@@ -1,0 +1,64 @@
+# Nexus-Shell Yazi Keymap
+
+[manager]
+keymap = [
+    # Navigation (vim-style)
+    { on = ["k"], run = "arrow -1", desc = "Move up" },
+    { on = ["j"], run = "arrow 1", desc = "Move down" },
+    { on = ["h"], run = "leave", desc = "Go to parent" },
+    { on = ["l"], run = ["open --use=nexus_open", "enter"], desc = "Open file / Enter directory" },
+    
+    # Navigation (arrow keys)
+    { on = ["<Up>"], run = "arrow -1", desc = "Move up" },
+    { on = ["<Down>"], run = "arrow 1", desc = "Move down" },
+    { on = ["<Left>"], run = "leave", desc = "Go to parent" },
+    { on = ["<Right>"], run = ["open --use=nexus_open", "enter"], desc = "Open file / Enter directory" },
+    
+    { on = ["g", "g"], run = "arrow -99999999", desc = "Go to top" },
+    { on = ["G"], run = "arrow 99999999", desc = "Go to bottom" },
+    
+    # Selection
+    { on = ["<Space>"], run = ["select --state=none", "arrow 1"], desc = "Toggle select" },
+    { on = ["v"], run = "visual_mode", desc = "Visual mode" },
+    { on = ["V"], run = "visual_mode --unset", desc = "Exit visual mode" },
+    
+    # Operations
+    { on = ["<Enter>"], run = "open --use=nexus_open", desc = "Open file in editor" },
+    { on = ["o"], run = "open --use=nexus_open", desc = "Open file" },
+    { on = ["y"], run = "yank", desc = "Yank (copy)" },
+    { on = ["x"], run = "yank --cut", desc = "Cut" },
+    { on = ["p"], run = "paste", desc = "Paste" },
+    { on = ["d"], run = "remove", desc = "Delete" },
+    { on = ["D"], run = "remove --permanently", desc = "Delete permanently" },
+    
+    # Create
+    { on = ["a"], run = "create", desc = "Create file/directory" },
+    { on = ["r"], run = "rename", desc = "Rename" },
+    
+    # View
+    { on = ["."], run = "hidden toggle", desc = "Toggle hidden files" },
+    { on = ["z", "z"], run = "plugin zoxide", desc = "Zoxide jump" },
+    
+    # Quit
+    { on = ["q"], run = "quit", desc = "Quit" },
+    { on = ["<Esc>"], run = "escape", desc = "Cancel / Escape" },
+    
+    # Search
+    { on = ["/"], run = "find --smart", desc = "Find" },
+    { on = ["n"], run = "find_arrow", desc = "Next match" },
+    { on = ["N"], run = "find_arrow --previous", desc = "Previous match" },
+    
+    # Sort
+    { on = ["s", "n"], run = "sort natural", desc = "Sort by name" },
+    { on = ["s", "s"], run = "sort size", desc = "Sort by size" },
+    { on = ["s", "m"], run = "sort mtime", desc = "Sort by modified" },
+    
+    # Refresh
+    { on = ["<C-r>"], run = "refresh", desc = "Refresh" },
+]
+
+[input]
+keymap = [
+    { on = ["<Esc>"], run = "close", desc = "Cancel" },
+    { on = ["<Enter>"], run = "close --submit", desc = "Submit" },
+]

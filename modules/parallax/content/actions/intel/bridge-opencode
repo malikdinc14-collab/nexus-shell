@@ -1,0 +1,45 @@
+#!/bin/bash
+# bridge-opencode - Connect OpenCode to Letta backend
+# @param ACTION: [status, link, unlink]
+# @param AGENT: Letta agent name (default: parallax_resident)
+
+set -e
+
+CONFIG_FILE="$HOME/.config/opencode/opencode.json"
+[[ ! -d "$(dirname "$CONFIG_FILE")" ]] && mkdir -p "$(dirname "$CONFIG_FILE")"
+
+case "$ACTION" in
+    link)
+        AGENT="${AGENT:-parallax_resident}"
+        echo "🔗 Linking OpenCode to Letta agent: $AGENT..."
+        
+        # We'll use jq to update the config if it exists, or create a new one
+        if [[ -f "$CONFIG_FILE" ]]; then
+            jq --arg agent "$AGENT" '.memory_backend = "letta" | .letta_agent = $agent' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        else
+            echo "{\"memory_backend\": \"letta\", \"letta_agent\": \"$AGENT\"}" > "$CONFIG_FILE"
+        fi
+        
+        echo "✅ OpenCode linked. Future sessions will sync with Letta."
+        ;;
+    unlink)
+        echo "🔓 Unlinking OpenCode from Letta..."
+        if [[ -f "$CONFIG_FILE" ]]; then
+            jq 'del(.memory_backend) | del(.letta_agent)' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+        fi
+        echo "✅ OpenCode unlinked."
+        ;;
+    status)
+        if [[ -f "$CONFIG_FILE" ]]; then
+            BACKEND=$(jq -r '.memory_backend // "none"' "$CONFIG_FILE")
+            AGENT=$(jq -r '.letta_agent // "n/a"' "$CONFIG_FILE")
+            echo "📊 OpenCode Backend: $BACKEND (Agent: $AGENT)"
+        else
+            echo "📊 OpenCode is using default flat-file memory."
+        fi
+        ;;
+    *)
+        echo "Usage: ACTION=[link|unlink|status] [AGENT=name]"
+        exit 1
+        ;;
+esac

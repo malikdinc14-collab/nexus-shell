@@ -1,0 +1,102 @@
+#!/bin/bash
+# RunPod - Cloud GPU Orchestration
+# @param ACTION: What to do [list, start, stop, status]
+# @param POD_ID: Select a pod $(px-vault get RUNPOD_API_KEY >/dev/null 2>&1 && curl -s --request POST --header 'content-type: application/json' --url "https://api.runpod.io/graphql?api_key=$(px-vault get RUNPOD_API_KEY)" --data '{"query": "query { myself { pods { id name } } }"}' 2>/dev/null | jq -r '.data.myself.pods[] | "\(.id) - \(.name)"' 2>/dev/null)
+
+set -e
+
+API_KEY=$(px-vault get RUNPOD_API_KEY 2>/dev/null || true)
+
+if [[ -z "$API_KEY" && "$ACTION" != "status" ]]; then
+    echo "❌ No RunPod API key found."
+    echo ""
+    echo "To configure:"
+    echo "  1. Get your API key from https://www.runpod.io/console/user/settings"
+    echo "  2. Use: System → Vault → add → RUNPOD_API_KEY"
+    exit 1
+fi
+
+API_URL="https://api.runpod.io/graphql?api_key=$API_KEY"
+
+graphql_query() {
+    curl -s --request POST \
+        --header 'content-type: application/json' \
+        --url "$API_URL" \
+        --data "{\"query\": \"$1\"}"
+}
+
+case "$ACTION" in
+    list)
+        echo "📋 Your RunPod Instances:"
+        echo ""
+        RESULT=$(graphql_query "query { myself { pods { id name runtime { uptimeInSeconds gpus { gpuUtilPercent memoryUtilPercent } } } } }")
+        
+        PODS=$(echo "$RESULT" | jq -r '.data.myself.pods[] | "\(.id)\t\(.name)\t\(.runtime.uptimeInSeconds // "stopped")"' 2>/dev/null)
+        
+        if [[ -z "$PODS" ]]; then
+            echo "  No pods found."
+        else
+            printf "%-20s %-30s %s\n" "ID" "NAME" "UPTIME"
+            printf "%-20s %-30s %s\n" "----" "----" "------"
+            echo "$PODS" | while IFS=$'\t' read -r id name uptime; do
+                printf "%-20s %-30s %s\n" "$id" "$name" "$uptime"
+            done
+        fi
+        ;;
+    start)
+        if [[ -z "$POD_ID" ]]; then
+            echo "❌ POD_ID is required."
+            exit 1
+        fi
+        
+        # Extract just the ID (before the " - ")
+        POD_ID=$(echo "$POD_ID" | cut -d' ' -f1)
+        
+        echo "🚀 Starting pod $POD_ID..."
+        RESULT=$(graphql_query "mutation { podResume(input: { podId: \\\"$POD_ID\\\", gpuCount: 1 }) { id } }")
+        
+        if echo "$RESULT" | jq -e '.data.podResume.id' > /dev/null 2>&1; then
+            echo "✅ Pod started successfully."
+        else
+            echo "❌ Failed to start pod."
+            echo "$RESULT" | jq '.errors' 2>/dev/null
+        fi
+        ;;
+    stop)
+        if [[ -z "$POD_ID" ]]; then
+            echo "❌ POD_ID is required."
+            exit 1
+        fi
+        
+        # Extract just the ID (before the " - ")
+        POD_ID=$(echo "$POD_ID" | cut -d' ' -f1)
+        
+        echo "🛑 Stopping pod $POD_ID..."
+        RESULT=$(graphql_query "mutation { podStop(input: { podId: \\\"$POD_ID\\\" }) { id } }")
+        
+        if echo "$RESULT" | jq -e '.data.podStop.id' > /dev/null 2>&1; then
+            echo "✅ Pod stopped successfully."
+        else
+            echo "❌ Failed to stop pod."
+            echo "$RESULT" | jq '.errors' 2>/dev/null
+        fi
+        ;;
+    status)
+        if [[ -z "$API_KEY" ]]; then
+            echo "⚠️  RunPod API key not configured."
+            echo "   Use: System → Vault → add → RUNPOD_API_KEY"
+        else
+            echo "✅ RunPod API key configured."
+            RESULT=$(graphql_query "query { myself { id } }")
+            if echo "$RESULT" | jq -e '.data.myself.id' > /dev/null 2>&1; then
+                echo "✅ API connection successful."
+            else
+                echo "❌ API connection failed. Check your key."
+            fi
+        fi
+        ;;
+    *)
+        echo "Usage: ACTION=[list|start|stop|status]"
+        exit 1
+        ;;
+esac

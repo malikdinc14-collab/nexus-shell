@@ -1,0 +1,14 @@
+#!/usr/bin/env zsh
+# bin/px-log
+# Direct access to Parallax History/Logs
+
+source "$HOME/.config/zsh/parallax/core/projection-shell.zsh"
+
+# If an argument is provided, try to get specific log
+if [[ -n "$1" ]]; then
+  "$HOME/bin/px-logger" get-content "$1"
+  exit 0
+fi
+
+# Otherwise, open the console mode directly
+parallax mode-console

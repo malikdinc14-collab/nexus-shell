@@ -1,0 +1,73 @@
+#!/bin/bash
+# MemEvolve - Memory Evolution & Context Optimization using Shared Repo
+# @param ACTION: [optimize, status, list-history, prune]
+# @param CONTEXT: Context ID to evolve $(ls ~/.parallax/sessions 2>/dev/null)
+# @param MODEL: Model to use for evolution (default: llama3)
+
+set -e
+
+MEMEVOLVE_ROOT="/Users/Shared/AI_CORE/MemEvolve/Flash-Searcher-main"
+SESSION_DIR="$HOME/.parallax/sessions"
+[[ ! -d "$SESSION_DIR" ]] && mkdir -p "$SESSION_DIR"
+
+case "$ACTION" in
+    optimize)
+        [[ -z "$CONTEXT" ]] && { echo "❌ CONTEXT (Session ID) is required."; exit 1; }
+        MODEL="${MODEL:-llama3}"
+        
+        HISTORY_FILE="$SESSION_DIR/$CONTEXT/history.json"
+        EVOLVED_FILE="$SESSION_DIR/$CONTEXT/memory_evolved.json"
+        
+        if [[ ! -f "$HISTORY_FILE" ]]; then
+            echo "⚠️  No history found for $CONTEXT at $HISTORY_FILE"
+            exit 1
+        fi
+
+        echo "🧠 Evolving memory for context: $CONTEXT using $MODEL..."
+        
+        # Use the Shared CLI if applicable, otherwise fallback to our logic
+        if [[ -f "$MEMEVOLVE_ROOT/evolve_cli.py" ]]; then
+            # Assuming it takes history and outputs evolved memory
+            python3 "$MEMEVOLVE_ROOT/evolve_cli.py" --input "$HISTORY_FILE" --output "$EVOLVED_FILE" --model "$MODEL"
+        else
+            # Fallback logic
+            MESSAGES=$(jq -r '.[] | "\(.role): \(.content)"' "$HISTORY_FILE")
+            PROMPT="Below is a conversation history. Distill this into a concise set of 'evolved memories' - key facts, preferences, and progress that should be remembered for future sessions. Format as a JSON list of strings.\n\n$MESSAGES"
+            echo "$PROMPT" | ollama run "$MODEL" > /tmp/px-evolve-raw.txt
+            if grep -q "\[" /tmp/px-evolve-raw.txt; then
+                sed -n '/\[/,/\]/p' /tmp/px-evolve-raw.txt > "$EVOLVED_FILE"
+            else
+                cat /tmp/px-evolve-raw.txt > "$EVOLVED_FILE"
+            fi
+        fi
+        echo "✅ Memory evolved and saved to $EVOLVED_FILE"
+        ;;
+    status)
+        echo "📊 Memory States:"
+        for d in "$SESSION_DIR"/*; do
+            if [[ -d "$d" ]]; then
+                ID=$(basename "$d")
+                echo -n "🔹 $ID: "
+                if [[ -f "$d/memory_evolved.json" ]]; then
+                    echo "Evolved"
+                else
+                    echo "Raw History Only"
+                fi
+            fi
+        done
+        ;;
+    list-history)
+        [[ -z "$CONTEXT" ]] && { ls "$SESSION_DIR"; exit 0; }
+        cat "$SESSION_DIR/$CONTEXT/history.json"
+        ;;
+    prune)
+        [[ -z "$CONTEXT" ]] && { echo "❌ CONTEXT is required."; exit 1; }
+        echo "✂️  Pruning memory for $CONTEXT..."
+        rm -rf "$SESSION_DIR/$CONTEXT"
+        echo "✅ History pruned."
+        ;;
+    *)
+        echo "Usage: ACTION=[optimize|status|list-history|prune] [CONTEXT=id] [MODEL=name]"
+        exit 1
+        ;;
+esac

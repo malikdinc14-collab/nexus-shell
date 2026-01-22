@@ -1,0 +1,11 @@
+##### Parallax tmux invariants #####
+
+# Kill sessions automatically when last client detaches
+# DISABLED: Conflicts with detached session creation
+# set -g destroy-unattached on
+
+# Enable focus events (required for mouse click → typing in iTerm2)
+set -g focus-events on
+
+# Ensure tmux understands mouse events (Parallax assumes this)
+set -g mouse on

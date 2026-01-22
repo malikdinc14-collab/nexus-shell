@@ -1,0 +1,11 @@
+{
+  "name": "ghost-noir",
+  "description": "Pure black and white minimalism",
+  "bg": "#000000",
+  "fg": "#ffffff",
+  "accent": "#444444",
+  "border": "white",
+  "success": "#00ff00",
+  "warning": "#ffff00",
+  "error": "#ff0000"
+}

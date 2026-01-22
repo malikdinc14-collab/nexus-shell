@@ -1,0 +1,20 @@
+{
+  "title": "Parallax Dashboard",
+  "description": "Example dashboard configuration",
+  "settings": {},
+  "sections": [
+    {
+      "name": "Quick Actions",
+      "items": [
+        { "label": "System Status", "type": "FOLDER", "payload": "audit" },
+        { "label": "Settings", "type": "FOLDER", "payload": "settings" }
+      ]
+    },
+    {
+      "name": "Project",
+      "items": [
+        { "label": "Project Actions", "type": "FOLDER", "payload": "library:local" }
+      ]
+    }
+  ]
+}

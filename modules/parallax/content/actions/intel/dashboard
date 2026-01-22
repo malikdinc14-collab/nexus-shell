@@ -1,0 +1,71 @@
+#!/bin/bash
+# Intel Dashboard - Hardware Telemetry & Model Map
+# Uses mactop for hardware metrics and ps/lsof for model map
+
+set -e
+
+# 1. Hardware Metrics (via mactop)
+if command -v mactop > /dev/null 2>&1; then
+    METRICS=$(mactop --headless --count 1 2>/dev/null || echo "[]")
+    RAM_USED=$(echo "$METRICS" | jq -r '.[0].memory.used // 0' | awk '{print $1 / 1024 / 1024 / 1024}' | xargs printf "%.1f")
+    RAM_TOTAL=$(echo "$METRICS" | jq -r '.[0].memory.total // 51539607552' | awk '{print $1 / 1024 / 1024 / 1024}' | xargs printf "%.1f")
+    GPU_LOAD=$(echo "$METRICS" | jq -r '.[0].gpu_usage // 0' | awk '{printf "%.0f", $1}')
+else
+    # Fallback to vm_stat
+    RAM_USED=$(vm_stat | grep "Pages active" | awk '{print $3}' | sed 's/\.//' | xargs -I{} echo "{} * 4096 / 1024 / 1024 / 1024" | bc)
+    RAM_TOTAL=48
+    GPU_LOAD="?"
+fi
+
+# 2. Render Hardware Bar
+BAR_SIZE=20
+# Use bc to handle float comparison and output an integer
+USED_BLOCKS=$(echo "($RAM_USED * $BAR_SIZE / $RAM_TOTAL)" | bc)
+BAR=""
+for ((i=0; i<BAR_SIZE; i++)); do
+    if [ $i -lt $USED_BLOCKS ]; then BAR="${BAR}█"; else BAR="${BAR}░"; fi
+done
+
+echo "🖥️  System Resource Monitor"
+echo "----------------------------------------"
+if [[ -f "/tmp/px-resource-guard.pid" ]]; then
+    echo "🛡️  Resource Guard: ACTIVE"
+else
+    echo "🛡️  Resource Guard: INACTIVE"
+fi
+echo "🧠 RAM: [$BAR] ${RAM_USED}GB / ${RAM_TOTAL}GB"
+echo "🎮 GPU Load: $GPU_LOAD%"
+echo ""
+
+# 3. Model Map (Active LLM Processes)
+echo "🧠 Active Intelligence Engines:"
+echo "----------------------------------------"
+FOUND=0
+
+# Check ports 8080-8085
+for PORT in {8080..8085}; do
+    PID=$(lsof -ti :$PORT 2>/dev/null || true)
+    if [[ -n "$PID" ]]; then
+        CMD=$(ps -p "$PID" -o command=)
+        # Extract model name if possible
+        MODEL="Unknown Model"
+        if [[ "$CMD" == *"--model"* ]]; then
+            MODEL=$(echo "$CMD" | sed -n 's/.*--model \([^ ]*\).*/\1/p' | xargs basename)
+        elif [[ "$CMD" == *"ollama"* ]]; then
+            MODEL="Ollama Service"
+        fi
+        
+        # Get individual process memory
+        P_MEM=$(ps -o rss= -p "$PID" | awk '{print $1 / 1024 / 1024}' | xargs printf "%.1f")
+        
+        echo "● Port $PORT: $MODEL ($P_MEM GB) [PID: $PID]"
+        FOUND=1
+    fi
+done
+
+if [[ $FOUND -eq 0 ]]; then
+    echo "  (No active model servers found)"
+fi
+
+echo ""
+echo "💡 Press [Kill] in Brains menu to free resources."

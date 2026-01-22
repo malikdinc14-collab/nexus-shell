@@ -1,0 +1,43 @@
+#!/bin/bash
+# Brain Router - The "Customs Officer" Logic
+# Uses a lightweight model to route queries to appropriate experts
+
+set -e
+
+QUERY="$1"
+[[ -z "$QUERY" ]] && { echo "Usage: brain-router 'your query'"; exit 1; }
+
+# Models
+SCOUT_PORT=8081
+EXPERT_PORT=8080
+
+# Check if Scout is running
+if ! lsof -i :$SCOUT_PORT > /dev/null 2>&1; then
+    echo "⚠️  Scout (AgentCPM) is not running on port $SCOUT_PORT."
+    echo "🚀 Starting Scout..."
+    export ACTION=start PORT=$SCOUT_PORT MODEL="openbmb.AgentCPM-Explore.Q8_0.gguf"
+    modules/parallax/content/actions/intel/mlx > /dev/null 2>&1 &
+    sleep 5
+fi
+
+# Pre-screen query
+echo "🕵️  Scout is analyzing task complexity..."
+ROUTING_PROMPT="Analyze this user request: '$QUERY'. Does this task require a large, powerful coding model (True) or can a small model handle it (False)? Answer only with 'True' or 'False'."
+
+# Use Ollama or MLX depending on what's running for Scout
+# For testing, we'll use Ollama if available as it's often more responsive for tiny models
+DECISION=$(ollama run openbmb.AgentCPM-Explore.Q8_0.gguf "$ROUTING_PROMPT" 2>/dev/null || echo "True")
+
+if [[ "$DECISION" == *"True"* ]]; then
+    echo "🧠 Complexity High. Routing to Expert (30B)..."
+    if ! lsof -i :$EXPERT_PORT > /dev/null 2>&1; then
+        echo "⚠️  Expert model not running on port $EXPERT_PORT."
+        echo "💡 Suggestion: Start Qwen3-30B via Brains menu."
+    else
+        echo "✅ Connected to Expert on $EXPERT_PORT"
+        # Forward to Expert
+    fi
+else
+    echo "⚡ Complexity Low. Scout will handle it."
+    # Handle via Scout
+fi

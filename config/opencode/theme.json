@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Nexus Cyber",
+  "id": "nexus-cyber",
+  "dark": {
+    "seeds": {
+      "neutral": "#0a0e14",
+      "primary": "#00ffff",
+      "success": "#50fa7b",
+      "warning": "#ffb86c",
+      "error": "#ff5555",
+      "info": "#ff00ff",
+      "interactive": "#00ffff",
+      "diffAdd": "#2fb27d",
+      "diffDelete": "#ff6b81"
+    },
+    "overrides": {
+      "background-base": "#0a0e14",
+      "text-base": "#00ffff",
+      "border-base": "cyan"
+    }
+  },
+  "light": {
+    "seeds": {
+      "neutral": "#ffffff",
+      "primary": "#000000"
+    },
+    "overrides": {}
+  }
+}

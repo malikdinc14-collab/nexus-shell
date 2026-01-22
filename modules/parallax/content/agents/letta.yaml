@@ -1,0 +1,8 @@
+label: Letta Stateful Agent
+type: AGENT
+payload: |
+  # This agent uses the Letta backend for long-term memory
+  # It automatically connects to the local Letta server
+  letta run --agent "parallax_resident"
+surface: library/surfaces/ai-chat.yaml
+description: Persistent AI agent with tiered memory (Letta).

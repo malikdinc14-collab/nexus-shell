@@ -1,0 +1,59 @@
+#!/bin/bash
+# Letta (formerly MemGPT) - Local Memory Agent Manager using Shared Backend
+# @param ACTION: What to do [start, stop, status, chat, list-agents]
+# @param AGENT: Agent name to use/create
+
+set -e
+
+LETTA_ROOT="/Users/Shared/letta-backend"
+LOG_FILE="/tmp/px-letta.log"
+
+case "$ACTION" in
+    start)
+        if lsof -i :8083 > /dev/null 2>&1; then
+            echo "⚠️  Letta server already running (Port 8083)."
+        else
+            echo "🚀 Starting Shared Letta server..."
+            cd "$LETTA_ROOT"
+            nohup ./letta-server > "$LOG_FILE" 2>&1 &
+            sleep 3
+            if lsof -i :8083 > /dev/null 2>&1; then
+                echo "✅ Letta server started."
+            else
+                echo "❌ Failed to start. Check $LOG_FILE"
+                tail -n 20 "$LOG_FILE"
+            fi
+        fi
+        ;;
+    stop)
+        PID=$(lsof -ti :8083 2>/dev/null || true)
+        if [[ -n "$PID" ]]; then
+            echo "🛑 Stopping Letta server (PID: $PID)..."
+            kill "$PID"
+            echo "✅ Letta stopped."
+        else
+            echo "⚠️  Letta is not running."
+        fi
+        ;;
+    status)
+        if lsof -i :8083 > /dev/null 2>&1; then
+            echo "✅ Letta server running on port 8083"
+            # Try to list agents using the shared script
+            "$LETTA_ROOT/letta-agent" list agents 2>/dev/null || echo "No agents listed."
+        else
+            echo "⚠️  Letta server not running."
+        fi
+        ;;
+    chat)
+        [[ -z "$AGENT" ]] && AGENT="default_agent"
+        echo "💬 Starting chat with Letta agent: $AGENT..."
+        "$LETTA_ROOT/letta-agent" run --agent "$AGENT"
+        ;;
+    list-agents)
+        "$LETTA_ROOT/letta-agent" list agents
+        ;;
+    *)
+        echo "Usage: ACTION=[start|stop|status|chat|list-agents] [AGENT=name]"
+        exit 1
+        ;;
+esac

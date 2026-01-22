@@ -1,0 +1,17 @@
+#!/bin/bash
+# install-visual - Install binaries for rich media rendering
+
+set -e
+
+BIN_DIR="/Users/compute/.nexus-shell/bin"
+mkdir -p "$BIN_DIR"
+
+echo "📥 Installing mermaid-cli (mmdc)..."
+npm install -g @mermaid-js/mermaid-cli --prefix "$HOME/.local"
+
+# Link to bin dir if not already there
+if [[ ! -f "$BIN_DIR/mmdc" ]]; then
+    ln -s "$HOME/.local/bin/mmdc" "$BIN_DIR/mmdc"
+fi
+
+echo "✅ mermaid-cli installed at $BIN_DIR/mmdc"

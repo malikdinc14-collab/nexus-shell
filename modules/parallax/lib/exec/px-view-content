@@ -1,0 +1,14 @@
+#!/usr/bin/env zsh
+# bin/px-view-content
+# Helper to view content with syntax highlighting if available
+
+FILE="$1"
+TITLE="${2:-Content}"
+
+if command -v bat &>/dev/null; then
+  bat --style=plain --paging=always --color=always "$FILE"
+else
+  # Fallback to cat with simple pager
+  echo "=== $TITLE ==="
+  cat "$FILE" | less -F -R -X
+fi

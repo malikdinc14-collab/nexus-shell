@@ -1,0 +1,182 @@
+#!/usr/bin/env zsh
+# bin/px-ui-styler
+# Generates Parallax-themed headers and keybind footers.
+
+# 1. READ SESSION STATE
+# We use px-engine --settings to get the current key mapping
+eval "$(~/.parallax/bin/px-engine --settings)"
+
+K_ACTIONS="${PX_KEY_ACTIONS:-ctrl-a}"
+K_PLACES="${PX_KEY_PLACES:-ctrl-p}"
+K_RECENT="${PX_KEY_RECENT:-ctrl-l}"
+K_TRACE="${PX_KEY_TRACE:-ctrl-t}"
+K_CHAT="${PX_KEY_CHAT:-ctrl-j}"
+K_PORTAL="${PX_KEY_MENU:-ctrl-b}"
+K_GLOBAL="${PX_KEY_GLOBAL:-ctrl-k}"
+
+# Defaults for other keys
+K_EXEC="enter"
+K_STAGE="tab"
+K_INSPECT="right"
+K_MODIFY="ctrl-e"
+K_CLEAR="alt-x"
+K_XFORM="alt-v"
+K_AGENT="alt-g"
+K_EDIT="alt-e"
+
+# 2. GENERATE COMPONENT
+case "$1" in
+    header)
+        # Combine base header with styled keybind help
+        BASE_HEADER="$2"
+        # BOLD CYAN help string with improved labels
+        local l_exec=$(echo "$K_EXEC" | tr '[:lower:]' '[:upper:]')
+        local l_stage=$(echo "$K_STAGE" | tr '[:lower:]' '[:upper:]')
+        local l_view=$(echo "$K_INSPECT" | tr '[:lower:]' '[:upper:]')
+        local l_edit=$(echo "$K_MODIFY" | tr '[:lower:]' '[:upper:]')
+
+        local help_raw="[${l_exec}:➜ Run] [${l_stage}:➜ Peek] [${l_view}:➜ View] [${l_edit}:➜ Edit] [ESC:Back]"
+        local term_width=$(tput cols)
+        
+        # Truncate help string if too wide for terminal
+        if [[ ${#help_raw} -gt $term_width ]]; then
+            help_raw="[${l_exec}:Run] [${l_stage}:Peek] [${l_view}:View] [${l_edit}:Edit] [ESC:Back]"
+        fi
+        
+        HELP_STR="\033[1;36m${help_raw}\033[0m"
+        echo -e "${BASE_HEADER}\n${HELP_STR}"
+        ;;
+    resident)
+        HUD_CONTEXT="${2:-Portal}"
+        ENV_SCOPE="${3:-GLOBAL}"
+        local term_width=$(tput cols)
+        local l_a=$(echo "$K_ACTIONS" | tr '[:lower:]' '[:upper:]')
+        local l_p=$(echo "$K_PLACES" | tr '[:lower:]' '[:upper:]')
+        local l_s="CTRL-S"
+        
+        # Color Pallette
+        local c_ctx="\033[1;36m" # Cyan
+        local c_scp="\033[1;32m" # Green
+        local c_key="\033[1;33m" # Yellow
+        local c_rst="\033[0m"
+        
+        # Line 1: The Breadcrumb / Status
+        local current_wd=$(print -P '%~')
+        local project_name="PARALLAX"
+        local link_status="ISOLATED"
+        local link_dir="${HOME}/.parallax/links"
+        
+        # Discover Connected Shell
+        if [[ -d "$link_dir" ]]; then
+            # Find the link file that contains OUR session ID
+            local my_link=$(grep -l "^${PX_SESSION_ID}$" ${link_dir}/shell-*.link(N) 2>/dev/null | head -n 1)
+            
+            if [[ -n "$my_link" ]]; then
+                link_status="LINKED"
+                # Extract Shell PID from filename: shell-1234.link
+                local shell_pid=${my_link:t} # basename with zsh modifier
+                shell_pid=${shell_pid#shell-}
+                shell_pid=${shell_pid%.link}
+                
+                # Read Shell's CWD
+                local cwd_file="/tmp/px-cwd-${shell_pid}.txt"
+                if [[ -f "$cwd_file" ]]; then
+                    local raw_cwd=$(cat "$cwd_file")
+                    
+                    # 1. Expand standard HOME replacement (NO BACKSLASH ESCAPE)
+                    # We use ${var/#pattern/replacement}
+                    local full_path="${raw_cwd/#$HOME/~}"
+                    
+                    # 2. Apply Style Preference
+                    local path_style="${PX_HUD_PATH_STYLE:-short}"
+                    
+                    if [[ "$path_style" == "short" ]]; then
+                        # Short Mode: Just the folder name
+                        # Special case: if raw_cwd is HOME, show "~"
+                        if [[ "$raw_cwd" == "$HOME" ]]; then
+                             current_wd="~"
+                        elif [[ "$raw_cwd" == "/" ]]; then
+                             current_wd="/"
+                        else
+                             current_wd="${raw_cwd:t}" # zsh modifier: tail/basename
+                        fi
+                    else
+                        # Full Mode: ~/Projects/parallax
+                        current_wd="$full_path"
+                    fi
+                    
+                    # Debug Log (Minimal)
+                    # echo "$(date) | PID:$shell_pid | STYLE:$path_style | CURR:$current_wd" >> /tmp/px-styler-debug.log
+                    
+                    # Debug Log (Minimal)
+                    # echo "$(date) | PID:$shell_pid | STYLE:$path_style | CURR:$current_wd" >> /tmp/px-styler-debug.log
+                    
+                    # Detect Project (Simple: root with .git or .parallax)
+                    # We walk up from raw_cwd
+                    local check="$raw_cwd"
+                    local found_proj="false"
+                    while [[ "$check" != "/" && "$check" != "." ]]; do
+                        if [[ -d "$check/.git" || -d "$check/.parallax" ]]; then
+                            project_name=${check:t} # Basename
+                            project_name=$(echo "$project_name" | tr '[:lower:]' '[:upper:]')
+                            found_proj="true"
+                            break
+                        fi
+                        check=${check:h} # Parent
+                    done
+                    
+                    # If we are just strictly in home, call it HOME
+                    if [[ "$found_proj" == "false" ]]; then
+                        if [[ "$raw_cwd" == "$HOME" ]]; then
+                             project_name="HOME"
+                        else
+                             project_name="PARALLAX"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+
+        printf " ${c_ctx}${project_name} │ ${current_wd}${c_rst} │ ${HUD_CONTEXT} │ ${c_scp}${ENV_SCOPE} ${link_status}${c_rst}\n"
+        
+        # Line 2+: The Legend (Toggleable, Dynamic width-aware formatting)
+        # echo "LEGEND_STATE:${PX_SHOW_LEGEND}" >> /tmp/px-styler-debug.log
+        if [[ "${PX_SHOW_LEGEND:-true}" == "true" ]]; then
+            local term_width=$(tput cols 2>/dev/null || echo 80)
+            
+            if (( term_width >= 100 )); then
+                # Wide terminal: Full legend on 2 lines
+                printf " [${c_key}Enter${c_rst}:Run] [${c_key}ESC${c_rst}:Back] [${c_key}Ctrl-V${c_rst}:View] [${c_key}Ctrl-E${c_rst}:Edit] [${c_key}Ctrl-D${c_rst}:Nav]\n"
+                printf " [${c_key}Ctrl-N${c_rst}:Notes] [${c_key}Ctrl-T${c_rst}:Tree] [${c_key}Ctrl-H${c_rst}:Help] [${c_key}Ctrl-Y${c_rst}:Debug]\n"
+            elif (( term_width >= 60 )); then
+                # Medium terminal: Abbreviated on 1 line
+                printf " [${c_key}⏎${c_rst}Run] [${c_key}⎋${c_rst}Back] [${c_key}^V${c_rst}View] [${c_key}^E${c_rst}Edit] [${c_key}^D${c_rst}Nav] [${c_key}^H${c_rst}Help]\n"
+            else
+                # Narrow terminal: Minimal
+                printf " [${c_key}^H${c_rst}:Help for keys]\n"
+            fi
+        fi
+        ;;
+    hud)
+        # Future: generate highly styled HUD segments
+        ;;
+    keys)
+        # Output expected keys for the selector
+        echo "$K_STAGE,$K_INSPECT,$K_MODIFY"
+        ;;
+    bindings)
+        # Generate FZF --bind arguments from list items
+        # Input: list items on stdin
+        # Scans for "[X] Label" and binds X to become(echo SIGNAL:ST_Label|Payload)
+        local bind_str=""
+        while IFS= read -r line; do
+            # regex: start of line, literal '[', capture content, literal ']'
+            if [[ "$line" =~ '^\[([^\]]+)\]' ]]; then
+                local char="${match[1]}"
+                # Bind the character (or modifier sequence) to return a SIGNAL pulse
+                bind_str+="--bind \"$char:become(printf 'SIGNAL\nST_$line')\" "
+            fi
+        done
+        echo "$bind_str"
+        ;;
+esac
