@@ -153,7 +153,7 @@ Create a JSON file in `~/.config/nexus-shell/themes/`:
 ├── tools.conf         # Tool configuration
 ├── tmux/              # TMUX configuration
 ├── themes/            # Color themes
-└── scripts/           # Core scripts
+├── core/boot/         # The core logic (Launcher, Architect, Wrapper).
 
 ~/.nexus-shell/bin/    # Downloaded binaries (if using download option)
 ```

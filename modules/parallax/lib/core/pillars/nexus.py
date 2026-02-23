@@ -115,7 +115,8 @@ def render(context, config, paths):
 
         # D. Actions
         output.append({"label": "⚡ QUICK ACTIONS", "type": "SEPARATOR"})
-        nexus_actions_dir = "/Users/compute/workspace/projects/nexus-shell/modules/parallax/actions/nexus"
+        nexus_home = os.getenv("NEXUS_HOME", os.path.expanduser("~/.config/nexus-shell"))
+        nexus_actions_dir = os.path.join(nexus_home, "modules/parallax/actions/nexus")
 
         if os.path.exists(nexus_actions_dir):
             output.append(

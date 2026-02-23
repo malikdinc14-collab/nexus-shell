@@ -3,9 +3,7 @@
 # PROJECT:  NEXUS CORE
 # ACTION:   INDEX SHELL & PARALLAX
 
-echo "[*] Absorbing Nexus-Shell and Parallax codebases..."
-
-/Users/Shared/letta-backend/.venv/bin/python3 /Users/compute/workspace/scripts/nexus_fast_index.py ShellArchitect /Users/compute/Projects/personal/nexus-shell
-/Users/Shared/letta-backend/.venv/bin/python3 /Users/compute/workspace/scripts/nexus_fast_index.py ShellArchitect /Users/Shared/opensource/parallax
+# 1. Absorbing Nexus-Shell and Parallax codebases
+python3 "$NEXUS_HOME/core/api/nexus_fast_index.py" ShellArchitect "$NEXUS_HOME"
 
 echo "[✅] Shell Knowledge Absorbed."

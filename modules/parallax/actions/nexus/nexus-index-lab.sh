@@ -3,8 +3,7 @@
 # PROJECT:  NEXUS CORE
 # ACTION:   INDEX LLM-LAB
 
-echo "[*] Absorbing llm-lab research project..."
-
-/Users/Shared/letta-backend/.venv/bin/python3 /Users/compute/workspace/scripts/nexus_fast_index.py LabScientist /Users/compute/Projects/llm-lab
+# 1. Absorbing llm-lab research project
+# python3 "$NEXUS_HOME/core/api/nexus_fast_index.py" LabScientist "$HOME/Projects/llm-lab"
 
 echo "[✅] Lab Knowledge Absorbed."

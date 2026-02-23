@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# scripts/plane_nav.sh
+# lib/plane_nav.sh
 # Coordinate-based 2D navigation for Nexus-Shell 5-pane layout
 
 DIRECTION=$1

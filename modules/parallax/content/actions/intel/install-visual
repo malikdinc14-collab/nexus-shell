@@ -3,7 +3,7 @@
 
 set -e
 
-BIN_DIR="/Users/compute/.nexus-shell/bin"
+BIN_DIR="${NEXUS_HOME:-$HOME/.config/nexus-shell}/bin"
 mkdir -p "$BIN_DIR"
 
 echo "📥 Installing mermaid-cli (mmdc)..."

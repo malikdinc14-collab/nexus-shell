@@ -5,4 +5,4 @@
 # @description: Switch between nvim and glow in editor pane
 # @icon: arrows-rotate
 
-"${NEXUS_CONFIG:-$HOME/.config/nexus-shell}/scripts/swap.sh"
+"${NEXUS_CONFIG:-$HOME/.config/nexus-shell}/lib/swap.sh"

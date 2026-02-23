@@ -47,7 +47,7 @@ _G.is_dirty = _G.nexus_is_dirty
 -- Toggle render/preview mode (Ctrl+Space is handled by tmux, this is backup)
 vim.keymap.set("n", "<leader>nv", function()
     vim.cmd("confirm w")
-    os.execute(nexus_config .. "/scripts/swap.sh 2>/dev/null")
+    os.execute(nexus_config .. "/lib/swap.sh 2>/dev/null")
 end, { desc = "Nexus: Toggle Render Mode" })
 
 -- Open file in tree pane

@@ -12,7 +12,7 @@ SPAWN_MODE="${PX_WINDOW_MODE:-tab}"
 
 # Construct the command to run in the new window
 # We use the launcher in 'spawn' mode to attach to the same session with independent view
-CMD="$NEXUS_HOME/scripts/launcher.sh '$PROJECT_ROOT' spawn \; select-window -t $VIEW_INDEX"
+CMD="$NEXUS_HOME/core/boot/launcher.sh '$PROJECT_ROOT' spawn \; select-window -t $VIEW_INDEX"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "🚀 Spawning new $SPAWN_MODE for view $VIEW_INDEX ($VIEW_NAME)..."

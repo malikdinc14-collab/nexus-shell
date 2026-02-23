@@ -9,13 +9,13 @@ Nexus-Shell is designed to exist in two distinct "states": **Source** and **Inst
 ### Source Repository (`~/Projects/personal/nexus-shell/`)
 - This is where you code.
 - Contains the `.git` history and the `install.sh` / `install_local.sh` scripts.
-- **scripts/**: The core logic (Launcher, Architect, Wrapper).
+- **core/boot/**: The core logic (Launcher, Architect, Wrapper).
 - **modules/parallax/**: The submodule for state synchronization.
 
 ### Live Installation (`~/.config/nexus-shell/`)
 - This is the "Stable Snapshot" used by your terminal.
 - It is decoupled from the Source to prevent developmental bugs from crashing your active station.
-- **scripts/**: Physical copies of the source scripts.
+- **core/boot/**: Physical copies of the source scripts.
 - **tmux/nexus.conf**: The hardened TMUX configuration.
 
 ---
@@ -30,7 +30,7 @@ We have identified why the recent attempts to "improve" the station resulted in 
 - **Fix**: The "Identity Firewall." Variables and hooks now only activate if the shell detects it is inside a TMUX session named `nexus_*`.
 
 ### Fault 2: The Path Schism
-- **Symptom**: `zsh: no such file or directory: /Users/compute/bin/layout_engine.sh`
+- **Symptom**: `zsh: no such file or directory: /Users/samir/bin/layout_engine.sh`
 - **Cause**: The `nxs` command in `~/bin/` is a symlink. When the script ran `dirname $0`, it pointed to `~/bin/` instead of the actual script directory in `.config/`.
 - **Fix**: Physical Path Resolution. Scripts now follow their own symlinks to find their "real" home before looking for helper files.
 
