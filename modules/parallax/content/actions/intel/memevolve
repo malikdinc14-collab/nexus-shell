@@ -6,7 +6,7 @@
 
 set -e
 
-MEMEVOLVE_ROOT="/Users/Shared/AI_CORE/MemEvolve/Flash-Searcher-main"
+MEMEVOLVE_ROOT="${MEMEVOLVE_ROOT:-$HOME/MemEvolve}"
 SESSION_DIR="$HOME/.parallax/sessions"
 [[ ! -d "$SESSION_DIR" ]] && mkdir -p "$SESSION_DIR"
 

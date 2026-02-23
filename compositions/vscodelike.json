@@ -44,7 +44,7 @@
                 "panes": [
                     {
                         "id": "chat",
-                        "command": "/Users/compute/sovereign_core_env/bin/gptme"
+                        "command": "gptme"
                     },
                     {
                         "id": "ui",

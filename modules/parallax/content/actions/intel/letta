@@ -5,7 +5,7 @@
 
 set -e
 
-LETTA_ROOT="/Users/Shared/letta-backend"
+LETTA_ROOT="${LETTA_ROOT:-$HOME/letta-backend}"
 LOG_FILE="/tmp/px-letta.log"
 
 case "$ACTION" in

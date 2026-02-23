@@ -1,20 +1,30 @@
-#!/bin/bash
+# --- Nexus-Shell Local Installer (Modular) ---
+# Syncs code from this project folder to your live environment (~/.config/nexus-shell)
 
-# --- Nexus-Shell Local Installer ---
-# Syncs code from this project folder to your live environment (~/.config)
+NEXUS_HOME_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_TARGET="$HOME/.config/nexus-shell"
 
-SOURCE_SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/scripts" && pwd)"
-SOURCE_TMUX="$(cd "$(dirname "${BASH_SOURCE[0]}")/config/tmux" && pwd)"
-INSTALL_SCRIPTS="$HOME/.config/nexus-shell/scripts"
-INSTALL_TMUX="$HOME/.config/nexus-shell/tmux"
+echo "[*] Syncing Nexus-Shell to $INSTALL_TARGET..."
 
-echo "[*] Installing Nexus-Shell to $HOME/.config/nexus-shell..."
+# Ensure target structure exists
+mkdir -p "$INSTALL_TARGET"
 
-mkdir -p "$INSTALL_SCRIPTS"
-mkdir -p "$INSTALL_TMUX"
+# List of core directories to sync
+CORE_DIRS=("core" "lib" "config" "themes" "compositions")
 
-# Perform the sync
-cp -rv "$SOURCE_SCRIPTS/"* "$INSTALL_SCRIPTS/"
-cp -rv "$SOURCE_TMUX/"* "$INSTALL_TMUX/"
+for dir in "${CORE_DIRS[@]}"; do
+    if [[ -d "$NEXUS_HOME_SRC/$dir" ]]; then
+        echo "    -> Syncing $dir..."
+        # Use -r for recursive and -u for update (if supported, otherwise plain cp)
+        cp -rv "$NEXUS_HOME_SRC/$dir" "$INSTALL_TARGET/"
+    fi
+done
 
-echo "[*] Success. Your live station has been updated."
+# Sync actions to Parallax if present
+if [[ -d "$HOME/.parallax/content/actions" ]]; then
+    echo "[*] Syncing actions to Parallax..."
+    mkdir -p "$HOME/.parallax/content/actions/nexus"
+    cp -rv "$NEXUS_HOME_SRC/actions/"* "$HOME/.parallax/content/actions/nexus/" 2>/dev/null || true
+fi
+
+echo "[✅] Success. Your live station has been updated."
