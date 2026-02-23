@@ -70,12 +70,12 @@ case "$CMD" in
     # === AI Control ===
     "kill"|":kill")
         # Terminate active agent loops
-        "$NEXUS_HOME/scripts/kill_agent.sh"
+        "$NEXUS_BOOT/kill_agent.sh"
         ;;
     
     "down"|":down")
         # Unload all local models and backends
-        "$NEXUS_HOME/scripts/unload_brains.sh"
+        "$NEXUS_BOOT/unload_brains.sh"
         ;;
 
     "spawn"|":spawn")
@@ -87,19 +87,19 @@ case "$CMD" in
 
     # === Pane Navigation ===
     "n"|":n")
-        tmux select-pane -t "${PX_NEXUS_TREE_PANE}" 2>/dev/null || tmux select-pane -t tree 2>/dev/null || tmux select-pane -t 0
+        tmux select-pane -t "${PX_NEXUS_TREE_PANE:-0}" 2>/dev/null || tmux select-pane -t tree 2>/dev/null
         ;;
     "p"|":p")
-        tmux select-pane -t "${PX_NEXUS_PARALLAX_PANE}" 2>/dev/null || tmux select-pane -t parallax 2>/dev/null || tmux select-pane -t 1
+        tmux select-pane -t "${PX_NEXUS_PARALLAX_PANE:-1}" 2>/dev/null || tmux select-pane -t parallax 2>/dev/null
         ;;
     "e"|":e")
-        tmux select-pane -t "${PX_NEXUS_EDITOR_PANE}" 2>/dev/null || tmux select-pane -t editor 2>/dev/null || tmux select-pane -t 2
+        tmux select-pane -t "${PX_NEXUS_EDITOR_PANE:-2}" 2>/dev/null || tmux select-pane -t editor 2>/dev/null
         ;;
     "t"|":t")
-        tmux select-pane -t "${PX_NEXUS_TERMINAL_PANE}" 2>/dev/null || tmux select-pane -t terminal 2>/dev/null || tmux select-pane -t 3
+        tmux select-pane -t "${PX_NEXUS_TERMINAL_PANE:-3}" 2>/dev/null || tmux select-pane -t terminal 2>/dev/null
         ;;
     "c"|":c")
-        tmux select-pane -t "${PX_NEXUS_CHAT_PANE}" 2>/dev/null || tmux select-pane -t chat 2>/dev/null || tmux select-pane -t 4
+        tmux select-pane -t "${PX_NEXUS_CHAT_PANE:-4}" 2>/dev/null || tmux select-pane -t chat 2>/dev/null
         ;;
 
     # === Theme ===
@@ -110,7 +110,7 @@ case "$CMD" in
     # === Parallax Commands ===
     "px"|"parallax"|":px"|":parallax")
         # Focus the resident Parallax pane
-        tmux select-pane -t "${PX_NEXUS_PARALLAX_PANE}" 2>/dev/null || tmux select-pane -t parallax 2>/dev/null || tmux select-pane -t 1
+        tmux select-pane -t "${PX_NEXUS_PARALLAX_PANE:-1}" 2>/dev/null || tmux select-pane -t parallax 2>/dev/null
         ;;
 
     "a"|"actions"|":a"|":actions")
@@ -159,11 +159,11 @@ read"
         if [[ "$CMD" == "!"* ]]; then
             # Query the agent directly
             QUERY="${CMD#!}"
-            "$NEXUS_HOME/scripts/px-bridge-agent.sh" "$QUERY"
+            "$NEXUS_BOOT/px-bridge-agent.sh" "$QUERY"
         elif [[ -n "$CMD" ]]; then
             # Try as a nexus command, if fails, send to agent as general query
             # (In testing phase, we treat any unknown :command as a query)
-            "$NEXUS_HOME/scripts/px-bridge-agent.sh" "$CMD"
+            "$NEXUS_BOOT/px-bridge-agent.sh" "$CMD"
         fi
         ;;
 esac

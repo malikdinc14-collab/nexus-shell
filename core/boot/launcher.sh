@@ -88,9 +88,6 @@ TOOLS_CONF="$NEXUS_CONFIG_DIR/tools.conf"
 if [[ -f "$TOOLS_CONF" ]]; then
     source "$TOOLS_CONF"
 fi
-if [[ -f "$TOOLS_CONF" ]]; then
-    source "$TOOLS_CONF"
-fi
 
 # Tool Defaults & Command Construction
 NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"

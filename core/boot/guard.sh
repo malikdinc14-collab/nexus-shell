@@ -25,11 +25,11 @@ case "$ACTION" in
         pkill -f "opencode" || true
         
         # 2. Unload brains
-        [[ -x "./scripts/unload_brains.sh" ]] && ./scripts/unload_brains.sh
+        [[ -x "$NEXUS_BOOT/unload_brains.sh" ]] && "$NEXUS_BOOT/unload_brains.sh"
         
         # 3. Stop resource guard
-        [[ -x "./modules/parallax/content/actions/intel/resource-guard" ]] && \
-            export ACTION=stop && ./modules/parallax/content/actions/intel/resource-guard
+        [[ -x "$NEXUS_HOME/modules/parallax/content/actions/intel/resource-guard" ]] && \
+            export ACTION=stop && "$NEXUS_HOME/modules/parallax/content/actions/intel/resource-guard"
             
         # 4. Kill the tmux session
         tmux kill-session -t "$SESSION_ID" 2>/dev/null || true
