@@ -7,7 +7,8 @@
 CMD="$1"
 NEXUS_HOME="${NEXUS_HOME:-$HOME/.config/nexus-shell}"
 NEXUS_BIN="$NEXUS_HOME/bin"
-NEXUS_SCRIPTS="$NEXUS_HOME/scripts"
+NEXUS_CORE="$NEXUS_HOME/core"
+NEXUS_BOOT="$NEXUS_CORE/boot"
 NEXUS_STATE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}"
 
 # Load tools configuration
@@ -37,7 +38,7 @@ case "$CMD" in
                 exit 1
             fi
         fi
-        "$NEXUS_SCRIPTS/guard.sh" exit
+        "$NEXUS_BOOT/guard.sh" exit
         ;;
         
     "wq"|":wq")
@@ -47,23 +48,23 @@ case "$CMD" in
             "$NEXUS_BIN/nvim" --server "$NVIM_PIPE" --remote-send ":wa<CR>"
             sleep 0.5
         fi
-        "$NEXUS_SCRIPTS/guard.sh" exit
+        "$NEXUS_BOOT/guard.sh" exit
         ;;
         
     "q!"|":q!")
         # Force quit
-        "$NEXUS_SCRIPTS/guard.sh" force
+        "$NEXUS_BOOT/guard.sh" force
         ;;
-
+        
     # === View Commands ===
     "v"|":v")
         # Toggle Vision/Render mode
-        "$NEXUS_SCRIPTS/swap.sh"
+        "$NEXUS_HOME/lib/swap.sh"
         ;;
 
     "g"|":g")
         # Toggle Tree/Git mode
-        "$NEXUS_SCRIPTS/tree_swap.sh"
+        "$NEXUS_HOME/lib/tree_swap.sh"
         ;;
 
     # === AI Control ===

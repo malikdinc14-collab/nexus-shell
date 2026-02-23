@@ -1,4 +1,66 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": "nexus-cyber"
+  "theme": "nexus-cyber",
+  "default_agent": "Helper",
+  "agent": {
+    "Helper": {
+      "model": "intelhub/Council-Helper",
+      "description": "Council Helper (The Author)",
+      "mode": "primary"
+    },
+    "Proposer": {
+      "model": "intelhub/Council-Proposer",
+      "description": "Council Proposer (The Designer)",
+      "mode": "subagent"
+    },
+    "Critic": {
+      "model": "intelhub/Council-Critic",
+      "description": "Council Critic (The Auditor)",
+      "mode": "subagent"
+    },
+    "Optimizer": {
+      "model": "intelhub/Council-Optimizer",
+      "description": "Council Optimizer (The Strategist)",
+      "mode": "subagent"
+    }
+  },
+  "provider": {
+    "intelhub": {
+      "name": "IntelHub Sovereign Council",
+      "api": "http://127.0.0.1:11436/v1",
+      "models": {
+        "Council-Helper": {
+          "name": "Council Helper",
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        },
+        "Council-Proposer": {
+          "name": "Council Proposer",
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        },
+        "Council-Critic": {
+          "name": "Council Critic",
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        },
+        "Council-Optimizer": {
+          "name": "Council Optimizer",
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        }
+      }
+    }
+  },
+  "plugin": [
+    "sentinel"
+  ],
+  "$schema": "https://opencode.ai/config.json"
 }

@@ -1,0 +1,6 @@
+{
+    "name": "zellij",
+    "description": "Terminal workspace with batteries included",
+    "category": "multiplexer",
+    "version": "latest"
+}

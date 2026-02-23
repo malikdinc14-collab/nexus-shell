@@ -82,156 +82,33 @@ NEXUS_BIN="$USER_HOME/.nexus-shell/bin"
 mkdir -p "$NEXUS_BIN"
 
 if [[ "$DOWNLOAD_TOOLS" =~ ^[Yy]$ ]]; then
-    echo "    Downloading tools (this may take a moment)..."
-    
-    # Detect architecture
-    ARCH=$(uname -m)
-    case "$ARCH" in
-        arm64|aarch64) ARCH_SUFFIX="arm64" ;;
-        x86_64) ARCH_SUFFIX="x86_64" ;;
-        *) echo "    Unsupported architecture: $ARCH"; exit 1 ;;
-    esac
-    
-    OS=$(uname -s)
-    case "$OS" in
-        Darwin) OS_NAME="macos" ;;
-        Linux) OS_NAME="linux" ;;
-        *) echo "    Unsupported OS: $OS"; exit 1 ;;
-    esac
-    
-    cd /tmp
-    
-    # Neovim
-    if [[ ! -x "$NEXUS_BIN/nvim" ]]; then
-        echo "    Downloading Neovim..."
-        if [[ "$OS_NAME" == "macos" ]]; then
-            curl -sL "https://github.com/neovim/neovim/releases/latest/download/nvim-macos-${ARCH_SUFFIX}.tar.gz" -o nvim.tar.gz
-            tar -xzf nvim.tar.gz
-            # Copy entire structure (bin, share, lib) to ~/.nexus-shell/
-            cp -r nvim-macos-${ARCH_SUFFIX}/* "$USER_HOME/.nexus-shell/"
-            rm -rf nvim.tar.gz nvim-macos-${ARCH_SUFFIX}
-        else
-            curl -sL "https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz" -o nvim.tar.gz
-            tar -xzf nvim.tar.gz
-            cp -r nvim-linux64/* "$USER_HOME/.nexus-shell/"
-            rm -rf nvim.tar.gz nvim-linux64
-        fi
-    fi
-    
-    # Yazi
-    if [[ ! -x "$NEXUS_BIN/yazi" ]]; then
-        echo "    Downloading Yazi..."
-        YAZI_TAG=$(curl -sI https://github.com/sxyazi/yazi/releases/latest | grep -i location | sed 's/.*tag\///' | tr -d '\r\n')
-        if [[ "$OS_NAME" == "macos" ]]; then
-            curl -sL "https://github.com/sxyazi/yazi/releases/download/${YAZI_TAG}/yazi-aarch64-apple-darwin.zip" -o yazi.zip
-            unzip -q yazi.zip
-            cp yazi-aarch64-apple-darwin/yazi "$NEXUS_BIN/"
-            rm -rf yazi.zip yazi-aarch64-apple-darwin
-        else
-            curl -sL "https://github.com/sxyazi/yazi/releases/download/${YAZI_TAG}/yazi-x86_64-unknown-linux-gnu.zip" -o yazi.zip
-            unzip -q yazi.zip
-            cp yazi-x86_64-unknown-linux-gnu/yazi "$NEXUS_BIN/"
-            rm -rf yazi.zip yazi-x86_64-unknown-linux-gnu
-        fi
-    fi
-    
-    # Glow
-    if [[ ! -x "$NEXUS_BIN/glow" ]]; then
-        echo "    Downloading Glow..."
-        GLOW_TAG=$(curl -sI https://github.com/charmbracelet/glow/releases/latest | grep -i location | sed 's/.*tag\///' | tr -d '\r\n')
-        GLOW_VER="${GLOW_TAG#v}"
-        if [[ "$OS_NAME" == "macos" ]]; then
-            curl -sL "https://github.com/charmbracelet/glow/releases/download/${GLOW_TAG}/glow_${GLOW_VER}_Darwin_${ARCH_SUFFIX}.tar.gz" -o glow.tar.gz
-        else
-            curl -sL "https://github.com/charmbracelet/glow/releases/download/${GLOW_TAG}/glow_${GLOW_VER}_Linux_${ARCH_SUFFIX}.tar.gz" -o glow.tar.gz
-        fi
-        mkdir -p glow_tmp
-        tar -xzf glow.tar.gz -C glow_tmp
-        find glow_tmp -type f -name "glow" -exec cp {} "$NEXUS_BIN/" \;
-        rm -rf glow.tar.gz glow_tmp
-    fi
-    
-    # Gum
-    if [[ ! -x "$NEXUS_BIN/gum" ]]; then
-        echo "    Downloading Gum..."
-        GUM_TAG=$(curl -sI https://github.com/charmbracelet/gum/releases/latest | grep -i location | sed 's/.*tag\///' | tr -d '\r\n')
-        GUM_VER="${GUM_TAG#v}"
-        if [[ "$OS_NAME" == "macos" ]]; then
-            curl -sL "https://github.com/charmbracelet/gum/releases/download/${GUM_TAG}/gum_${GUM_VER}_Darwin_${ARCH_SUFFIX}.tar.gz" -o gum.tar.gz
-        else
-            curl -sL "https://github.com/charmbracelet/gum/releases/download/${GUM_TAG}/gum_${GUM_VER}_Linux_${ARCH_SUFFIX}.tar.gz" -o gum.tar.gz
-        fi
-        mkdir -p gum_tmp
-        tar -xzf gum.tar.gz -C gum_tmp
-        find gum_tmp -type f -name "gum" -exec cp {} "$NEXUS_BIN/" \;
-        rm -rf gum.tar.gz gum_tmp
-    fi
+    echo "    Installing modules..."
 
-    # OpenCode
-    if [[ ! -x "$NEXUS_BIN/opencode" ]]; then
-        echo "    Downloading OpenCode..."
-        OC_TAG=$(curl -sI https://github.com/anomalyco/opencode/releases/latest | grep -i location | sed 's/.*tag\///' | tr -d '\r\n')
+    # Detect architecture (Exported for modules to use)
+    export ARCH=$(uname -m)
+    export OS=$(uname -s)
+    
+    # Generic Module Installer Logic
+    MODULES_DIR="$NEXUS_HOME/modules"
+    
+    # Loop through local modules (excluding parallax which is special)
+    for mod_dir in "$MODULES_DIR"/*; do
+        mod_name=$(basename "$mod_dir")
         
-        if [[ "$OS_NAME" == "macos" ]]; then
-            curl -sL "https://github.com/anomalyco/opencode/releases/download/${OC_TAG}/opencode-darwin-${ARCH_SUFFIX}.zip" -o opencode.zip
-            unzip -oq opencode.zip 2>/dev/null || true
-        else
-            curl -sL "https://github.com/anomalyco/opencode/releases/download/${OC_TAG}/opencode-linux-${ARCH_SUFFIX}.tar.gz" -o opencode.tar.gz
-            tar -xzf opencode.tar.gz 2>/dev/null || true
-        fi
+        # Skip parallax submodule as it's handled separately
+        [[ "$mod_name" == "parallax" ]] && continue
+        [[ "$mod_name" =~ template_* ]] && continue
         
-        if [[ -f "opencode" ]]; then
-            cp opencode "$NEXUS_BIN/"
-        elif [[ -d "opencode_tmp" ]]; then
-            find opencode_tmp -type f -name "opencode" -exec cp {} "$NEXUS_BIN/" \;
+        if [[ -f "$mod_dir/install.sh" ]]; then
+            echo "    [$mod_name] Installing..."
+            # Execute module installer
+            (cd "$mod_dir" && ./install.sh "$NEXUS_BIN" "$OS" "$ARCH")
         fi
-        rm -rf opencode opencode.zip opencode.tar.gz opencode_tmp
-    fi
-
-    # Micro
-    if [[ ! -x "$NEXUS_BIN/micro" ]]; then
-        echo "    Downloading Micro..."
-        MICRO_TAG=$(curl -sI https://github.com/zyedidia/micro/releases/latest | grep -i location | sed 's/.*tag\///' | tr -d '\r\n')
-        MICRO_VER="${MICRO_TAG#v}"
-        if [[ "$OS_NAME" == "macos" ]]; then
-            # Micro uses a different naming convention: micro-2.0.14-macos-arm64.tar.gz
-            # ARCH_SUFFIX is arm64 or x86_64
-            curl -sL "https://github.com/zyedidia/micro/releases/download/${MICRO_TAG}/micro-${MICRO_VER}-macos-${ARCH_SUFFIX}.tar.gz" -o micro.tar.gz
-        else
-            curl -sL "https://github.com/zyedidia/micro/releases/download/${MICRO_TAG}/micro-${MICRO_VER}-linux64.tar.gz" -o micro.tar.gz
-        fi
-        if [[ -f micro.tar.gz ]]; then
-            mkdir -p micro_tmp
-            if tar -xzf micro.tar.gz -C micro_tmp 2>/dev/null; then
-                find micro_tmp -type f -name "micro" -exec cp {} "$NEXUS_BIN/" \;
-            else
-                echo "    [!] Warning: Failed to extract Micro archive."
-            fi
-            rm -rf micro.tar.gz micro_tmp
-        else
-            echo "    [!] Warning: Failed to download Micro."
-        fi
-    fi
-
-    # LazyGit
-    if [[ ! -x "$NEXUS_BIN/lazygit" ]]; then
-        echo "    Downloading LazyGit..."
-        LG_TAG=$(curl -sI https://github.com/jesseduffield/lazygit/releases/latest | grep -i location | sed 's/.*tag\///' | tr -d '\r\n')
-        LG_VER="${LG_TAG#v}"
-        if [[ "$OS_NAME" == "macos" ]]; then
-            # lazygit_0.58.1_darwin_arm64.tar.gz
-            curl -sL "https://github.com/jesseduffield/lazygit/releases/download/${LG_TAG}/lazygit_${LG_VER}_darwin_${ARCH_SUFFIX}.tar.gz" -o lazygit.tar.gz
-        else
-            curl -sL "https://github.com/jesseduffield/lazygit/releases/download/${LG_TAG}/lazygit_${LG_VER}_linux_${ARCH_SUFFIX}.tar.gz" -o lazygit.tar.gz
-        fi
-        mkdir -p lazygit_tmp
-        tar -xzf lazygit.tar.gz -C lazygit_tmp
-        find lazygit_tmp -type f -name "lazygit" -exec cp {} "$NEXUS_BIN/" \;
-        rm -rf lazygit.tar.gz lazygit_tmp
-    fi
+    done
     
-    chmod +x "$NEXUS_BIN"/*
-    echo "    Tools installed to $NEXUS_BIN"
+    chmod +x "$NEXUS_BIN"/* 2>/dev/null || true
+    echo "    Modules installed to $NEXUS_BIN"
+
     
     # Copy tool configs for isolated mode
     TOOL_CONFIGS="$CONFIG_DIR/tool-configs"
@@ -257,21 +134,35 @@ if [[ "$DOWNLOAD_TOOLS" =~ ^[Yy]$ ]]; then
             grep "^$1=" "$EXISTING_CONF" | cut -d'=' -f2- | tr -d '"' | tr -d "'"
         }
 
-        # Determine values (Priority: Existing > Default)
-        VAL_EDITOR=$(get_conf_val "NEXUS_EDITOR")
-        [[ -z "$VAL_EDITOR" ]] && VAL_EDITOR="$NEXUS_BIN/nvim"
+        # Determine values (Priority: Isolated > Existing > Default)
         
-        VAL_FILES=$(get_conf_val "NEXUS_FILES")
-        [[ -z "$VAL_FILES" ]] && VAL_FILES="$NEXUS_BIN/yazi"
+        # Helper: Check isolated binary
+        get_isolated_or_conf() {
+            local tool_name="$1"
+            local conf_key="$2"
+            local conf_val=$(get_conf_val "$conf_key")
+            
+            if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
+                echo "$NEXUS_BIN/$tool_name"
+            else
+                echo "$conf_val"
+            fi
+        }
+
+        VAL_EDITOR=$(get_isolated_or_conf "nvim" "NEXUS_EDITOR")
+        [[ -z "$VAL_EDITOR" ]] && VAL_EDITOR="nvim"
         
-        VAL_RENDER=$(get_conf_val "NEXUS_RENDER")
-        [[ -z "$VAL_RENDER" ]] && VAL_RENDER="$NEXUS_BIN/glow"
+        VAL_FILES=$(get_isolated_or_conf "yazi" "NEXUS_FILES")
+        [[ -z "$VAL_FILES" ]] && VAL_FILES="yazi"
         
-        VAL_GUM=$(get_conf_val "NEXUS_GUM")
-        [[ -z "$VAL_GUM" ]] && VAL_GUM="$NEXUS_BIN/gum"
+        VAL_RENDER=$(get_isolated_or_conf "glow" "NEXUS_RENDER")
+        [[ -z "$VAL_RENDER" ]] && VAL_RENDER="glow"
         
-        VAL_GIT=$(get_conf_val "NEXUS_GIT")
-        [[ -z "$VAL_GIT" ]] && VAL_GIT="$NEXUS_BIN/lazygit"
+        VAL_GUM=$(get_isolated_or_conf "gum" "NEXUS_GUM")
+        [[ -z "$VAL_GUM" ]] && VAL_GUM="gum"
+        
+        VAL_GIT=$(get_isolated_or_conf "lazygit" "NEXUS_GIT")
+        [[ -z "$VAL_GIT" ]] && VAL_GIT="lazygit"
         
         VAL_CHAT=$(get_conf_val "NEXUS_CHAT")
         [[ -z "$VAL_CHAT" ]] && VAL_CHAT="$DETECTED_CHAT"
@@ -392,10 +283,13 @@ echo "[3/6] Setting up configuration..."
 
 mkdir -p "$CONFIG_DIR"
 
-# Copy nexus-shell config
-cp -r "$NEXUS_HOME/config/tmux" "$CONFIG_DIR/"
+# Copy Nexus 2.0 structure
+cp -r "$NEXUS_HOME/core" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/lib" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/compositions" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/config" "$CONFIG_DIR/"
 cp -r "$NEXUS_HOME/themes" "$CONFIG_DIR/"
-cp -r "$NEXUS_HOME/scripts" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/specs" "$CONFIG_DIR/"
 
 # Install Nexus actions to Parallax
 if [[ -d "$HOME/.parallax/content/actions" ]]; then
@@ -443,8 +337,15 @@ export NEXUS_BIN="$NEXUS_BIN"
 # Add nexus-shell bin to PATH if using downloaded tools
 [[ -d "\$NEXUS_BIN" ]] && export PATH="\$NEXUS_BIN:\$PATH"
 
-# Shell hooks
-source "\$NEXUS_CONFIG/scripts/shell_hooks.zsh"
+# Shell hooks (Kernal Location)
+source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
+
+# Source module inits
+if [[ -d "\$NEXUS_HOME/modules" ]]; then
+    for init_file in "\$NEXUS_HOME"/modules/*/init.zsh; do
+        [[ -f "\$init_file" ]] && source "\$init_file"
+    done
+fi
 EOF
 
 # Add to .zshrc if not already there
@@ -472,10 +373,10 @@ else
     mkdir -p "$BIN_DIR"
 fi
 
-ln -sf "$CONFIG_DIR/scripts/launcher.sh" "$BIN_DIR/nexus"
-ln -sf "$CONFIG_DIR/scripts/launcher.sh" "$BIN_DIR/nxs"
-echo "    $BIN_DIR/nexus -> launcher.sh"
-echo "    $BIN_DIR/nxs -> launcher.sh"
+ln -sf "$CONFIG_DIR/core/boot/launcher.sh" "$BIN_DIR/nexus"
+ln -sf "$CONFIG_DIR/core/boot/launcher.sh" "$BIN_DIR/nxs"
+echo "    $BIN_DIR/nexus -> core/boot/launcher.sh"
+echo "    $BIN_DIR/nxs -> core/boot/launcher.sh"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"

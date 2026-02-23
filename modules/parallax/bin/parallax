@@ -2,10 +2,19 @@
 # bin/parallax
 # Atomic Parallax Driver (Hardened Mode v13)
 
-# 0. CLEANUP STALE TEMP FILES
-setopt NULL_GLOB
-rm -rf /tmp/px-*
-unsetopt NULL_GLOB
+# NEXUS MODE: Skip session management when embedded in Nexus-Shell
+if [[ "$1" == "--nexus" || -n "$PX_NEXUS_MODE" ]]; then
+    export PX_NEXUS_MODE=1
+    shift 2>/dev/null  # Remove --nexus from args if present
+    # Skip to dashboard logic directly (don't create sessions or cleanup)
+fi
+
+# 0. CLEANUP STALE TEMP FILES (Skip in Nexus mode to avoid wiping Nexus state)
+if [[ -z "$PX_NEXUS_MODE" ]]; then
+    setopt NULL_GLOB
+    rm -rf /tmp/px-*
+    unsetopt NULL_GLOB
+fi
 
 # 0.5 ENVIRONMENT FIREWALL (Isolation)
 # Prevent parent shell's python environment from leaking into the session
@@ -46,8 +55,8 @@ cleanup() {
 trap "cleanup EXIT" EXIT
 
 # 1.5 TMUX-NATIVE MODE
-# If not already in Tmux and not in isolated mode, create a 2-pane session
-if [[ -z "$TMUX" && "$1" != "--isolated" ]]; then
+# If not already in Tmux and not in isolated mode and not in Nexus mode, create a 2-pane session
+if [[ -z "$TMUX" && "$1" != "--isolated" && -z "$PX_NEXUS_MODE" ]]; then
     # [OUTER ROLE] The Driver
     # Invariant: Must survive Ctrl+C to print the log after session death.
     trap '' INT
@@ -82,8 +91,8 @@ if [[ -z "$TMUX" && "$1" != "--isolated" ]]; then
     
     # Outer Script: Persistence handled by user dropping to shell
     exit 0
-elif [[ -n "$TMUX" && "$1" != "--in-tmux" ]]; then
-    # [RE-ENTRY ROLE] Running 'parallax' from inside the Stage Pane
+elif [[ -n "$TMUX" && "$1" != "--in-tmux" && -z "$PX_NEXUS_MODE" ]]; then
+    # [RE-ENTRY ROLE] Running 'parallax' from inside the Stage Pane (not Nexus)
     # Invariant: Must restore the Dashboard split.
     
     SESSION_NAME=$(tmux display-message -p '#S')
@@ -95,6 +104,9 @@ elif [[ -n "$TMUX" && "$1" != "--in-tmux" ]]; then
     # We are done. The new pane takes over.
     exit 0
 fi
+
+# NEXUS MODE: Run dashboard directly in the pane without session management
+# We skip --in-tmux check since we're already in Nexus's pane
 
 # If we're the inner Dashboard process, continue; otherwise this is the Stage pane
 [[ "$1" == "--in-tmux" ]] && shift
@@ -227,7 +239,6 @@ fzf_args=(
   '--border=none' --delimiter=$'\t' '--with-nth=1'
   '--pointer= ' '--marker= '
   '--height=100%' '--color=prompt:#268bd2,header:#859900,pointer:#b58900,bg+:#073642'
-  '--sync' '--mouse'
   '--bind=j:down,k:up,ctrl-j:down,ctrl-k:up'
   
   # Legend Toggle (Ctrl-H: Help)

@@ -1,0 +1,6 @@
+{
+    "name": "fzf",
+    "description": "Command-line fuzzy finder",
+    "category": "core-discovery",
+    "version": "0.67.0"
+}

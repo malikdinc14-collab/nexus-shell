@@ -35,7 +35,7 @@ build_vscodelike() {
     $STAGGER
     
     # 3. UI (Bottom of Chat)
-    tmux split-window -v -p 25 -t "$CHAT_PANE" -c "$PROJECT_ROOT" "$WRAPPER $SCRIPT_DIR/transaction_ui.sh"
+    tmux split-window -v -p 25 -t "$CHAT_PANE" -c "$PROJECT_ROOT" "$WRAPPER $BRIDGE/transaction_ui.sh"
     nxs_assert "UI Split"
     $STAGGER
     
@@ -67,19 +67,48 @@ build_vscodelike() {
 }
 
 # --- Entry Point ---
+# SCRIPT_DIR is .../nexus-shell/core/layout
 SCRIPT_DIR="$(cd -P "$(dirname "$0")" && pwd)"
-WRAPPER="$SCRIPT_DIR/pane_wrapper.sh"
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
+export NEXUS_CORE="${NEXUS_CORE:-$NEXUS_HOME/core}"
+export WRAPPER="$NEXUS_CORE/boot/pane_wrapper.sh"
+export BRIDGE="$NEXUS_CORE/bridge"
 
 WINDOW_ID="$1"
 LAYOUT="$2"
 SESSION_ID="$3"
 PROJECT_ROOT="$4"
 
+echo "    [*] Seeking Composition: $LAYOUT"
+
+# 1. Check for JSON Composition in compositions/
+COMP_JSON="$NEXUS_HOME/compositions/$LAYOUT.json"
+
+if [[ -f "$COMP_JSON" ]]; then
+    echo "    [*] Applying Data-Driven Composition..."
+    # Get the starting pane ID for this window
+    START_PANE=$(tmux display-message -t "$WINDOW_ID" -p '#{pane_id}')
+    
+    # Ensure all required environment variables are exported for the Python processor
+    # These may have been set by launcher.sh but need to be explicitly exported
+    export WRAPPER="${WRAPPER:-$NEXUS_CORE/boot/pane_wrapper.sh}"
+    export PARALLAX_CMD="${PARALLAX_CMD:-echo 'Parallax not configured'}"
+    export EDITOR_CMD="${EDITOR_CMD:-nvim}"
+    export NEXUS_FILES="${NEXUS_FILES:-yazi}"
+    export NEXUS_CHAT="${NEXUS_CHAT:-zsh}"
+    
+    echo "    [*] Processor target: $START_PANE, Root: $PROJECT_ROOT"
+    
+    # Execute the Python Processor
+    python3 "$SCRIPT_DIR/processor.py" "$COMP_JSON" "$START_PANE" "$PROJECT_ROOT"
+    
+    # Final Focus
+    tmux select-pane -t "$START_PANE"
+    exit 0
+fi
+
+# 2. Legacy Fallback (If no JSON found)
 case "$LAYOUT" in
     vscodelike) build_vscodelike "$WINDOW_ID" "$PROJECT_ROOT" ;;
-    monitor)
-        tmux send-keys -t "$WINDOW_ID.0" "$WRAPPER top" Enter
-        tmux split-window -v -b -p 20 -t "$WINDOW_ID.0" -c "$PROJECT_ROOT" "$WRAPPER $PARALLAX_CMD --context workflow:tasks"
-        tmux split-window -h -p 50 -t "$WINDOW_ID.1" -c "$PROJECT_ROOT" "$WRAPPER tail -f /tmp/px-agent-trace.log"
-        ;;
+    *) echo "    [!] ERROR: Unknown composition '$LAYOUT'" >&2; exit 1 ;;
 esac

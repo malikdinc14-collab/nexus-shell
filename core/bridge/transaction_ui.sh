@@ -1,7 +1,12 @@
 #!/bin/bash
 # transaction_ui.sh - Minimal TUI for approving/rejecting agent patches
 
-set -e
+# Robustness: Don't exit on errors
+# set -e
+
+# Resolve paths
+NEXUS_HOME="${NEXUS_HOME:-$HOME/.config/nexus-shell}"
+NEXUS_SCRIPTS="${NEXUS_SCRIPTS:-$NEXUS_HOME/core/boot}"
 
 TRANS_DIR="$HOME/.parallax/transactions"
 mkdir -p "$TRANS_DIR"
@@ -31,8 +36,14 @@ while true; do
         continue
     fi
 
-    STATUS=$(jq -r '.status' "$METADATA")
-    INTENT=$(jq -r '.intent' "$METADATA")
+    # Use jq if available, fallback to grep
+    if command -v jq &>/dev/null; then
+        STATUS=$(jq -r '.status // "unknown"' "$METADATA" 2>/dev/null || echo "unknown")
+        INTENT=$(jq -r '.intent // "N/A"' "$METADATA" 2>/dev/null || echo "N/A")
+    else
+        STATUS="unknown"
+        INTENT="(jq not installed)"
+    fi
     
     if [[ "$STATUS" != "staged" ]]; then
         echo "  Last: $ID ($STATUS)"

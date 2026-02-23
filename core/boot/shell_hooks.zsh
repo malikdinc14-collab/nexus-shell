@@ -13,8 +13,8 @@ mkdir -p "$NEXUS_STATE"
 # === edit/view Commands ===
 # These work inside Nexus sessions to open files in the editor/render pane
 
-alias edit="$NEXUS_HOME/scripts/open.sh edit"
-alias view="$NEXUS_HOME/scripts/open.sh view"
+alias edit="$NEXUS_HOME/lib/open.sh edit"
+alias view="$NEXUS_HOME/lib/open.sh view"
 
 # === Parallax Integration ===
 # Only auto-link inside Nexus sessions or if explicitly forced
@@ -48,7 +48,20 @@ if [[ -n "$NEXUS_PROJECT" ]]; then
 fi
 
 # === Quick Launchers ===
-# 'nxs' as shorthand for nexus launcher
+# 'nxs' points to the public bin entry point
+alias nxs="$NEXUS_HOME/bin/nxs"
+alias nexus="$NEXUS_HOME/bin/nxs"
 
-alias nxs="$NEXUS_HOME/scripts/launcher.sh"
-alias nexus="$NEXUS_HOME/scripts/launcher.sh"
+# === Kernel API ===
+# nxs-state <key> [val] - Simple wrapper for the Station Manager
+nxs-state() {
+    if [[ -z "$NEXUS_PROJECT" ]]; then
+        echo "Error: NEXUS_PROJECT not set. Are you inside a station?" >&2
+        return 1
+    fi
+    if [[ $# -eq 1 ]]; then
+        "$NEXUS_HOME/core/api/station_manager.sh" "$NEXUS_PROJECT" get "$1"
+    else
+        "$NEXUS_HOME/core/api/station_manager.sh" "$NEXUS_PROJECT" set "$1" "$2"
+    fi
+}

@@ -1,0 +1,39 @@
+{
+    "name": "quad_parallax",
+    "description": "4-pane with parallax to test if parallax crashes",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "left",
+                "size": 50,
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "parallax",
+                        "size": 20,
+                        "command": "$PARALLAX_CMD"
+                    },
+                    {
+                        "id": "shell1",
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            },
+            {
+                "id": "right",
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "shell2",
+                        "command": "/bin/zsh -i"
+                    },
+                    {
+                        "id": "shell3",
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            }
+        ]
+    }
+}
