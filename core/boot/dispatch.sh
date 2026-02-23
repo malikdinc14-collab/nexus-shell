@@ -45,7 +45,7 @@ case "$CMD" in
         # Save and quit
         if [[ -S "$NVIM_PIPE" ]]; then
             tmux display-message "Saving buffers..."
-            "$NEXUS_BIN/nvim" --server "$NVIM_PIPE" --remote-send ":wa<CR>"
+            "$NEXUS_BIN/nvim" --server "$NVIM_PIPE" --remote-send ":wa<CR>" 2>/dev/null || tmux display-message "Failed to communicate with Neovim"
             sleep 0.5
         fi
         "$NEXUS_BOOT/guard.sh" exit

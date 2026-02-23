@@ -327,7 +327,8 @@ echo "[5/6] Setting up shell integration..."
 NEXUS_ZSH="$USER_HOME/.nexus-shell.zsh"
 cat > "$NEXUS_ZSH" << EOF
 # Nexus-Shell Integration
-export NEXUS_HOME="$NEXUS_HOME"
+# Point NEXUS_HOME to the config directory for runtime usage
+export NEXUS_HOME="$CONFIG_DIR"
 export NEXUS_CONFIG="$CONFIG_DIR"
 export NEXUS_BIN="$NEXUS_BIN"
 
@@ -337,12 +338,12 @@ export NEXUS_BIN="$NEXUS_BIN"
 # Add nexus-shell bin to PATH if using downloaded tools
 [[ -d "\$NEXUS_BIN" ]] && export PATH="\$NEXUS_BIN:\$PATH"
 
-# Shell hooks (Kernal Location)
+# Shell hooks (Kernel Location)
 source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
 
 # Source module inits
-if [[ -d "\$NEXUS_HOME/modules" ]]; then
-    for init_file in "\$NEXUS_HOME"/modules/*/init.zsh; do
+if [[ -d "\$NEXUS_CONFIG/modules" ]]; then
+    for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh; do
         [[ -f "\$init_file" ]] && source "\$init_file"
     done
 fi

@@ -59,11 +59,18 @@ echo "      Note: You may want to remove the nexus line from ~/.zshrc manually"
 
 # === Clean state directory ===
 echo "[4/4] Cleaning state directory..."
-
+# Clean state
 NEXUS_STATE="/tmp/nexus_$USER_NAME"
 if [[ -d "$NEXUS_STATE" ]]; then
     rm -rf "$NEXUS_STATE"
     echo "      Removed: $NEXUS_STATE"
+fi
+
+# Clean persistent state
+PERSISTENT_STATE="$CONFIG_DIR/state"
+if [[ -d "$PERSISTENT_STATE" ]]; then
+    rm -rf "$PERSISTENT_STATE"
+    echo "      Removed: $PERSISTENT_STATE"
 fi
 
 echo ""

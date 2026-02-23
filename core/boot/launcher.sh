@@ -156,6 +156,12 @@ tmux set-environment -t "$SESSION_ID" NEXUS_CHAT "$NEXUS_CHAT"
 echo "[*] Building Station Architecture..."
 "$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:0" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
 
+# Restore active theme from persistent state
+if [[ -x "$NEXUS_SCRIPTS/theme.sh" ]]; then
+    CURRENT_THEME=$("$NEXUS_SCRIPTS/theme.sh" current)
+    "$NEXUS_SCRIPTS/theme.sh" apply "$CURRENT_THEME" >/dev/null 2>&1 || true
+fi
+
 # 10. Success Handover
 echo -e "\033[1;32m[*] Station Solidified. Attaching...\033[0m"
 export NEXUS_STATION_ACTIVE=1

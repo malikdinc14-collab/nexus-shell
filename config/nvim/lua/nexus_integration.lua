@@ -40,6 +40,9 @@ function _G.nexus_is_dirty()
     return "false"
 end
 
+-- Alias for compatibility with dispatch.sh
+_G.is_dirty = _G.nexus_is_dirty
+
 -- === Keybindings ===
 -- Toggle render/preview mode (Ctrl+Space is handled by tmux, this is backup)
 vim.keymap.set("n", "<leader>nv", function()

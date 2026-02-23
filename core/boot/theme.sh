@@ -6,7 +6,16 @@
 NEXUS_HOME="${NEXUS_HOME:-$HOME/.config/nexus-shell}"
 NEXUS_STATE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}"
 THEMES_DIR="$NEXUS_HOME/themes"
-ACTIVE_THEME_FILE="$NEXUS_STATE/theme.json"
+
+# Use persistent state for theme configuration
+PERSISTENT_STATE="$NEXUS_HOME/state"
+mkdir -p "$PERSISTENT_STATE"
+ACTIVE_THEME_FILE="$PERSISTENT_STATE/theme.json"
+
+# Fallback to tmp state if persistent fails (unlikely)
+if [[ ! -w "$PERSISTENT_STATE" ]]; then
+    ACTIVE_THEME_FILE="$NEXUS_STATE/theme.json"
+fi
 
 ACTION="${1:-menu}"
 
