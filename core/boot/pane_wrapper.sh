@@ -37,6 +37,7 @@ show_hub() {
     echo "Project: $NEXUS_PROJECT"
     echo ""
     
+    # Future: Generate this from registry.json
     local menu_items="editor|Editor\nrender|Render\nshell|Terminal\nfiles|Files\nchat|AI Chat\ngit|Git\nexit|EXIT STATION"
     
     selection=$(echo -e "$menu_items" | fzf --reverse --height=50% --border --header="Choose Tool")
@@ -47,6 +48,8 @@ show_hub() {
         "shell")  COMMAND="/bin/zsh -i" ;;
         "files")  COMMAND="$NEXUS_FILES" ;;
         "chat")   COMMAND="$NEXUS_CHAT" ;;
+        "render") COMMAND="$NEXUS_HOME/lib/swap.sh" ;;
+        "git")    COMMAND="$NEXUS_HOME/lib/tree_swap.sh" ;;
         "exit")   tmux kill-session -t "$SESSION_NAME"; exit 0 ;;
         *)        COMMAND="/bin/zsh -i" ;;
     esac

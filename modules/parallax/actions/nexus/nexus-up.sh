@@ -6,8 +6,7 @@
 # 1. Start Embedding Server (Jina)
 if ! lsof -i:11435 > /dev/null; then
     echo "[*] Starting Jina Embedding Node..."
-    JINA_MODEL="${JINA_MODEL:-/Users/Shared/AI_CORE/models/embeddings/gguf/jina-code-embeddings-1.5b-GGUF/jina-code-embeddings-1.5b-Q8_0.gguf}"
-    nohup llama-server -m "$JINA_MODEL" --port 11435 --embedding --host 127.0.0.1 > /tmp/nexus_embedding_server.log 2>&1 &
+    nohup llama-server -m /Users/Shared/AI_CORE/models/embeddings/gguf/jina-code-embeddings-1.5b-GGUF/jina-code-embeddings-1.5b-Q8_0.gguf --port 11435 --embedding --host 127.0.0.1 > /tmp/nexus_embedding_server.log 2>&1 &
 fi
 
 # 2. Start Gateway
