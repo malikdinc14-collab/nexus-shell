@@ -140,6 +140,17 @@ export PX_SCOPE="${PX_SCOPE:-GLOBAL}" PX_TOOL_VIEWER PX_TOOL_EDITOR
 
 # 4. STATE
 export PX_SESSION_ID="$$"
+export PX_BUS_SOCKET="/tmp/parallax_$(whoami)/bus_$PX_SESSION_ID.sock"
+
+# Start the Event Bus
+if [[ -n "$PX_TMUX_NATIVE" || -n "$PX_NEXUS_MODE" ]]; then
+    # Start bus server in background
+    python3 "$PROJECT_ROOT/lib/core/bus_server.py" --socket "$PX_BUS_SOCKET" >/dev/null 2>&1 &
+    PX_BUS_PID=$!
+    
+    # Ensure bus is killed on exit
+    trap "kill $PX_BUS_PID 2>/dev/null; cleanup" EXIT
+fi
 export PX_CTX_FILE="/tmp/px-ctx-$$.log"
 export PX_ENV_FILE="/tmp/px-env-$$.sh"
 export PX_SIGNAL_FILE="/tmp/px-signal-$$.sh"
