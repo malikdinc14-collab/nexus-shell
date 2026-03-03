@@ -61,17 +61,17 @@ if [[ -z "$TMUX" && "$1" != "--isolated" && -z "$PX_NEXUS_MODE" ]]; then
     # Invariant: Must survive Ctrl+C to print the log after session death.
     trap '' INT
     
-    SESSION_NAME="parallax-$$"
-    # Create new session in detached mode
     # CRITICAL: px-link must be sourced BY the interactive shell (not before it)
     # We use ZDOTDIR to inject our init into zsh startup
-    mkdir -p "$HOME/.parallax/stage"
-    echo 'source ~/.zshrc 2>/dev/null; export PX_STAGE_PID=$$; source ~/.parallax/bin/px-link' > "$HOME/.parallax/stage/.zshrc"
+    # Use PX_STATE_DIR for isolated staging, fallback to default if not provided
+    LOCAL_STAGE_DIR="${PX_STATE_DIR:-$HOME/.parallax/stage}"
+    mkdir -p "$LOCAL_STAGE_DIR"
+    echo 'source ~/.zshrc 2>/dev/null; export PX_STAGE_PID=$$; source '${PX_LIB_DIR:-$HOME/.parallax}/bin/px-link > "$LOCAL_STAGE_DIR/.zshrc"
+    
     # Launch with explicit environment scrubbing via `env`
     # This prevents the zsh process from inheriting vars even if the session does.
     tmux new-session -d -s "$SESSION_NAME" -x "$(tput cols)" -y "$(tput lines)" \
-        "env -u VIRTUAL_ENV -u CONDA_PREFIX -u PYTHONHOME -u POETRY_ACTIVE ZDOTDIR=$HOME/.parallax/stage zsh"
-    
+        "env -u VIRTUAL_ENV -u CONDA_PREFIX -u PYTHONHOME -u POETRY_ACTIVE ZDOTDIR=$LOCAL_STAGE_DIR zsh"    
     # 0.5 FORCE CLEANUP (Session Level)
     # We still clean the session for future panes/windows.
     # Even if we unset in shell, tmux might inherit from server global env.
@@ -138,10 +138,14 @@ export PATH="$BIN_DIR:$LIB_EXEC_DIR:$PATH"
 eval "$(px-engine --settings)"
 export PX_SCOPE="${PX_SCOPE:-GLOBAL}" PX_TOOL_VIEWER PX_TOOL_EDITOR
 
-# 4. STATE
-export PX_SESSION_ID="$$"
-export PX_BUS_SOCKET="/tmp/parallax_$(whoami)/bus_$PX_SESSION_ID.sock"
+# 4. ISOLATED STATE MAP
+# Parallax is mostly stateless in memory, but stateful on disk.
+# We map all tmp files into the isolated Nexus state directory or a fallback.
+STATE_ROOT="${PX_STATE_DIR:-/tmp/parallax_$(whoami)/$PX_SESSION_ID}"
+mkdir -p "$STATE_ROOT"
 
+export PX_SESSION_ID="$$"
+export PX_BUS_SOCKET="$STATE_ROOT/bus_$PX_SESSION_ID.sock"
 # Start the Event Bus
 if [[ -n "$PX_TMUX_NATIVE" || -n "$PX_NEXUS_MODE" ]]; then
     # Start bus server in background
@@ -151,11 +155,13 @@ if [[ -n "$PX_TMUX_NATIVE" || -n "$PX_NEXUS_MODE" ]]; then
     # Ensure bus is killed on exit
     trap "kill $PX_BUS_PID 2>/dev/null; cleanup" EXIT
 fi
-export PX_CTX_FILE="/tmp/px-ctx-$$.log"
-export PX_ENV_FILE="/tmp/px-env-$$.sh"
-export PX_SIGNAL_FILE="/tmp/px-signal-$$.sh"
-export PX_SESSION_META="/tmp/px-session-$$.meta"
-export PX_SESSION_JSON="$HOME/.parallax/session.json"
+
+# Map all kernel context files and state into the isolated root
+export PX_CTX_FILE="$STATE_ROOT/px-ctx-$$.log"
+export PX_ENV_FILE="$STATE_ROOT/px-env-$$.sh"
+export PX_SIGNAL_FILE="$STATE_ROOT/px-signal-$$.sh"
+export PX_SESSION_META="$STATE_ROOT/px-session-$$.meta"
+export PX_SESSION_JSON="$STATE_ROOT/session.json"
 [[ -n "$PX_TMUX_NATIVE" ]] && export PX_TMUX_NATIVE
 
 echo "entities" > "$PX_CTX_FILE"
@@ -196,7 +202,10 @@ with open(path, 'w') as f: json.dump(data, f, indent=2)
 # Clear signal file first to avoid re-triggering old commands
 echo "" > "$PX_SIGNAL_FILE"
 setopt NULL_GLOB
-for wait_file in "$HOME/.parallax/links"/shell-*.waiting; do
+# Link directory should reside globally or in the workspace
+LINK_DIR="${PX_STATE_DIR:-$HOME/.parallax}/links"
+mkdir -p "$LINK_DIR"
+for wait_file in "$LINK_DIR"/shell-*.waiting; do
     # Point the shell to our NEW session
     echo "$$" > "${wait_file%.waiting}.link"
     rm -f "$wait_file"
@@ -204,14 +213,12 @@ done
 unsetopt NULL_GLOB
 
 # 5. NAVIGATION STACK (Deep persistence)
-export PX_NAV_STACK="/tmp/px-nav-stack-$$.log"
-export PX_POS_FILE="/tmp/px-pos-$$.log"
-export PX_SHOW_LEGEND_FILE="/tmp/px-legend-$$.log"
+export PX_NAV_STACK="$STATE_ROOT/px-nav-stack-$$.log"
+export PX_POS_FILE="$STATE_ROOT/px-pos-$$.log"
+export PX_SHOW_LEGEND_FILE="$STATE_ROOT/px-legend-$$.log"
 touch "$PX_NAV_STACK"
 echo "1" > "$PX_POS_FILE"
-echo "1" > "$PX_POS_FILE"
 echo "${PX_SHOW_LEGEND:-true}" > "$PX_SHOW_LEGEND_FILE"
-
 # 4. RESIDENT UI
 INIT_HEADER=$(px-ui-styler resident entities $PX_SCOPE)
 

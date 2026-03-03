@@ -1,0 +1,39 @@
+#!/usr/bin/env zsh
+# zsh/modes/mode-preview
+
+mode-preview() {
+  # 1. READ SESSION STATE
+  if [[ -z "$PX_ZSH_ROOT" ]]; then
+      source "$HOME/.config/zsh/parallax/core/projection-shell.zsh"
+  fi
+  
+  while true; do
+    export PX_HUD_CONTEXT="Preview (Staging)"
+    local current_context=$($HOME/bin/px-context get staged_context)
+    
+    clear
+    echo "🏗️  COMPOSED CONTEXT (PREVIEW) - Press Ctrl-C to exit mode"
+    echo "───────────────────────────────────────────────────────"
+    
+    if [[ -z "$current_context" ]]; then
+       echo "Staging area is empty."
+       echo "Add files, prompts, or actions in the Mind to see them here."
+    else
+       # Format and display the staged items
+       # We use bat if available for syntax highlighting
+       while IFS= read -r line; do
+         [[ -z "$line" ]] && continue
+         echo "📎 $line"
+         
+         # If it's a file, show a snippet
+         if [[ -f "$line" ]]; then
+            (command -v bat >/dev/null && bat --color=always --line-range :10 "$line" || head -n 10 "$line")
+            echo "---"
+         fi
+       done <<< "$current_context"
+    fi
+    
+    # Poll for changes
+    sleep 1
+  done
+}

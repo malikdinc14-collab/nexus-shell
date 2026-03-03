@@ -1,0 +1,3 @@
+env:
+  TEST_VAR: "activated"
+  GREETING: "Hello from Context"

@@ -1,0 +1,315 @@
+#!/usr/bin/env zsh
+# bin/parallax
+# Atomic Parallax Driver (Hardened Mode v13)
+
+# NEXUS MODE: Skip session management when embedded in Nexus-Shell
+if [[ "$1" == "--nexus" || -n "$PX_NEXUS_MODE" ]]; then
+    export PX_NEXUS_MODE=1
+    shift 2>/dev/null  # Remove --nexus from args if present
+    # Skip to dashboard logic directly (don't create sessions or cleanup)
+fi
+
+# 0. CLEANUP STALE TEMP FILES (Skip in Nexus mode to avoid wiping Nexus state)
+if [[ -z "$PX_NEXUS_MODE" ]]; then
+    setopt NULL_GLOB
+    rm -rf /tmp/px-*
+    unsetopt NULL_GLOB
+fi
+
+# 0.5 ENVIRONMENT FIREWALL (Isolation)
+# Prevent parent shell's python environment from leaking into the session
+unset VIRTUAL_ENV
+unset CONDA_PREFIX
+unset PYTHONHOME
+unset POETRY_ACTIVE
+# Do NOT unset PYTHONPATH completely, as user might rely on it, but be wary.
+
+# 1. HARD INVARIANTS
+cleanup() {
+    [[ -x "$BIN_DIR/px-spy" ]] && "$BIN_DIR/px-spy" EXIT "Parallax cleanup triggered ($1)"
+    stty sane 2>/dev/null
+    setopt +o nomatch # Disable no match error for this function
+    rm -rf /tmp/px-*-$$.* 2>/dev/null
+    rm -rf /tmp/px-*-$$.* 2>/dev/null
+    
+    if [[ -n "$PX_TMUX_SESSION" ]]; then
+        # [INNER ROLE] Dashboard in Tmux-Native mode
+        # Invariant: Capture state, then Kill Session (Exit Tmux)
+        
+        # Capture visible text only (No history)
+        tmux capture-pane -p -t "${PX_TMUX_SESSION}:0" > /tmp/px-stage-dump-${PX_TMUX_SESSION}.txt 2>/dev/null
+        tmux kill-session -t "$PX_TMUX_SESSION" 2>/dev/null
+    else
+        # [OUTER ROLE] The Driver Script
+        # Invariant: If a session log exists, it must be printed.
+        
+        # We look for the file indexed by OUR session name (parallax-PID)
+        SESSION_LOG="/tmp/px-stage-dump-parallax-$$.txt"
+        if [[ -s "$SESSION_LOG" ]]; then
+            echo ""; echo "--- 📝 PARALLAX STAGE LOG ---"
+            sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$SESSION_LOG"
+            rm -f "$SESSION_LOG"
+        fi
+    fi
+}
+trap "cleanup EXIT" EXIT
+
+# 1.5 TMUX-NATIVE MODE
+# If not already in Tmux and not in isolated mode and not in Nexus mode, create a 2-pane session
+if [[ -z "$TMUX" && "$1" != "--isolated" && -z "$PX_NEXUS_MODE" ]]; then
+    # [OUTER ROLE] The Driver
+    # Invariant: Must survive Ctrl+C to print the log after session death.
+    trap '' INT
+    
+    SESSION_NAME="parallax-$$"
+    # Create new session in detached mode
+    # CRITICAL: px-link must be sourced BY the interactive shell (not before it)
+    # We use ZDOTDIR to inject our init into zsh startup
+    mkdir -p "$HOME/.parallax/stage"
+    echo 'source ~/.zshrc 2>/dev/null; export PX_STAGE_PID=$$; source ~/.parallax/bin/px-link' > "$HOME/.parallax/stage/.zshrc"
+    # Launch with explicit environment scrubbing via `env`
+    # This prevents the zsh process from inheriting vars even if the session does.
+    tmux new-session -d -s "$SESSION_NAME" -x "$(tput cols)" -y "$(tput lines)" \
+        "env -u VIRTUAL_ENV -u CONDA_PREFIX -u PYTHONHOME -u POETRY_ACTIVE ZDOTDIR=$HOME/.parallax/stage zsh"
+    
+    # 0.5 FORCE CLEANUP (Session Level)
+    # We still clean the session for future panes/windows.
+    # Even if we unset in shell, tmux might inherit from server global env.
+    tmux set-environment -t "$SESSION_NAME" -u VIRTUAL_ENV
+    tmux set-environment -t "$SESSION_NAME" -u CONDA_PREFIX
+    tmux set-environment -t "$SESSION_NAME" -u PYTHONHOME
+    tmux set-environment -t "$SESSION_NAME" -u POETRY_ACTIVE
+    
+    # Disable status bar for clean look
+    tmux set-option -t "$SESSION_NAME" status off
+    # Split horizontally: Dashboard on bottom (30%)
+    tmux split-window -v -t "$SESSION_NAME" -p 30 \
+        "PX_TMUX_SESSION=$SESSION_NAME PX_TMUX_NATIVE=1 $(realpath $0) --in-tmux"
+    # Select the bottom pane (Dashboard) and attach
+    tmux select-pane -t "$SESSION_NAME":0.1
+    tmux attach-session -t "$SESSION_NAME"
+    
+    # Outer Script: Persistence handled by user dropping to shell
+    exit 0
+elif [[ -n "$TMUX" && "$1" != "--in-tmux" && -z "$PX_NEXUS_MODE" ]]; then
+    # [RE-ENTRY ROLE] Running 'parallax' from inside the Stage Pane (not Nexus)
+    # Invariant: Must restore the Dashboard split.
+    
+    SESSION_NAME=$(tmux display-message -p '#S')
+    
+    # Split the current window to create the Dashboard again
+    tmux split-window -v -t "$SESSION_NAME" -p 30 \
+        "PX_TMUX_SESSION=$SESSION_NAME PX_TMUX_NATIVE=1 $(realpath $0) --in-tmux"
+        
+    # We are done. The new pane takes over.
+    exit 0
+fi
+
+# NEXUS MODE: Run dashboard directly in the pane without session management
+# We skip --in-tmux check since we're already in Nexus's pane
+
+# If we're the inner Dashboard process, continue; otherwise this is the Stage pane
+[[ "$1" == "--in-tmux" ]] && shift
+
+# [INNER ROLE] The Dashboard
+# Invariant: Ctrl+C means "Exit Gracefully" (closes pane)
+trap 'exit 0' INT
+
+# 2. RESOLVE PATHS (Handles symlinks to find the real project home)
+SOURCE="${BASH_SOURCE[0]:-${(%):-%x}}"
+while [ -L "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" 
+done
+BIN_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+PROJECT_ROOT="$(dirname "$BIN_DIR")"
+LIB_EXEC_DIR="$PROJECT_ROOT/lib/exec"
+
+# Prepend both bin (public) and lib/exec (system) to PATH
+export PATH="$BIN_DIR:$LIB_EXEC_DIR:$PATH"
+
+# 3. SMART DISCOVERY & SETTINGS
+# Load user config overrides (Persistent Settings)
+[[ -f "$HOME/.parallax/config" ]] && source "$HOME/.parallax/config"
+
+# Fetch scope and project name from the kernel
+# Note: px-engine is now in lib/exec
+eval "$(px-engine --settings)"
+export PX_SCOPE="${PX_SCOPE:-GLOBAL}" PX_TOOL_VIEWER PX_TOOL_EDITOR
+
+# 4. STATE
+export PX_SESSION_ID="$$"
+export PX_BUS_SOCKET="/tmp/parallax_$(whoami)/bus_$PX_SESSION_ID.sock"
+
+# Start the Event Bus
+if [[ -n "$PX_TMUX_NATIVE" || -n "$PX_NEXUS_MODE" ]]; then
+    # Start bus server in background
+    python3 "$PROJECT_ROOT/lib/core/bus_server.py" --socket "$PX_BUS_SOCKET" >/dev/null 2>&1 &
+    PX_BUS_PID=$!
+    
+    # Ensure bus is killed on exit
+    trap "kill $PX_BUS_PID 2>/dev/null; cleanup" EXIT
+fi
+export PX_CTX_FILE="/tmp/px-ctx-$$.log"
+export PX_ENV_FILE="/tmp/px-env-$$.sh"
+export PX_SIGNAL_FILE="/tmp/px-signal-$$.sh"
+export PX_SESSION_META="/tmp/px-session-$$.meta"
+export PX_SESSION_JSON="$HOME/.parallax/session.json"
+[[ -n "$PX_TMUX_NATIVE" ]] && export PX_TMUX_NATIVE
+
+echo "entities" > "$PX_CTX_FILE"
+touch "$PX_ENV_FILE" "$PX_SIGNAL_FILE"
+mkdir -p "$(dirname "$PX_SESSION_JSON")"
+
+# Write Session Metadata for discovery
+# Use the name resolved by the engine
+echo "$PX_PROJECT_NAME|$(pwd)|$$|$PX_TMUX_SESSION" > "$PX_SESSION_META"
+
+# !! NEW: SMART SESSION MERGE !!
+python3 -c "
+import json, os
+path = os.path.expanduser('$PX_SESSION_JSON')
+data = {}
+if os.path.exists(path):
+    try:
+        with open(path, 'r') as f: data = json.load(f)
+    except: pass
+
+# Update Project Metadata
+data['project_name'] = '$PX_PROJECT_NAME'
+data['project_path'] = os.getcwd()
+data['session_id'] = '$PX_SESSION_ID'
+data['scope'] = '$PX_SCOPE'
+
+# Update Agent ID from local config if it exists
+try:
+    with open('.parallax/dashboard.json', 'r') as f:
+        proj = json.load(f)
+        if 'agent_id' in proj: data['agent_id'] = proj['agent_id']
+except: pass
+
+with open(path, 'w') as f: json.dump(data, f, indent=2)
+"
+
+# !! REVERSE HANDSHAKE: Auto-link waiting shells !!
+# Clear signal file first to avoid re-triggering old commands
+echo "" > "$PX_SIGNAL_FILE"
+setopt NULL_GLOB
+for wait_file in "$HOME/.parallax/links"/shell-*.waiting; do
+    # Point the shell to our NEW session
+    echo "$$" > "${wait_file%.waiting}.link"
+    rm -f "$wait_file"
+done
+unsetopt NULL_GLOB
+
+# 5. NAVIGATION STACK (Deep persistence)
+export PX_NAV_STACK="/tmp/px-nav-stack-$$.log"
+export PX_POS_FILE="/tmp/px-pos-$$.log"
+export PX_SHOW_LEGEND_FILE="/tmp/px-legend-$$.log"
+touch "$PX_NAV_STACK"
+echo "1" > "$PX_POS_FILE"
+echo "1" > "$PX_POS_FILE"
+echo "${PX_SHOW_LEGEND:-true}" > "$PX_SHOW_LEGEND_FILE"
+
+# 4. RESIDENT UI
+INIT_HEADER=$(px-ui-styler resident entities $PX_SCOPE)
+
+# Define actions based on mode
+if [[ -n "$PX_TMUX_NATIVE" ]]; then
+    # Native: Evaluate target, then send commmand to Stage
+    # Hardened: Quoting for spaces, suppress stderr, trim newlines, check for empty target
+    VIEWER_BIND="execute-silent(TARGET=\$(PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" px-engine --source '{3}' 2>/dev/null | tr -d '\n'); [[ -n \"\$TARGET\" ]] && tmux send-keys -t 0 \"\$PX_TOOL_VIEWER '\$TARGET'\" Enter)"
+    EDITOR_BIND="execute-silent(TARGET=\$(PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" px-engine --source '{3}' 2>/dev/null | tr -d '\n'); [[ -n \"\$TARGET\" ]] && tmux send-keys -t 0 \"\$PX_TOOL_EDITOR '\$TARGET'\" Enter)"
+else
+    # Standard: Run in foreground
+    VIEWER_BIND="execute(\$PX_TOOL_VIEWER \$(PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" px-engine --source {3}))"
+    EDITOR_BIND="execute(\$PX_TOOL_EDITOR \$(PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" px-engine --source {3}))"
+fi
+
+# Layout Style: Default (Bottom-Up) vs Reverse (App-Like)
+# RESTART LOOP (For Layout/Config Changes)
+RESTART_FLAG="/tmp/px-restart-$$.flag"
+while true; do
+  # Refresh Config (in case changed)
+  [[ -f "$HOME/.parallax/config" ]] && source "$HOME/.parallax/config"
+  
+  # Re-evaluate Layout Args based on potentially new config
+  if [[ "$PX_LAYOUT_STYLE" == "reverse" ]]; then
+      LAYOUT_ARGS=('--layout=reverse' '--header-first')
+  else
+      # Classic (Prompt floating above Legend)
+      LAYOUT_ARGS=('--layout=default' '--header-first')
+  fi
+
+# FZF arguments (Single quotes only for shell literalness)
+fzf_args=(
+  '--prompt=Dashboard > '
+  "--header=$INIT_HEADER"
+  '--no-sort' '--no-tac' '--ansi' "${LAYOUT_ARGS[@]}"
+  '--border=none' --delimiter=$'\t' '--with-nth=1'
+  '--pointer= ' '--marker= '
+  '--height=100%' '--color=prompt:#268bd2,header:#859900,pointer:#b58900,bg+:#073642'
+  '--bind=j:down,k:up,ctrl-j:down,ctrl-k:up'
+  
+  # Legend Toggle (Ctrl-H: Help)
+  # Legend Toggle (Ctrl-H: Help)
+  '--bind=ctrl-h:transform:STATE=$(cat "$PX_SHOW_LEGEND_FILE"); if [[ "$STATE" == "true" ]]; then echo "false" > "$PX_SHOW_LEGEND_FILE"; else echo "true" > "$PX_SHOW_LEGEND_FILE"; fi; PX_CTX_FILE="$PX_CTX_FILE" PX_NAV_STACK="$PX_NAV_STACK" PX_POS_FILE="$PX_POS_FILE" PX_SHOW_LEGEND_FILE="$PX_SHOW_LEGEND_FILE" px-engine --ui-event legend_toggle'
+  
+  # ESC override: Always trigger back/exit logic immediately
+  '--bind=esc:transform:PX_CTX_FILE="$PX_CTX_FILE" PX_NAV_STACK="$PX_NAV_STACK" PX_POS_FILE="$PX_POS_FILE" px-engine --ui-event esc'
+  
+  # Surface Save (Dynamic Name Prompt)
+  "--bind=${PX_KEY_SAVE_SURFACE:-ctrl-w}:execute-silent(PX_NAME=\$(echo '' | fzf --print-query --header 'Name this Surface'); [[ -n \$PX_NAME ]] && px-surface save \"\$PX_NAME\")+reload(px-engine --context \$(cat \"$PX_CTX_FILE\"))"
+
+  # Directory Navigator (Ctrl+F): Opens cdr in Stage pane
+  "--bind=ctrl-f:execute-silent(tmux send-keys -t 0 'cdr' Enter)"
+  
+  # Dashboard Toggle (Ctrl+D): Switch between normal and custom dashboards
+  "--bind=ctrl-d:execute-silent(PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" PX_POS_FILE=\"$PX_POS_FILE\" px-engine --ui-event TOGGLE_DASHBOARD)"
+
+  # Scratchpad (Ctrl+N): Opens notes file in Stage pane
+  "--bind=ctrl-n:execute-silent(tmux send-keys -t 0 'px-notes' Enter)"
+
+  # View Toggle (Ctrl+T): Toggle flat/tree view in Docs plane
+  "--bind=ctrl-t:execute-silent(MODE=\$(cat /tmp/px-docs-view-\$PX_SESSION_ID.txt 2>/dev/null || echo flat); [[ \"\$MODE\" == \"flat\" ]] && echo tree > /tmp/px-docs-view-\$PX_SESSION_ID.txt || echo flat > /tmp/px-docs-view-\$PX_SESSION_ID.txt)+reload(px-engine --context \$(cat \"$PX_CTX_FILE\"))"
+  
+  # Verbosity Toggle (Ctrl+Y): Toggles global verbose flag
+  "--bind=ctrl-y:execute-silent(V=\$(cat /tmp/px-verbose-\$PX_SESSION_ID.txt 2>/dev/null || echo false); [[ \"\$V\" == \"true\" ]] && echo false > /tmp/px-verbose-\$PX_SESSION_ID.txt || echo true > /tmp/px-verbose-\$PX_SESSION_ID.txt)+reload(px-engine --context \$(cat \"$PX_CTX_FILE\"))"
+
+  # ESC: Step-back or Exit (writes target pos to PX_POS_FILE)
+  "--bind=esc:transform:PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" PX_POS_FILE=\"$PX_POS_FILE\" px-engine --ui-event esc"
+  
+  # Result: Apply cursor position after reload completes
+  "--bind=result:transform:[[ -f \"$PX_POS_FILE\" ]] && echo \"pos(\$(cat \"$PX_POS_FILE\"))\" && echo 1 > \"$PX_POS_FILE\""
+  
+  # Selection Persistence (Save position and label)
+  "--bind=focus:execute-silent(CUR_CTX=\$(cat \"$PX_CTX_FILE\"); echo {n} > \"/tmp/px-pos-\$PX_SESSION_ID-\$CUR_CTX.log\"; echo {1} >> \"$PX_NAV_STACK\")"
+
+  # Mutation Binds
+  "--bind=ctrl-v:${VIEWER_BIND}"
+  "--bind=ctrl-e:${EDITOR_BIND}"
+
+  # Remote Header Refresh (Triggered by shell CWD change via px-link)
+  # We escape parens, pipes, and quotes to ensure safe transport to FZF transform
+  "--bind=ctrl-r:transform:HEADER=\$(px-ui-styler resident \$(cat \"$PX_CTX_FILE\") \"$PX_SCOPE\" | perl -pe 's/([()|\\x22\\x27])/\\\\\$1/g'); echo \"change-header(\$HEADER)\""
+
+  # ENTER (ctrl-m): Execute or Navigate (always fire even with no matches)
+  "--bind=ctrl-m:transform:FZF_QUERY=\"{q}\" PX_CTX_FILE=\"$PX_CTX_FILE\" PX_NAV_STACK=\"$PX_NAV_STACK\" PX_POS_FILE=\"$PX_POS_FILE\" px-engine --ui-event enter \"{}\" 2>>/tmp/px-crash.log"
+)
+
+  # RUN FZF KERNEL
+  PX_CTX_FILE="$PX_CTX_FILE" PX_NAV_STACK="$PX_NAV_STACK" PX_POS_FILE="$PX_POS_FILE" PX_SHOW_LEGEND_FILE="$PX_SHOW_LEGEND_FILE" \
+    px-engine --context "$(cat "$PX_CTX_FILE" 2>/dev/null || echo entities)" | \
+    fzf "${fzf_args[@]}"
+
+  # Check restart flag
+  if [[ -f "$RESTART_FLAG" ]]; then
+      rm -f "$RESTART_FLAG"
+      continue # Loop again with new config
+  fi
+  
+  # Normal exit
+  break
+done
+px-spy EXIT "Dashboard Session Closed"

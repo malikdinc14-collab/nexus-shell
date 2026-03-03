@@ -4,7 +4,7 @@
 
 # 1. READ SESSION STATE
 # We use px-engine --settings to get the current key mapping
-eval "$(~/.parallax/bin/px-engine --settings)"
+eval "$(${PX_LIB_DIR:-$HOME/.parallax}/bin/px-engine --settings)"
 
 K_ACTIONS="${PX_KEY_ACTIONS:-ctrl-a}"
 K_PLACES="${PX_KEY_PLACES:-ctrl-p}"
@@ -64,7 +64,7 @@ case "$1" in
         local current_wd=$(print -P '%~')
         local project_name="PARALLAX"
         local link_status="ISOLATED"
-        local link_dir="${HOME}/.parallax/links"
+        local link_dir="${PX_STATE_DIR:-$HOME/.parallax}/links"
         
         # Discover Connected Shell
         if [[ -d "$link_dir" ]]; then

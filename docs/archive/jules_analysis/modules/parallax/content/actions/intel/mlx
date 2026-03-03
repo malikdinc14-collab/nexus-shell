@@ -1,0 +1,78 @@
+#!/bin/bash
+# MLX - Apple Silicon Model Manager
+# @param ACTION: What to do [install, start, stop, list, status]
+# @param MODEL: Model to serve
+# @param PORT: Port to use (default: 8080)
+
+set -e
+
+MLX_VENV="$HOME/.mlx-venv"
+LOG_FILE="/tmp/px-mlx-server-$PORT.log"
+PORT="${PORT:-8080}"
+
+case "$ACTION" in
+    install)
+        echo "📦 Setting up MLX environment..."
+        if [[ ! -d "$MLX_VENV" ]]; then
+            python3 -m venv "$MLX_VENV"
+        fi
+        source "$MLX_VENV/bin/activate"
+        pip install --upgrade pip
+        pip install mlx-lm
+        echo "✅ MLX installed successfully."
+        ;;
+    start)
+        if lsof -i :"$PORT" > /dev/null 2>&1; then
+            echo "⚠️  MLX server already running (Port $PORT)."
+        else
+            if [[ ! -d "$MLX_VENV" ]]; then
+                echo "❌ MLX not installed. Use 'install' first."
+                exit 1
+            fi
+            [[ -z "$MODEL" ]] && MODEL=$(px-models list all mlx | head -n 1)
+            
+            FULL_MODEL_PATH=$(px-models path all mlx "$MODEL" 2>/dev/null || echo "$MODEL")
+            
+            echo "🚀 Starting MLX server with $MODEL..."
+            nohup "$MLX_VENV/bin/python" -m mlx_lm.server --model "$FULL_MODEL_PATH" --port "$PORT" > "$LOG_FILE" 2>&1 &
+            sleep 5
+            if lsof -i :"$PORT" > /dev/null 2>&1; then
+                echo "✅ MLX server started on port $PORT."
+            else
+                echo "❌ Failed to start. Check $LOG_FILE"
+            fi
+        fi
+        ;;
+    stop)
+        PID=$(lsof -ti :"$PORT" 2>/dev/null || true)
+        if [[ -n "$PID" ]]; then
+            echo "🛑 Stopping MLX server (PID: $PID)..."
+            kill "$PID"
+            echo "✅ MLX server stopped."
+        else
+            echo "⚠️  MLX server is not running."
+        fi
+        ;;
+    list)
+        echo "📋 Popular MLX Community Models:"
+        echo ""
+        echo "  mlx-community/Llama-3.2-3B-Instruct-4bit"
+        echo "  mlx-community/Mistral-7B-Instruct-v0.3-4bit"
+        echo "  mlx-community/Phi-3-mini-4k-instruct-4bit"
+        echo "  mlx-community/gemma-2-2b-it-4bit"
+        echo "  mlx-community/Qwen2.5-7B-Instruct-4bit"
+        echo ""
+        echo "Browse more at: https://huggingface.co/mlx-community"
+        ;;
+    status)
+        if lsof -i :"$PORT" > /dev/null 2>&1; then
+            echo "✅ MLX server running on port $PORT"
+        else
+            echo "⚠️  MLX server not running."
+        fi
+        ;;
+    *)
+        echo "Usage: ACTION=[install|start|stop|list|status]"
+        exit 1
+        ;;
+esac

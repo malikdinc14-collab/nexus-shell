@@ -1,0 +1,41 @@
+#!/usr/bin/env zsh
+# bin/px-version
+# Audit the Parallax installation status.
+
+DIST_ROOT="$HOME/.parallax/dist"
+CURRENT_DIST="$DIST_ROOT/current"
+
+check_link() {
+    local target="$1"
+    if [[ -L "$target" ]]; then
+        local link_dest=$(readlink "$target")
+        echo "$link_dest"
+    else
+        echo "NOT_A_LINK"
+    fi
+}
+
+# 1. Check a representative binary
+PARALLAX_BIN=$(command -v parallax)
+LINK_DEST=$(check_link "$PARALLAX_BIN")
+
+echo "%F{cyan}Parallax Substrate Audit%f"
+echo "--------------------------"
+
+if [[ "$LINK_DEST" == *"Programming/Parallax"* ]]; then
+    echo "Mode: %F{yellow}DEV (Linked)%f"
+    echo "Source: $LINK_DEST"
+elif [[ "$LINK_DEST" == *"$DIST_ROOT"* ]]; then
+    echo "Mode: %F{green}PROD (Frozen Snapshot)%f"
+    # Find the actual timestamped folder
+    REAL_PATH=$(readlink -f "$CURRENT_DIST" 2>/dev/null || readlink "$CURRENT_DIST")
+    echo "Snapshot: $(basename "$REAL_PATH")"
+else
+    echo "Mode: %F{red}UNKNOWN / MANUAL%f"
+    echo "Path: $PARALLAX_BIN"
+fi
+
+# 2. Check Zsh Integration
+ZSH_MODE_SAMPLE="$HOME/.config/zsh/parallax/core/projection-shell.zsh"
+ZSH_LINK=$(check_link "$ZSH_MODE_SAMPLE")
+echo "Shell Link: $([[ "$ZSH_LINK" == *"$DIST_ROOT"* ]] && echo "%F{green}Frozen%f" || echo "%F{yellow}Dev%f")"

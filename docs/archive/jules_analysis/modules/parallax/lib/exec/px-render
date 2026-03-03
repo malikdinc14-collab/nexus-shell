@@ -1,0 +1,65 @@
+#!/usr/bin/env zsh
+# bin/px-render
+# Universal List Processor for Parallax
+
+PRESET_FILE="${PX_ACTIVE_PRESET}"
+
+# Read items from stdin
+items=()
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  items+=("$line")
+done
+
+if [[ -z "$PRESET_FILE" ]] || [[ ! -f "$PRESET_FILE" ]]; then
+  # No preset: Raw pass-through
+  printf "%s\n" "${items[@]}"
+  exit 0
+fi
+
+# 1. READ PRESET CONFIG
+SORT_MODE=$(jq -r '.list.sort // "alphabetical"' "$PRESET_FILE")
+# manual_order is an array of labels
+MANUAL_ORDER=($(jq -r '.list.manual_order[] // empty' "$PRESET_FILE" 2>/dev/null))
+
+# 2. SEPARATE ITEMS
+# We want to identify items that are in the manual_order
+ordered_items=()
+other_items=()
+
+for item in "${items[@]}"; do
+  label="${item%%|*}"
+  is_ordered=0
+  for target in "${MANUAL_ORDER[@]}"; do
+    if [[ "$label" == "$target" ]]; then
+      is_ordered=1
+      break
+    fi
+  done
+  
+  if [[ $is_ordered -eq 1 ]]; then
+     ordered_items+=("$item")
+  else
+     other_items+=("$item")
+  fi
+done
+
+# 3. SORT OTHERS
+if [[ "$SORT_MODE" == "alphabetical" ]]; then
+  other_items=($(printf "%s\n" "${other_items[@]}" | sort))
+fi
+
+# 4. RE-ORDER ORDERED ITEMS (to match the specified array order)
+sorted_ordered=()
+for target in "${MANUAL_ORDER[@]}"; do
+  for item in "${ordered_items[@]}"; do
+    label="${item%%|*}"
+    if [[ "$label" == "$target" ]]; then
+      sorted_ordered+=("$item")
+    fi
+  done
+done
+
+# 5. OUTPUT
+printf "%s\n" "${sorted_ordered[@]}"
+printf "%s\n" "${other_items[@]}"

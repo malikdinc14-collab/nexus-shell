@@ -1,0 +1,106 @@
+#!/usr/bin/env zsh
+# zsh/modes/mode-custom-dashboard
+# Custom Dashboard for Parallax Projects
+
+source "$HOME/.config/zsh/parallax/core/projection-shell.zsh"
+CONTEXT_FILE="$PX_STATE_DIR/context.json"
+HUD_FILE="$PX_STATE_DIR/.hud_msg"
+HISTORY_FILE="$PX_STATE_DIR/history.log"
+CUSTOM_DASHBOARD_FILE="$PX_STATE_DIR/custom_dashboard.json"
+
+# UI Helpers
+BOLD="%B"
+DIM="%F{black}"
+BLUE="%F{blue}"
+GREEN="%F{green}"
+YELLOW="%F{yellow}"
+MAGENTA="%F{magenta}"
+RESET="%b%f%k"
+
+draw_custom_dashboard() {
+  clear
+  print -P "${BOLD}${MAGENTA}  ━━━ PARALLAX CUSTOM DASHBOARD ━━━${RESET}"
+  print ""
+  
+  # Check if we have a custom dashboard config
+  if [[ -f "$CUSTOM_DASHBOARD_FILE" ]]; then
+    local title=$(jq -r '.title // "Project Dashboard"' "$CUSTOM_DASHBOARD_FILE")
+    print -P "${BOLD}${title}${RESET}"
+    print ""
+    
+    # Display custom sections
+    local sections_count=$(jq '.sections | length' "$CUSTOM_DASHBOARD_FILE")
+    for ((i=0; i<sections_count; i++)); do
+      local section_name=$(jq -r ".sections[$i].name" "$CUSTOM_DASHBOARD_FILE")
+      print -P "${BOLD}  [ $section_name ]${RESET}"
+      
+      local items_count=$(jq ".sections[$i].items | length" "$CUSTOM_DASHBOARD_FILE")
+      for ((j=0; j<items_count; j++)); do
+        local item_label=$(jq -r ".sections[$i].items[$j].label" "$CUSTOM_DASHBOARD_FILE")
+        local item_type=$(jq -r ".sections[$i].items[$j].type" "$CUSTOM_DASHBOARD_FILE")
+        local item_path=$(jq -r ".sections[$i].items[$j].path // \"\"" "$CUSTOM_DASHBOARD_FILE")
+        
+        case "$item_type" in
+          DOC)
+            if [[ -f "$item_path" ]]; then
+              print -P "  ${BLUE}•${RESET} ${item_label}"
+              # Show first few lines of the document
+              head -n 3 "$item_path" | sed 's/^/    /' | head -n 3
+              print "    ..."
+            else
+              print -P "  ${DIM}•${RESET} ${item_label} ${DIM}(File not found)${RESET}"
+            fi
+            ;;
+          CMD)
+            print -P "  ${GREEN}•${RESET} ${item_label}"
+            ;;
+          *)
+            print -P "  ${YELLOW}•${RESET} ${item_label}"
+            ;;
+        esac
+      done
+      print ""
+    done
+  else
+    # Default dashboard view
+    print -P "${BOLD}  [ PROJECT OVERVIEW ]${RESET}"
+    print -P "  ${BLUE}•${RESET} Project: $(basename "$PWD")"
+    print -P "  ${BLUE}•${RESET} Path: $PWD"
+    print ""
+    
+    print -P "${BOLD}  [ QUICK ACTIONS ]${RESET}"
+    print -P "  ${GREEN}•${RESET} Run tests"
+    print -P "  ${GREEN}•${RESET} Build project"
+    print -P "  ${GREEN}•${RESET} Deploy"
+    print ""
+  fi
+  
+  # 2. LIVE CONTEXT (Shared Memory)
+  print -P "${BOLD}  [ SHARED MEMORY ]${RESET}"
+  if [[ -f "$CONTEXT_FILE" ]]; then
+    jq -r 'to_entries | .[] | "  \(.key): \(.value)"' "$CONTEXT_FILE" | while read -r line; do
+      print -P "  ${BLUE}•${RESET} ${line}"
+    done
+  else
+    print -P "  ${DIM}No context initialized.${RESET}"
+  fi
+  print ""
+  
+  # 3. SYSTEM HEALTH (HUD)
+  print -P "${BOLD}  [ SYSTEM HEALTH ]${RESET}"
+  if [[ -f "$HUD_FILE" ]]; then
+      local hud_msg=$(cat "$HUD_FILE")
+      print -P "  ${GREEN}✚${RESET} HUD: ${hud_msg:-"Stable"}"
+  else
+      print -P "  ${YELLOW}⚠${RESET} HUD: Offline"
+  fi
+  print ""
+  
+  print -P "${DIM}  (Toggle Dashboard: Ctrl-D | Refreshing every 2s... Hit Ctrl-C to exit)${RESET}"
+}
+
+# Main Loop
+while true; do
+  draw_custom_dashboard
+  sleep 2
+done

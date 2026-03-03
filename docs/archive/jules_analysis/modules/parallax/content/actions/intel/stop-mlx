@@ -1,0 +1,8 @@
+#!/bin/bash
+# @parallax-action
+# @name: Stop MLX
+# @id: intel:stop-mlx
+# @description: Halts the MLX Model Server.
+# @icon: stop-circle
+
+ACTION=stop bash "$HOME/.parallax/content/actions/intel/mlx"

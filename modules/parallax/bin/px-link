@@ -26,19 +26,20 @@ px-ask-confirm() {
 
 # Internal: Discover and Link to a Parallax Session
 _px_discover_and_link() {
-    local link_dir="$HOME/.parallax/links"
+    local state_dir="${PX_STATE_DIR:-$HOME/.parallax}"
+    local link_dir="$state_dir/links"
     local link_file="$link_dir/shell-$$.link"
     local wait_file="$link_dir/shell-$$.waiting"
 
     # 1. DISCOVER SESSIONS (and verify PIDs)
     local active_sessions=()
-    for meta in /tmp/px-session-*.meta(N); do
+    for meta in "$state_dir"/px-session-*.meta(N); do
         [[ ! -f "$meta" ]] && continue
         local pid=$(cat "$meta" | cut -d'|' -f3)
         if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
             active_sessions+=("$meta")
         else
-            rm -f "$meta" "/tmp/px-signal-$pid.sh" "/tmp/px-env-$pid.sh" 2>/dev/null
+            rm -f "$meta" "$state_dir/px-signal-$pid.sh" "$state_dir/px-env-$pid.sh" 2>/dev/null
         fi
     done
     
@@ -81,13 +82,14 @@ _px_discover_and_link() {
 
 # The Instant Sync Signal Handler (Hardened Customs Officer)
 TRAPUSR1() {
+    local state_dir="${PX_STATE_DIR:-$HOME/.parallax}"
     local shell_id="${PX_STAGE_PID:-$$}"
-    local link_file="$HOME/.parallax/links/shell-$shell_id.link"
+    local link_file="$state_dir/links/shell-$shell_id.link"
     [[ ! -f "$link_file" ]] && return
     
     local target_pid=$(cat "$link_file")
-    local signal_file="/tmp/px-signal-$target_pid.sh"
-    local env_file="/tmp/px-env-$target_pid.sh"
+    local signal_file="$state_dir/px-signal-$target_pid.sh"
+    local env_file="$state_dir/px-env-$target_pid.sh"
     
     if [[ -f "$signal_file" ]]; then
         [[ -f "$env_file" ]] && source "$env_file"
@@ -160,8 +162,9 @@ _px_start_watcher() {
         return 0
     fi
 
+    local state_dir="${PX_STATE_DIR:-$HOME/.parallax}"
     local shell_id="${PX_STAGE_PID:-$$}"
-    local lock_file="$HOME/.parallax/links/watcher-$shell_id.lock"
+    local lock_file="$state_dir/links/watcher-$shell_id.lock"
     
     # Check if a watcher is already active for THIS shell
     if [[ -f "$lock_file" ]]; then
@@ -184,8 +187,8 @@ _px_start_watcher() {
                 exit 0
             fi
             
-            local link_file="$HOME/.parallax/links/shell-$shell_id.link"
-            local wait_file="$HOME/.parallax/links/shell-$shell_id.waiting"
+            local link_file="$state_dir/links/shell-$shell_id.link"
+            local wait_file="$state_dir/links/shell-$shell_id.waiting"
 
             if [[ -f "$link_file" ]]; then
                 local t_pid=$(cat "$link_file")
@@ -207,7 +210,7 @@ _px_start_watcher() {
                     kill -USR1 $$
                 fi
 
-                local s_file="/tmp/px-signal-$t_pid.sh"
+                local s_file="$state_dir/px-signal-$t_pid.sh"
                 if [[ -f "$s_file" ]]; then
                     local mtime=$(stat -f %m "$s_file" 2>/dev/null || stat -c %Y "$s_file" 2>/dev/null)
                     if [[ "$mtime" != "$last_mtime" ]]; then
@@ -218,7 +221,7 @@ _px_start_watcher() {
             else
                 # AUTO-LINK LOGIC: If waiting, look for a unique new session
                 local active_sessions=()
-                for m in /tmp/px-session-*.meta(N); do
+                for m in "$state_dir"/px-session-*.meta(N); do
                     local pid=$(cat "$m" | cut -d'|' -f3)
                     [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && active_sessions+=("$m")
                 done
@@ -255,14 +258,15 @@ autoload -Uz add-zsh-hook
 # add-zsh-hook precmd _px_prompt_setup
 
 # Load navigation utilities (cdr)
-[[ -f "$HOME/.parallax/bin/px-cdr" ]] && source "$HOME/.parallax/bin/px-cdr"
+[[ -f "${PX_LIB_DIR:-$HOME/.parallax}/bin/px-cdr" ]] && source "${PX_LIB_DIR:-$HOME/.parallax}/bin/px-cdr"
 
 # Sync CWD to Dashboard (Automatic Header Update)
 _px_sync_cwd() {
     local shell_id="${PX_STAGE_PID:-$$}"
-    local state_file="/tmp/px-cwd-${shell_id}.txt"
-    local link_file="$HOME/.parallax/links/shell-$shell_id.link"
-    local debug_log="/tmp/px-link-debug.log"
+    local state_dir="${PX_STATE_DIR:-$HOME/.parallax}"
+    local state_file="$state_dir/px-cwd-${shell_id}.txt"
+    local link_file="$state_dir/links/shell-$shell_id.link"
+    local debug_log="$state_dir/px-link-debug.log"
     
     # 1. Update State File
     echo "$PWD" > "$state_file"
@@ -270,7 +274,7 @@ _px_sync_cwd() {
     # 2. Notify Dashboard (if linked)
     if [[ -f "$link_file" ]]; then
         local target_pid=$(cat "$link_file")
-        local meta_file="/tmp/px-session-${target_pid}.meta"
+        local meta_file="$state_dir/px-session-${target_pid}.meta"
         local tmux_target=""
 
         # Strategy A: Use metadata to find explicit Tmux Session

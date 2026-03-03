@@ -1,0 +1,306 @@
+# bin/px-link (Sourced ZSH function)
+# Syncs current shell with a linked Parallax session instantly.
+
+# Check if we are being sourced
+if [[ "$ZSH_EVAL_CONTEXT" != *file* ]]; then
+    echo "\033[1;31mError:\033[0m px-link must be SOURCED, not executed."
+    echo "Usage: \033[1;36msource px-link\033[0m"
+    exit 1
+fi
+
+# Ensure space-prefixed commands are ignored from history
+setopt HIST_IGNORE_SPACE 2>/dev/null
+
+# Helper for Wizard prompts (Clean Output - "Phantom Command")
+# Uses ZSH print builtin for reliable escape code handling
+# \e[1A = Up, \e[2K = Clear Line
+px-ask() {
+    print -n "\e[1A\e[2K"
+    print -P "\n%F{cyan}?%f $*"
+}
+
+px-ask-confirm() {
+    print -n "\e[1A\e[2K"
+    print -P "\n  %F{green}✅ %f$*"
+}
+
+# Internal: Discover and Link to a Parallax Session
+_px_discover_and_link() {
+    local link_dir="$HOME/.parallax/links"
+    local link_file="$link_dir/shell-$$.link"
+    local wait_file="$link_dir/shell-$$.waiting"
+
+    # 1. DISCOVER SESSIONS (and verify PIDs)
+    local active_sessions=()
+    for meta in /tmp/px-session-*.meta(N); do
+        [[ ! -f "$meta" ]] && continue
+        local pid=$(cat "$meta" | cut -d'|' -f3)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            active_sessions+=("$meta")
+        else
+            rm -f "$meta" "/tmp/px-signal-$pid.sh" "/tmp/px-env-$pid.sh" 2>/dev/null
+        fi
+    done
+    
+    if [[ ${#active_sessions[@]} -eq 0 ]]; then
+        # Silently wait - background watcher will auto-link when a session starts
+        echo "$$" > "$wait_file"
+        return
+    fi
+
+    local target_pid=""
+    local target_name=""
+
+    if [[ ${#active_sessions[@]} -eq 1 ]]; then
+        # Exactly one session? Auto-link.
+        local meta=$(cat "${active_sessions[1]}")
+        target_pid=$(echo "$meta" | cut -d'|' -f3)
+        # Silent auto-link
+    else
+        # Multiple sessions? 
+        # Only prompt if we are explicitly in Nexus mode or if the user requested it
+        if [[ "$PX_NEXUS_MODE" == "1" ]]; then
+            echo "Multiple Parallax sessions found. Please select one:"
+            local SELECTION=$(cat "${active_sessions[@]}" | fzf --header 'Select Parallax Session to Link' --height 40% --layout reverse --border)
+            if [[ -z "$SELECTION" ]]; then
+                echo "Operation cancelled. Not linked."
+                return
+            fi
+            target_pid=$(echo "$SELECTION" | awk -F'|' '{print $3}')
+        else
+            # Silently wait in background for manual link or unique session
+            echo "$$" > "$wait_file"
+            return
+        fi
+    fi
+
+    # Save link and clear waiting state
+    echo "$target_pid" > "$link_file"
+    rm -f "$wait_file"
+}
+
+# The Instant Sync Signal Handler (Hardened Customs Officer)
+TRAPUSR1() {
+    local shell_id="${PX_STAGE_PID:-$$}"
+    local link_file="$HOME/.parallax/links/shell-$shell_id.link"
+    [[ ! -f "$link_file" ]] && return
+    
+    local target_pid=$(cat "$link_file")
+    local signal_file="/tmp/px-signal-$target_pid.sh"
+    local env_file="/tmp/px-env-$target_pid.sh"
+    
+    if [[ -f "$signal_file" ]]; then
+        [[ -f "$env_file" ]] && source "$env_file"
+        local raw_content=$(cat "$signal_file")
+        [[ -z "$raw_content" ]] && return
+
+        # Parse structured signal: LABEL:...|CMD:... or SILENT:... or plain command
+        local label=""
+        local cmd="$raw_content"
+        local is_silent=false
+        
+        if [[ "$cmd" == LABEL:* ]]; then
+            # Structured signal: LABEL:name|CMD:command
+            label="${cmd#LABEL:}"
+            label="${label%%|*}"
+            cmd="${raw_content#*|CMD:}"
+        elif [[ "$cmd" == SILENT:* ]]; then
+            is_silent=true
+            cmd="${cmd#SILENT:}"
+        fi
+
+        # Verbosity control (0=quiet, 1=normal, 2=verbose)
+        local verbosity="${PX_VERBOSITY:-1}"
+
+        # --- SECURITY GATE (Adhering to Invariant-Driven Design) ---
+        local gate_status="ALLOW"
+        
+        # Invariant: Any command explicitly targeting a Parallax action is trusted.
+        if [[ "$cmd" =~ "/.parallax/content/actions/" ]]; then
+             gate_status="ALLOW"
+        
+        # Block truly destructive system commands (Negative Space: fail loudly if used outside of safe paths)
+        elif [[ "$cmd" =~ "px-vault" || "$cmd" =~ "security " || "$cmd" =~ "~/.ssh" || "$cmd" =~ "/etc/shadow" ]]; then
+            echo -e "\n\033[1;31m🛑 SECURITY ALERT:\033[0m Blocked unauthorized command: \033[1m$cmd\033[0m"
+            px-spy SECURITY "BLOCKED: $cmd"
+            gate_status="BLOCK"
+        fi
+
+        # 4. EXECUTION (Verbosity-Aware)
+        if [[ "$gate_status" == "ALLOW" ]]; then
+            if [[ "$is_silent" == "true" ]]; then
+                eval "$cmd"
+            elif [[ "$verbosity" == "0" ]]; then
+                # Quiet: Just execute, no ceremony
+                eval "$cmd"
+            elif [[ "$verbosity" == "2" ]]; then
+                # Verbose: Show full command (debug mode)
+                echo -e "\n\033[1;35m📡 Parallax Signal:\033[0m ${cmd}"
+                eval "$cmd"
+                echo -e "\033[1;32m✅ Done.\033[0m"
+            else
+                # Normal (1): Friendly header with label
+                local display_name="${label:-Action}"
+                echo -e "\n\033[1;35m📡 Running:\033[0m ${display_name}"
+                eval "$cmd"
+                echo -e "\033[1;32m✅ Done.\033[0m"
+            fi
+        fi
+        
+        # Reset signal file to avoid re-trigger
+        echo "" > "$signal_file"
+        zle && zle reset-prompt
+    fi
+}
+
+# Background Poller (Instant Watcher) - HARDENED SINGLETON
+_px_start_watcher() {
+    # Assertion: Absolute Kill Switch
+    if [[ -n "$PX_STOP_WATCHER" ]]; then
+        return 0
+    fi
+
+    local shell_id="${PX_STAGE_PID:-$$}"
+    local lock_file="$HOME/.parallax/links/watcher-$shell_id.lock"
+    
+    # Check if a watcher is already active for THIS shell
+    if [[ -f "$lock_file" ]]; then
+        local old_pid=$(cat "$lock_file")
+        if kill -0 "$old_pid" 2>/dev/null; then
+            return # Already running
+        fi
+    fi
+
+    (
+        # Register PID
+        echo "$$" > "$lock_file"
+        
+        local last_mtime=0
+        local last_linked_pid=""
+        while true; do
+            # 1. Clean up orphan lock if shell is gone
+            if ! ps -p $shell_id > /dev/null 2>&1; then 
+                rm -f "$lock_file"
+                exit 0
+            fi
+            
+            local link_file="$HOME/.parallax/links/shell-$shell_id.link"
+            local wait_file="$HOME/.parallax/links/shell-$shell_id.waiting"
+
+            if [[ -f "$link_file" ]]; then
+                local t_pid=$(cat "$link_file")
+                
+                # Check if Parallax is still alive
+                if ! kill -0 "$t_pid" 2>/dev/null; then
+                    # Parallax died or restarted. Reset to waiting.
+                    rm -f "$link_file"
+                    echo "$$" > "$wait_file"
+                    last_linked_pid=""
+                    kill -USR1 $$
+                    continue
+                fi
+                
+                # If newly linked, notify
+                if [[ "$t_pid" != "$last_linked_pid" ]]; then
+                    # Silent linking
+                    last_linked_pid="$t_pid"
+                    kill -USR1 $$
+                fi
+
+                local s_file="/tmp/px-signal-$t_pid.sh"
+                if [[ -f "$s_file" ]]; then
+                    local mtime=$(stat -f %m "$s_file" 2>/dev/null || stat -c %Y "$s_file" 2>/dev/null)
+                    if [[ "$mtime" != "$last_mtime" ]]; then
+                        last_mtime="$mtime"
+                        kill -USR1 $$
+                    fi
+                fi
+            else
+                # AUTO-LINK LOGIC: If waiting, look for a unique new session
+                local active_sessions=()
+                for m in /tmp/px-session-*.meta(N); do
+                    local pid=$(cat "$m" | cut -d'|' -f3)
+                    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && active_sessions+=("$m")
+                done
+                
+                if [[ ${#active_sessions[@]} -eq 1 ]]; then
+                    local meta=$(cat "${active_sessions[1]}")
+                    local t_pid=$(echo "$meta" | cut -d'|' -f3)
+                    echo "$t_pid" > "$link_file"
+                    rm -f "$wait_file"
+                fi
+            fi
+            sleep 3.0
+        done
+    ) &!
+    export PX_WATCHER_PID=$!
+}
+
+# Prompt Indicator - DISABLED
+# _px_prompt_setup() {
+#     local link_file="$HOME/.parallax/links/shell-$$.link"
+#     if [[ -f "$link_file" ]]; then
+#         if [[ ! "$PROMPT" =~ "\[PX\]" ]]; then
+#             PROMPT="%F{magenta}[PX]%f $PROMPT"
+#         fi
+#     else
+#         # Remove indicator if link is lost
+#         PROMPT=${PROMPT//\%F\{magenta\}\[PX\]\%f /}
+#     fi
+# }
+
+# Start the watcher and register hooks
+_px_start_watcher
+autoload -Uz add-zsh-hook
+# add-zsh-hook precmd _px_prompt_setup
+
+# Load navigation utilities (cdr)
+[[ -f "$HOME/.parallax/bin/px-cdr" ]] && source "$HOME/.parallax/bin/px-cdr"
+
+# Sync CWD to Dashboard (Automatic Header Update)
+_px_sync_cwd() {
+    local shell_id="${PX_STAGE_PID:-$$}"
+    local state_file="/tmp/px-cwd-${shell_id}.txt"
+    local link_file="$HOME/.parallax/links/shell-$shell_id.link"
+    local debug_log="/tmp/px-link-debug.log"
+    
+    # 1. Update State File
+    echo "$PWD" > "$state_file"
+    
+    # 2. Notify Dashboard (if linked)
+    if [[ -f "$link_file" ]]; then
+        local target_pid=$(cat "$link_file")
+        local meta_file="/tmp/px-session-${target_pid}.meta"
+        local tmux_target=""
+
+        # Strategy A: Use metadata to find explicit Tmux Session
+        if [[ -f "$meta_file" ]]; then
+            # format: NAME|PATH|PID|TMUX_SESSION
+            local raw_meta=$(cat "$meta_file")
+            local t_session=$(echo "$raw_meta" | cut -d'|' -f4)
+            if [[ -n "$t_session" ]]; then
+                tmux_target="${t_session}:0.1"
+            fi
+        fi
+
+        # Strategy B: Fallback to current session if in same context
+        if [[ -z "$tmux_target" && -n "$TMUX" ]]; then
+            # Assume we are in the Stage pane (0.0) targeting Dashboard (0.1)
+            tmux_target=":0.1"
+        fi
+
+        # Send Trigger
+        if [[ -n "$tmux_target" ]]; then
+             # Send Ctrl-R (Refresh Bind)
+             if command -v tmux >/dev/null; then
+                 tmux send-keys -t "$tmux_target" 'C-r' 2>/dev/null
+             fi
+        fi
+    fi
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook chpwd _px_sync_cwd
+
+# Run initial discovery and sync
+_px_discover_and_link
+_px_sync_cwd

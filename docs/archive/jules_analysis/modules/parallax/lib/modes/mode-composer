@@ -1,0 +1,82 @@
+#!/usr/bin/env zsh
+# zsh/modes/mode-composer
+
+mode-composer() {
+  # 1. READ SESSION STATE
+  if [[ -z "$PX_ZSH_ROOT" ]]; then
+      source "$HOME/.config/zsh/parallax/core/projection-shell.zsh"
+  fi
+  TARGET_PANE=$(cat "$PX_TARGET_FILE")
+  
+  # Ensure staging bucket is empty on start
+  $HOME/bin/px-context set staged_context ""
+
+  while true; do
+    export PX_HUD_CONTEXT="Composer (Assembling...)"
+    local current_context=$($HOME/bin/px-context get staged_context)
+    
+    # 2. GENERATE OPTIONS
+    local -a items
+    items=(
+      "🚀 SEND BATCH|SIGNAL:SEND_COMPOSED"
+      "📁 Add Folder|PLANE:places"
+      "🛠️  Add Action|PLANE:actions"
+      "📚 Add Prompt|LIST:prompts"
+      "🗑️  Clear Assembly|SIGNAL:CLEAR_COMPOSED"
+      "--- CURRENT ASSEMBLY ---|SEPARATOR"
+    )
+    
+    # Show what's in the bucket
+    if [[ -n "$current_context" ]]; then
+       while IFS= read -r line; do
+         [[ -n "$line" ]] && items+=("• $line|SEPARATOR")
+       done <<< "$current_context"
+    else
+       items+=("(Empty)|SEPARATOR")
+    fi
+
+    # 3. RENDER
+    local hud=$(px-hud "Composer")
+    selection=$(printf "%s\n" "${items[@]}" | "$HOME/bin/ui-fzf" "$hud > " "" "$TARGET_PANE")
+    
+    if [[ -z "$selection" ]]; then
+       return 0
+    fi
+
+    local label="${selection%%|*}"
+    local payload="${selection#*|}"
+
+    # 4. TRAP COMPOSER SIGNALS
+    case "$payload" in
+      SIGNAL:SEND_COMPOSED)
+        if [[ -z "$current_context" ]]; then
+           echo "Composer: Nothing to send!"
+           sleep 1
+           continue
+        fi
+        # Ask for a message to accompany the context
+        vared -p "Add instruction to this context > " final_msg
+        
+        # Dispatch the full bundle
+        # We package it as a single block for the agent
+        local bundle="CONTEXT:\n$current_context\n\nINSTRUCTION:\n$final_msg"
+        $HOME/bin/px-intent "QUERY" "CUSTOM" "$bundle"
+        
+        # Clear after send
+        $HOME/bin/px-context set staged_context ""
+        ;;
+      SIGNAL:CLEAR_COMPOSED)
+        $HOME/bin/px-context set staged_context ""
+        ;;
+      SEPARATOR)
+        continue
+        ;;
+      *)
+        # Normal routing (descend into Actions/Places)
+        # Note: We need a way to "capture" the results from these planes.
+        # This requires updating px-router to handle STAGE_TO_COMPOSER.
+        px-router "$payload" "$label"
+        ;;
+    esac
+  done
+}

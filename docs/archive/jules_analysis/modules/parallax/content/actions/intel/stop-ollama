@@ -1,0 +1,8 @@
+#!/bin/bash
+# @parallax-action
+# @name: Stop Ollama
+# @id: intel:stop-ollama
+# @description: Halts the Ollama daemon.
+# @icon: stop-circle
+
+ACTION=stop bash "$HOME/.parallax/content/actions/intel/ollama"

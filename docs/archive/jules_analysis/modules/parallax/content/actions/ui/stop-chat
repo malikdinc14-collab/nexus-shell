@@ -1,0 +1,8 @@
+#!/bin/bash
+# @parallax-action
+# @name: Stop Chat UI
+# @id: ui:stop-chat
+# @description: Halts the Open WebUI Docker container.
+# @icon: stop-circle
+
+ACTION=stop bash "$HOME/.parallax/content/actions/ui/chat.sh"

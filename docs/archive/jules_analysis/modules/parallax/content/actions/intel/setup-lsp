@@ -1,0 +1,33 @@
+#!/bin/bash
+# setup-lsp - Help configure Neovim to use local MLX/Ollama LSP
+# @param PROVIDER: [mlx, ollama] (default: mlx)
+# @param PORT: Port the server is running on (default: 8080 for mlx, 11434 for ollama)
+
+set -e
+
+PROVIDER="${PROVIDER:-mlx}"
+if [[ "$PROVIDER" == "mlx" ]]; then
+    PORT="${PORT:-8080}"
+    MODEL_URL="http://localhost:$PORT/v1"
+else
+    PORT="${PORT:-11434}"
+    MODEL_URL="http://localhost:$PORT/v1"
+fi
+
+echo "🔧 Configuration for Neovim AI Integration ($PROVIDER)"
+echo "--------------------------------------------------------"
+echo "Add this to your Neovim config (e.g., using a plugin like 'minuet-ai' or 'copilot.lua' compatible adapters):"
+echo ""
+cat <<EOF
+-- Example configuration for local LLM completion
+local lsp_config = {
+    name = "Local-$PROVIDER",
+    endpoint = "$MODEL_URL",
+    api_key = "none", -- Local servers usually don't need one
+    model = "default", -- MLX uses the currently loaded model
+}
+
+print("✅ Point your LSP client to $MODEL_URL")
+EOF
+echo ""
+echo "💡 Tip: Ensure your $PROVIDER server is running first via the 'Brains' menu."

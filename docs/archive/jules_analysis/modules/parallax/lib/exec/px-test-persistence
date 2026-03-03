@@ -1,0 +1,67 @@
+#!/usr/bin/env zsh
+# bin/px-test-persistence
+# Diagnostic tool to test navigation stack and cursor positioning
+
+echo "=== PARALLAX PERSISTENCE TEST ==="
+echo ""
+
+# Setup
+export PX_CTX_FILE="/tmp/px-test-ctx.log"
+export PX_NAV_STACK="/tmp/px-test-nav.log"
+
+echo "entities" > "$PX_CTX_FILE"
+echo "" > "$PX_NAV_STACK"
+
+# Test 1: Simulate entering a plane
+echo "[TEST 1] Simulating focus on 'Actions' in entities context..."
+echo "entities:Actions" >> "$PX_NAV_STACK"
+echo "  Stack contents:"
+cat "$PX_NAV_STACK" | sed 's/^/    /'
+
+# Test 2: Simulate entering the plane
+echo ""
+echo "[TEST 2] Simulating entering 'actions' plane..."
+echo "actions" > "$PX_CTX_FILE"
+echo "  Context file: $(cat $PX_CTX_FILE)"
+
+# Test 3: Simulate ESC - what does the engine return?
+echo ""
+echo "[TEST 3] Calling px-engine --ui-event esc..."
+result=$(PX_CTX_FILE="$PX_CTX_FILE" PX_NAV_STACK="$PX_NAV_STACK" px-engine --ui-event esc)
+echo "  Engine output:"
+echo "$result" | sed 's/^/    /'
+
+# Extract pos value
+if [[ "$result" =~ pos\(([0-9]+)\) ]]; then
+    pos_val="${match[1]}"
+    echo ""
+    echo "[RESULT] Engine returned pos($pos_val)"
+    
+    # Verify against master index
+    echo ""
+    echo "[VERIFY] Master Index:"
+    px-engine --context entities | nl
+    echo ""
+    echo "  Expected line $pos_val to be 'Actions'"
+else
+    echo ""
+    echo "[ERROR] Could not extract pos() from engine output"
+fi
+
+# Test 4: Live FZF test
+echo ""
+echo "=== LIVE FZF TEST ==="
+echo "Press arrow keys to move, then Ctrl-C to exit"
+echo "After exit, check: cat $PX_NAV_STACK"
+echo ""
+read -q "?Press any key to start FZF test..."
+echo ""
+
+px-engine --context entities | fzf \
+    --prompt="TEST > " \
+    --bind="focus:execute-silent(echo \$(cat \"$PX_CTX_FILE\"):{1} >> \"$PX_NAV_STACK\")" \
+    --header="Move cursor, then Ctrl-C. Check stack file after."
+
+echo ""
+echo "Stack file contents after FZF:"
+cat "$PX_NAV_STACK"

@@ -1,0 +1,32 @@
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# State files
+/tmp/px-*
+*.log
+*.pid
+
+# Python
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+venv/
+.venv/
+
+# Local config (user-specific)
+.parallax/
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

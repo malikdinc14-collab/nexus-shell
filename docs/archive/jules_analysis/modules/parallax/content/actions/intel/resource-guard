@@ -1,0 +1,75 @@
+#!/bin/bash
+# resource-guard - Prevent system freeze by auto-unloading models
+# @param ACTION: [start, stop, status]
+# @param THRESHOLD: Max GB allowed (default: 44)
+
+set -e
+
+THRESHOLD="${THRESHOLD:-44.0}"
+LOG_FILE="/tmp/px-resource-guard.log"
+PID_FILE="/tmp/px-resource-guard.pid"
+
+# Robust script path detection
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_PATH/../../../.." && pwd)"
+NEXUS_SCRIPTS="$PROJECT_ROOT/scripts"
+
+check_resources() {
+    if command -v mactop > /dev/null 2>&1; then
+        RAM_USED=$(mactop --headless --count 1 2>/dev/null | jq -r '.[0].memory.used // 0' | awk '{print $1 / 1024 / 1024 / 1024}')
+    else
+        RAM_USED=$(vm_stat | grep "Pages active" | awk '{print $3}' | sed 's/\.//' | xargs -I{} echo "{} * 4096 / 1024 / 1024 / 1024" | bc)
+    fi
+    echo "$RAM_USED"
+}
+
+run_guard() {
+    echo "🛡️  Resource Guard Active (Threshold: ${THRESHOLD}GB)" > "$LOG_FILE"
+    while true; do
+        USED=$(check_resources)
+        if (( $(echo "$USED > $THRESHOLD" | bc -l) )); then
+            echo "$(date) ⚠️  DANGER: RAM usage at ${USED}GB. Triggering emergency unload..." >> "$LOG_FILE"
+            tmux display-message "🛑 RESOURCE GUARD: RAM critical (${USED}GB). Unloading brains..."
+            bash "$NEXUS_SCRIPTS/unload_brains.sh" >> "$LOG_FILE" 2>&1
+            sleep 30 # Cool down after unload
+        fi
+        sleep 10
+    done
+}
+
+case "$ACTION" in
+    start)
+        if [[ -f "$PID_FILE" ]] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+            echo "⚠️  Resource Guard already running."
+        else
+            nohup "$0" run-internal > /dev/null 2>&1 &
+            echo $! > "$PID_FILE"
+            echo "✅ Resource Guard started (PID: $!)"
+        fi
+        ;;
+    run-internal)
+        run_guard
+        ;;
+    stop)
+        if [[ -f "$PID_FILE" ]]; then
+            PID=$(cat "$PID_FILE")
+            kill "$PID" || true
+            rm "$PID_FILE"
+            echo "✅ Resource Guard stopped."
+        else
+            echo "⚠️  Resource Guard is not running."
+        fi
+        ;;
+    status)
+        if [[ -f "$PID_FILE" ]] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
+            echo "✅ Resource Guard is RUNNING (Threshold: ${THRESHOLD}GB)"
+            tail -n 5 "$LOG_FILE"
+        else
+            echo "❌ Resource Guard is STOPPED."
+        fi
+        ;;
+    *)
+        echo "Usage: ACTION=[start|stop|status] [THRESHOLD=44.0] $0"
+        exit 1
+        ;;
+esac

@@ -1,0 +1,129 @@
+#!/bin/bash
+# Recursive Language Models (RLM) - 1-Layer Intelligent Decomposition
+# Uses Expert (Port 8080) for orchestration and Scout (Port 8081) for deep dives.
+
+set -e
+
+INTEL_VENV="$HOME/.parallax/venvs/intel"
+PROVENANCE_FILE="/tmp/nexus/provenance.mmd"
+mkdir -p "$(dirname "$PROVENANCE_FILE")"
+
+setup_venv() {
+    if [[ ! -d "$INTEL_VENV" ]]; then
+        mkdir -p "$(dirname "$INTEL_VENV")"
+        python3 -m venv "$INTEL_VENV"
+    fi
+    source "$INTEL_VENV/bin/activate"
+}
+
+case "$ACTION" in
+    install)
+        setup_venv
+        pip install -U langchain openai
+        echo "✅ RLM (Intelligent) ready."
+        ;;
+    run)
+        [[ -z "$INPUT" ]] && { echo "❌ INPUT (File path) is required."; exit 1; }
+        [[ -z "$QUERY" ]] && { echo "❌ QUERY is required."; exit 1; }
+        
+        setup_venv
+        
+        echo "🔄 Initializing 1-Layer Recursive Inference..."
+        
+        python3 - <<EOF
+import os
+import json
+import requests
+
+EXPERT_URL = "http://localhost:8080/v1"
+SCOUT_URL = "http://localhost:8081/v1"
+
+def ask_llm(url, prompt, model="default"):
+    try:
+        response = requests.post(
+            f"{url}/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": prompt}],
+                "model": model,
+                "temperature": 0.2
+            },
+            timeout=120
+        )
+        return response.json()['choices'][0]['message']['content']
+    except Exception as e:
+        return f"Error: {e}"
+
+def run_rlm(input_file, query):
+    with open(input_file, 'r') as f:
+        content = f.read()
+
+    # Step 1: Expert Decomposes
+    print("🧠 Expert is decomposing task...")
+    decomp_prompt = f"""
+    You are the Expert Architect. Analyze this document and query.
+    Query: {query}
+    
+    Document Snippet (First 4000 chars):
+    {content[:4000]}
+    
+    Identify the 3 most critical sections or keywords to investigate in the full document.
+    Format your response as a JSON list of strings.
+    """
+    sections = ask_llm(EXPERT_URL, decomp_prompt)
+    
+    # Try to parse sections
+    try:
+        # Simple extraction if not pure JSON
+        if "[" in sections:
+            sections_list = json.loads(sections[sections.find("["):sections.rfind("]")+1])
+        else:
+            sections_list = [sections]
+    except:
+        sections_list = ["general context"]
+
+    # Step 2: Scout Investigates (Recursion Depth 1)
+    results = []
+    mermaid = ["graph TD", "  Root((Task)) --> Expert[Expert: Decomposition]"]
+    
+    for i, section in enumerate(sections_list):
+        print(f"🕵️  Scout investigating: {section}...")
+        scout_prompt = f"In the context of '{query}', find and summarize information related to: {section}\n\nDocument: {content}"
+        # Limit content for scout if needed, but here we assume Scout can handle it or we use a chunk
+        res = ask_llm(SCOUT_URL, scout_prompt)
+        results.append(res)
+        
+        node_id = f"S{i}"
+        mermaid.append(f"  Expert --> {node_id}[Scout: {section}]")
+        mermaid.append(f"  {node_id} --> R{i}[Result {i}]")
+
+    # Step 3: Expert Synthesizes
+    print("合成 Expert is synthesizing findings...")
+    synth_prompt = f"Synthesize these findings to answer the query: '{query}'\n\nFindings:\n" + "\n".join(results)
+    final_answer = ask_llm(EXPERT_URL, synth_prompt)
+    
+    mermaid.append("  " + " & ".join([f"R{i}" for i in range(len(results))]) + " --> Final((Final Answer))")
+
+    # Save Provenance
+    with open("$PROVENANCE_FILE", 'w') as f:
+        f.write("\n".join(mermaid))
+    
+    return final_answer
+
+try:
+    answer = run_rlm("$INPUT", "$QUERY")
+    print("\n" + "="*40)
+    print("✅ FINAL RESPONSE")
+    print("="*40)
+    print(answer)
+    print("\n📊 Provenance graph saved to $PROVENANCE_FILE")
+    print("💡 View the graph in the Nexus Render pane.")
+except Exception as e:
+    print(f"❌ RLM Failed: {e}")
+
+EOF
+        ;;
+    *)
+        echo "Usage: ACTION=[install|run] INPUT=path QUERY='...'"
+        exit 1
+        ;;
+esac

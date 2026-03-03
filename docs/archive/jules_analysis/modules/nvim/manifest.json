@@ -1,0 +1,6 @@
+{
+    "name": "nvim",
+    "description": "Hyperextensible Vim-based text editor",
+    "category": "editor",
+    "version": "0.10.x"
+}

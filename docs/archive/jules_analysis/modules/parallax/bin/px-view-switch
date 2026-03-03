@@ -1,0 +1,25 @@
+#!/bin/bash
+# px-view-switch - Toggle the content of the center workspace pane
+# Usage: px-view-switch [editor|monitor|logs|workflow]
+
+VIEW="$1"
+SESSION_ID=$(tmux display-message -p '#S')
+PANE_TARGET="editor" # Default target pane name
+
+case "$VIEW" in
+    monitor)
+        tmux send-keys -t "$SESSION_ID:0.$PANE_TARGET" "C-c" "mactop" Enter
+        ;;
+    logs)
+        tmux send-keys -t "$SESSION_ID:0.$PANE_TARGET" "C-c" "tail -f /tmp/px-agent-trace.log" Enter
+        ;;
+    editor)
+        # Assuming we can resume nvim or restart it
+        # This is tricky if nvim is already running. 
+        # Maybe just use different windows for different views?
+        tmux select-window -t :0
+        ;;
+    *)
+        echo "Unknown view: $VIEW"
+        ;;
+esac

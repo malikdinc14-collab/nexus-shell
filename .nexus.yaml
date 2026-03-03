@@ -1,0 +1,13 @@
+composition: vscodelike
+tools:
+  editor: nvim
+  files: yazi
+  chat: opencode
+parallax:
+  enabled: true
+  pillars:
+    - library
+    - places
+    - brains
+    - projects
+    - user_lists

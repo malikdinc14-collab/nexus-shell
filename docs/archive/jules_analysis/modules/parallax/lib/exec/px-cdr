@@ -1,0 +1,76 @@
+#!/usr/bin/env zsh
+# bin/px-cdr
+# Interactive directory navigator (sourced by px-link)
+# Based on user's original cdr implementation
+
+px_cdr() {
+  emulate -L zsh
+  local root="$PWD"
+  local selection key dir_to_check show_hidden
+
+  [[ "$1" == "." ]] && show_hidden=true || show_hidden=false
+
+  while true; do
+    local find_cmd=(find "$root" -mindepth 1 -maxdepth 1 -type d)
+    [[ "$show_hidden" = false ]] && find_cmd+=(! -name ".*")
+
+    local fzf_output
+    fzf_output=$(
+      "${find_cmd[@]}" 2>/dev/null \
+        | sed "s|^$root/||" \
+        | fzf \
+            --prompt="cdr [$root] > " \
+            --expect=ctrl-o,ctrl-b \
+            --header="Enter: Deeper | Ctrl-B: Back | Ctrl-O: cd Here | Esc: Exit"
+    )
+    local f_status=$?
+
+    # Esc / abort
+    if [[ $f_status -eq 130 || -z "$fzf_output" ]]; then
+      return 0
+    fi
+
+    # Split fzf output (first line = key, second = selection)
+    local lines=("${(@f)fzf_output}")
+    key="${lines[1]}"
+    selection="${lines[2]}"
+
+    case "$key" in
+      # Back (Ctrl-B)
+      ctrl-b)
+        [[ "$root" == "/" ]] && continue
+        root=$(dirname "$root")
+        ;;
+
+      # Commit (Ctrl-O = Open/Go)
+      ctrl-o)
+        if [[ -n "$selection" ]]; then
+          builtin cd "$root/$selection"
+        else
+          builtin cd "$root"
+        fi
+        return
+        ;;
+
+      # Default: Enter → go deeper
+      *)
+        [[ -z "$selection" ]] && continue
+        dir_to_check="$root/$selection"
+
+        local sub_find=(find "$dir_to_check" -mindepth 1 -maxdepth 1 -type d)
+        [[ "$show_hidden" = false ]] && sub_find+=(! -name ".*")
+
+        # If no subdirs, commit to this directory
+        if [[ -z $("${sub_find[@]}" 2>/dev/null | head -n 1) ]]; then
+          builtin cd "$dir_to_check"
+          return
+        else
+          root="$dir_to_check"
+        fi
+        ;;
+    esac
+  done
+}
+
+# Alias for convenience
+alias cdr='px_cdr'

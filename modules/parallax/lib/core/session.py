@@ -44,22 +44,35 @@ BIN_DIR = PROJECT_ROOT / "bin"
 LIB_EXEC_DIR = PROJECT_ROOT / "lib" / "exec"
 
 HOME = Path.home()
-PARALLAX_HOME = HOME / ".parallax"
-GLOBAL_CONFIG = PARALLAX_HOME / "dashboard.json"
-LIBRARY_ROOT = PARALLAX_HOME / "content"
 
+# Isolate Paths (Tiered Environment Architecture)
+# Use environment variables injected by Nexus Launcher, or fallback to default ~/.parallax
+PARALLAX_HOME = Path(os.environ.get("PX_LIB_DIR", HOME / ".parallax"))
+GLOBAL_CONFIG = Path(os.environ.get("PX_CONFIG_DIR", HOME / ".config" / "nexus-shell")) / "settings.yaml"
+# Ensure we use isolated state for session files if provided
+PX_STATE_DIR = Path(os.environ.get("PX_STATE_DIR", PARALLAX_HOME))
+LIBRARY_ROOT = PARALLAX_HOME / "content"
 # Import Pillars
 from lib.core.pillars import (
     library,
+    projects,
     places,
     brains,
-    ghosts,
-    control,
-    history,
-    projects,
-    workflow,
-    nexus,
+    models,
+    notes,
+    user_lists
 )
+
+PILLARS = {
+    "library": library,
+    "projects": projects,
+    "places": places,
+    "brains": brains,
+    "models": models,
+    "notes": notes,
+    "user_lists": user_lists
+}
+
 from lib.core.wizard import WizardManager
 
 
@@ -74,27 +87,16 @@ def load_configs():
     # 1. Start with Empty Baseline
     merged = {"title": "Parallax", "settings": {}, "sections": [], "entities": []}
 
-    # 2. Load Global (Base Layer)
-    if GLOBAL_CONFIG.exists():
-        with open(GLOBAL_CONFIG, "r") as f:
-            try:
-                g_cfg = json.load(f)
-                merged.update(g_cfg)
-            except:
-                pass
-
-    # 3. Check Stealth Registry
+    # 2. Check Stealth Registry (Keep for backward compat)
     registry_path = PARALLAX_HOME / "registry.json"
-    cwd = os.path.realpath(os.getcwd())  # Resolve symlinks (e.g., /tmp -> /private/tmp)
+    cwd = os.path.realpath(os.getcwd())
     stealth_config = None
 
     if registry_path.exists():
         try:
             with open(registry_path, "r") as f:
                 registry = json.load(f)
-            # Normalize registry keys as well
             normalized_registry = {os.path.realpath(k): v for k, v in registry.items()}
-            # Check if current path or any parent is registered
             check_path = cwd
             while check_path != "/":
                 if check_path in normalized_registry:
@@ -104,43 +106,78 @@ def load_configs():
         except:
             pass
 
-    # 4. Determine scope and load overlay config
+    # 3. Determine scope and load overlay config (The New Model)
     scope = "GLOBAL"
     target = None
 
     if stealth_config:
-        # STEALTH mode: use registered config
         scope = "STEALTH"
         dashboard_path = stealth_config.get("dashboard", "")
         if dashboard_path:
             target = Path(os.path.expanduser(dashboard_path))
     else:
-        # Check for local .parallax/
-        proj_path = Path(cwd) / ".parallax/dashboard.json"
+        # Check for local .nexus.yaml (V2) or .parallax/dashboard.json (V1)
+        proj_path_v2 = Path(cwd) / ".nexus.yaml"
+        proj_path_v1 = Path(cwd) / ".parallax/dashboard.json"
+        
         env_path = os.environ.get("PX_DASHBOARD_FILE")
-        target = Path(env_path) if env_path else proj_path
-        if target.exists():
+        
+        if env_path:
+            target = Path(env_path)
+        elif proj_path_v2.exists():
+            target = proj_path_v2
             scope = "PROJECT"
+        elif proj_path_v1.exists():
+            target = proj_path_v1
+            scope = "PROJECT"
+
+    # 4. Load Global (Base Layer - settings.yaml)
+    if GLOBAL_CONFIG.exists():
+        try:
+            import yaml
+            with open(GLOBAL_CONFIG, "r") as f:
+                g_cfg = yaml.safe_load(f)
+                if g_cfg:
+                    # Map new schema to old
+                    if "parallax" in g_cfg:
+                        merged["settings"]["pillars"] = g_cfg["parallax"].get("pillars", [])
+        except:
+            pass
 
     # 5. Load overlay config if exists
     if target and target.exists():
-        with open(target, "r") as f:
-            try:
-                p_cfg = json.load(f)
+        try:
+            if target.name.endswith(".yaml") or target.name.endswith(".yml"):
+                import yaml
+                with open(target, "r") as f:
+                    p_cfg = yaml.safe_load(f)
+            else:
+                with open(target, "r") as f:
+                    p_cfg = json.load(f)
+                    
+            if p_cfg:
+                if "title" in p_cfg:
+                    merged["title"] = p_cfg["title"]
+                elif "project" in p_cfg:
+                    merged["title"] = p_cfg["project"]
+                    
+                if "parallax" in p_cfg:
+                    if "pillars" in p_cfg["parallax"]:
+                        merged["settings"]["pillars"] = p_cfg["parallax"]["pillars"]
+                        
+                # Backwards compat for old schema
                 if "settings" in p_cfg:
                     merged["settings"].update(p_cfg["settings"])
                 if "sections" in p_cfg:
                     merged["sections"] = p_cfg["sections"] + [
                         s for s in merged["sections"] if s.get("global")
                     ]
-                if "title" in p_cfg:
-                    merged["title"] = p_cfg["title"]
                 if "entities" in p_cfg:
                     merged["entities"] = p_cfg["entities"]
-            except:
-                pass
+        except Exception as e:
+            with open("/tmp/px-debug.log", "a") as dbg:
+                dbg.write(f"Config Load Error: {e}\\n")
 
-    # Store stealth config for library scanning
     if stealth_config:
         merged["settings"]["stealth_library"] = os.path.expanduser(
             stealth_config.get("library", "")
@@ -148,7 +185,6 @@ def load_configs():
 
     merged["settings"]["scope"] = scope
     return merged
-
 
 def render_item(item):
     """Standardized Delimited Output for the Resident Driver."""
@@ -301,59 +337,6 @@ def main():
             if os.path.exists(legend_file):
                 show_legend = Path(legend_file).read_text().strip()
 
-            os.environ["PX_SHOW_LEGEND"] = show_legend
-            os.environ["PX_SESSION_ID"] = session_id
-            active_ctx_name_file = f"/tmp/px-active-context-{session_id}.log"
-            active_ctx = ""
-            if os.path.exists(active_ctx_name_file):
-                active_ctx = Path(active_ctx_name_file).read_text().strip()
-
-            styler_path = str(PARALLAX_HOME / "lib" / "exec" / "px-ui-styler")
-            cmd = [styler_path, "resident", ctx, scope]
-            try:
-                # Need to escape parens for FZF change-header()
-                # Need to escape parens for FZF change-header()
-                out = (
-                    subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-                    .decode()
-                    .strip()
-                )
-                lines = out.split("\n")
-
-                # Pulse Check: Show active LLM status with color
-                provider = "DISCONNECTED"
-                p_color = "\x1b[1;31m"  # Red (actual escape char)
-                reset = "\x1b[0m"
-                session_path = os.path.expanduser("~/.parallax/session.json")
-                if os.path.exists(session_path):
-                    with open(session_path) as f:
-                        s_data = json.load(f)
-                        provider = s_data.get("llm_provider", "DEFAULT").upper()
-                        if provider != "DISCONNECTED":
-                            p_color = "\x1b[1;32m"  # Green
-
-                header_line = lines[0]
-                if active_ctx:
-                    header_line = f"{header_line} │ {active_ctx.upper()}"
-
-                header_line = f"{header_line} │ 🧠 {p_color}{provider}{reset}"
-                lines[0] = header_line
-                # Try using actual newlines - FZF may handle them in change-header()
-                final_header = "\n".join(lines)
-                # ESCAPE FOR FZF ACTION: parens, pipes, quotes
-                import re
-
-                # We need to escape: ) ( | " '
-                # In FZF action string context, escaping is tricky.
-                # Usually backslash works.
-                safe_header = re.sub(r"([()|\"\'])", r"\\\1", final_header)
-                return safe_header
-            except Exception as e:
-                # Log exception for debugging
-                with open("/tmp/px-styler-error.log", "a") as f:
-                    f.write(f"ERROR in run_styler: {e}\n")
-                return f"PARALLAX │ {ctx.upper()} │ ERROR"
-
         if event == "legend_toggle":
             ctx_file = os.environ.get("PX_CTX_FILE", f"/tmp/px-ctx-{session_id}.log")
             ctx = (
@@ -361,8 +344,11 @@ def main():
                 if Path(ctx_file).exists()
                 else "entities"
             )
-            header = run_styler(ctx.split(":")[0] if ":" in ctx else ctx)
-            print(f"reload(px-engine --context {ctx})+change-header({header})")
+            header_lines = build_context(config, ctx.split(":")[0] if ":" in ctx else ctx)
+            final_header = "\n".join(header_lines)
+            import re
+            safe_header = re.sub(r"([()|\"\'])", r"\\\1", final_header)
+            print(f"reload(px-engine --context {ctx})+change-header({safe_header})")
             return
 
         if event == "esc":
@@ -381,11 +367,12 @@ def main():
                     # Clean up
                     os.remove(return_ctx_file)
 
-                    header = run_styler(
-                        parent_ctx.split(":")[0] if ":" in parent_ctx else parent_ctx
-                    )
+                    header_lines = build_context(config, parent_ctx.split(":")[0] if ":" in parent_ctx else parent_ctx)
+                    final_header = "\n".join(header_lines)
+                    import re
+                    safe_header = re.sub(r"([()|\"\'])", r"\\\1", final_header)
                     print(
-                        f"execute-silent(echo {parent_ctx} > {ctx_file})+reload('{BIN_DIR}/px-engine' --context {parent_ctx})+change-header({header})+clear-query"
+                        f"execute-silent(echo {parent_ctx} > {ctx_file})+reload('{BIN_DIR}/px-engine' --context {parent_ctx})+change-header({safe_header})+clear-query"
                     )
                     return
 
@@ -564,9 +551,9 @@ def main():
                 )
             elif e_type == "ACTION":
                 # Check for active linked shells
-                link_dir = os.path.expanduser("~/.parallax/links")
+                link_dir = PX_STATE_DIR / "links"
                 is_linked = False
-                if os.path.exists(link_dir):
+                if link_dir.exists():
                     for lk in glob.glob(f"{link_dir}/shell-*.link"):
                         try:
                             l_target_pid = Path(lk).read_text().strip()
@@ -576,7 +563,6 @@ def main():
                                 break
                         except:
                             pass
-
                 env_source = '[[ -f "$PX_ENV_FILE" ]] && source "$PX_ENV_FILE";'
 
                 # Log Action Trigger
@@ -666,11 +652,9 @@ def main():
                 )
             elif e_type == "PLACE":
                 # Check for active linked shells
-                link_dir = os.path.expanduser("~/.parallax/links")
+                link_dir = PX_STATE_DIR / "links"
                 is_linked = False
-                if os.path.exists(link_dir):
-                    # Local imports removed
-
+                if link_dir.exists():
                     for lk in glob.glob(f"{link_dir}/*.link"):
                         try:
                             if Path(lk).read_text().strip() == session_id:
@@ -678,7 +662,6 @@ def main():
                                 break
                         except:
                             pass
-
                 env_source = '[[ -f "$PX_ENV_FILE" ]] && source "$PX_ENV_FILE";'
                 signal_file = os.environ.get(
                     "PX_SIGNAL_FILE", f"/tmp/px-signal-{session_id}.sh"
@@ -754,27 +737,28 @@ def main():
                     elif key == "PX_HUD_PATH_STYLE":
                         new_val = "full" if curr == "short" else "short"
 
-                    # 1. Update Persistent Config
-                    cfg = os.path.expanduser("~/.parallax/config")
+                    # 1. Update Persistent Config (If it's the old format)
+                    # For YAML, we'd need a more complex updater, so for now we just
+                    # update the immediate session state if it's a layout toggle.
+                    cfg = GLOBAL_CONFIG
                     lines = []
-                    if os.path.exists(cfg):
+                    if cfg.exists() and cfg.name.endswith(".config"):
                         with open(cfg, "r") as f:
                             lines = f.readlines()
 
-                    found = False
-                    new_lines = []
-                    for line in lines:
-                        if line.startswith(f"export {key}="):
+                        found = False
+                        new_lines = []
+                        for line in lines:
+                            if line.startswith(f"export {key}="):
+                                new_lines.append(f'export {key}="{new_val}"\\n')
+                                found = True
+                            else:
+                                new_lines.append(line)
+                        if not found:
                             new_lines.append(f'export {key}="{new_val}"\\n')
-                            found = True
-                        else:
-                            new_lines.append(line)
-                    if not found:
-                        new_lines.append(f'export {key}="{new_val}"\\n')
 
-                    with open(cfg, "w") as f:
-                        f.writelines(new_lines)
-
+                        with open(cfg, "w") as f:
+                            f.writelines(new_lines)
                     # 2. Update Immediate State (Files)
                     if key == "PX_VERBOSE":
                         p = os.environ.get("PX_VERBOSE_FILE")

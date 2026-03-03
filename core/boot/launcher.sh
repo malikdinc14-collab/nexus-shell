@@ -44,31 +44,37 @@ export NEXUS_SCRIPTS="$NEXUS_CORE/boot"
 export PATH="$HOME/.nexus-shell/bin:$PATH"
 
 # 3. Environment Context
-# Handle flags (e.g., --composition)
-COMPOSITION="vscodelike"
+# Identify Project Root Early
 PROJECT_ARG=""
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --composition) COMPOSITION="$2"; shift 2 ;;
-        -c) COMPOSITION="$2"; shift 2 ;;
-        -*) shift ;; # Unknown flag
-        *) PROJECT_ARG="$1"; shift ;;
-    esac
+for arg in "$@"; do
+    [[ "$arg" != -* ]] && PROJECT_ARG="$arg" && break
 done
 
 PROJECT_ROOT="${PROJECT_ARG:-$(pwd)}"
 PROJECT_ROOT="$(cd -- "$PROJECT_ROOT" && pwd)"
 PROJECT_NAME="$(basename "$PROJECT_ROOT")"
+
+# 4. Tiered Configuration Loading (Clean Slate V1)
+echo "[*] Loading Workspace Configuration..."
+# Use Python helper to merge settings.yaml and .nexus.yaml
+eval "$(python3 "$NEXUS_CORE/api/config_helper.py")"
+
+# Apply Overrides from Flags (CLI Priority)
+COMPOSITION="${NEXUS_COMPOSITION:-vscodelike}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --composition|-c) COMPOSITION="$2"; shift 2 ;;
+        *) shift ;; 
+    esac
+done
+
 SESSION_ID="nexus_$PROJECT_NAME"
 
 # Resolve Configuration Path (Detect Layout)
 if [[ -f "$HOME/.config/nexus-shell/config/keybinds.conf" ]]; then
-    # Installed Layout
     NEXUS_CONFIG_DIR="$HOME/.config/nexus-shell"
     TMUX_CONF="$NEXUS_CONFIG_DIR/tmux/nexus.conf"
 else
-    # Source/Dev Layout (current layout)
     NEXUS_CONFIG_DIR="$NEXUS_HOME"
     TMUX_CONF="$NEXUS_CONFIG_DIR/config/tmux/nexus.conf"
 fi
@@ -77,30 +83,29 @@ echo -e "\033[1;36m[*] INITIALIZING STATION: $PROJECT_NAME\033[0m"
 echo "    Layout: $COMPOSITION"
 echo "    Session: $SESSION_ID"
 
-# 4. Load Tool Configurations
+# 4.5 Load Legacy tools.conf (Backwards Compatibility)
 TOOLS_CONF="$NEXUS_CONFIG_DIR/tools.conf"
-# Fallback to config dir parent if in source mode
-[[ ! -f "$TOOLS_CONF" ]] && TOOLS_CONF="$(dirname "$NEXUS_CONFIG_DIR")/tools.conf" # Source mode tools.conf location?
-# Actually source vs installed tools.conf might differ too.
-# In source: no tools.conf usually.
-# In install: ~/.config/nexus-shell/tools.conf
-
+[[ ! -f "$TOOLS_CONF" ]] && TOOLS_CONF="$(dirname "$NEXUS_CONFIG_DIR")/tools.conf"
 if [[ -f "$TOOLS_CONF" ]]; then
     source "$TOOLS_CONF"
 fi
 
-# Tool Defaults & Command Construction
-NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
-NEXUS_FILES="${NEXUS_FILES:-yazi}"
-NEXUS_CHAT="${NEXUS_CHAT:-opencode}"
+# Tool Defaults (Configuration Hierarchy)
+# Priority: 1. Flags (N/A yet) 2. .nexus.yaml 3. tools.conf 4. Global defaults
+export NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
+export NEXUS_FILES="${NEXUS_FILES:-yazi}"
+export NEXUS_CHAT="${NEXUS_CHAT:-opencode}"
 PARALLAX_BIN="$HOME/.parallax/bin/parallax"
+
+# Build isolated state directory
+export PX_STATE_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME/parallax"
+mkdir -p "$PX_STATE_DIR"
 
 # Build absolute command strings for the Architect
 NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe"
 export EDITOR_CMD="$NEXUS_EDITOR"
 [[ "$NEXUS_EDITOR" == *"nvim"* ]] && export EDITOR_CMD="$NEXUS_EDITOR --listen $NVIM_PIPE"
-export PARALLAX_CMD="PX_NEXUS_MODE=1 PX_NEXUS_SESSION=$SESSION_ID $PARALLAX_BIN --nexus"
-export NEXUS_FILES NEXUS_CHAT
+export PARALLAX_CMD="PX_NEXUS_MODE=1 PX_NEXUS_SESSION=$SESSION_ID PX_STATE_DIR=$PX_STATE_DIR $PARALLAX_BIN --nexus"
 export HAS_CHAT=true HAS_FILES=true
 
 # 5. Mandatory State Reset & Initialization

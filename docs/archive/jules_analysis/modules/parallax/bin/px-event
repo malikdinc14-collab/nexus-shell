@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+
+import asyncio
+import argparse
+import json
+import os
+import sys
+import uuid
+import datetime
+import socket as sock_lib
+from typing import Optional
+
+class ParallaxEventClient:
+    def __init__(self, socket_path: str):
+        self.socket_path = socket_path
+
+    async def connect(self):
+        """Connects to the Parallax Event Bus."""
+        try:
+            reader, writer = await asyncio.open_unix_connection(self.socket_path)
+            return reader, writer
+        except FileNotFoundError:
+            print(f"Error: Parallax socket not found at {self.socket_path}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error connecting to bus: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    async def publish(self, event_type: str, payload_str: str):
+        """Publishes an event to the bus."""
+        reader, writer = await self.connect()
+        
+        try:
+            # Parse payload if provided as string
+            try:
+                payload_obj = json.loads(payload_str)
+            except json.JSONDecodeError:
+                payload_obj = {"raw": payload_str}
+
+            # Build envelope
+            pane_id = os.environ.get("TMUX_PANE", "unknown")
+            pid = os.getpid()
+            
+            envelope = {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.datetime.now().isoformat(),
+                "source": {
+                    "pane_id": pane_id,
+                    "pid": pid
+                },
+                "type": event_type,
+                "payload": payload_obj
+            }
+            
+            message = json.dumps(envelope)
+            writer.write(f"{message}\n".encode())
+            await writer.drain()
+            
+            # Close properly
+            writer.close()
+            await writer.wait_closed()
+            
+        except Exception as e:
+            print(f"Error publishing: {e}", file=sys.stderr)
+
+    async def subscribe(self, filter_type: Optional[str] = None):
+        """Subscribes to events on the bus."""
+        reader, writer = await self.connect()
+        
+        try:
+            while True:
+                data = await reader.readline()
+                if not data:
+                    break
+                    
+                message_str = data.decode().strip()
+                if not message_str:
+                    continue
+                
+                try:
+                    event = json.loads(message_str)
+                    
+                    # Filter by type if specified
+                    if filter_type and event.get("type") != filter_type:
+                        continue
+                        
+                    # Output
+                    print(json.dumps(event))
+                    sys.stdout.flush()
+                        
+                except json.JSONDecodeError:
+                    continue
+                    
+        except asyncio.CancelledError:
+            pass
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+def main():
+    parser = argparse.ArgumentParser(description="Parallax Event Bus CLI")
+    
+    # Subparsers for commands
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    
+    # Pub command
+    pub_parser = subparsers.add_parser("pub", help="Publish an event")
+    pub_parser.add_argument("type", help="Event type (e.g., NXS_BUFFER_SAVED)")
+    pub_parser.add_argument("payload", help="JSON payload string")
+    
+    # Sub command
+    sub_parser = subparsers.add_parser("sub", help="Subscribe to events")
+    sub_parser.add_argument("type", nargs="?", help="Event type to filter by (optional)")
+
+    # Common args
+    parser.add_argument("--socket", help="Path to the Unix socket (optional)")
+
+    args = parser.parse_args()
+
+    # Determine socket path
+    socket_path = args.socket
+    if not socket_path:
+        # Default strategy: /tmp/parallax_$USER/bus_$SESSION.sock
+        # Needs PX_SESSION_ID env var usually, or defaults to "default"
+        user = os.environ.get("USER", "unknown")
+        session_id = os.environ.get("PX_SESSION_ID", "default")
+        socket_path = f"/tmp/parallax_{user}/bus_{session_id}.sock"
+
+    client = ParallaxEventClient(socket_path)
+
+    try:
+        if args.command == "pub":
+            asyncio.run(client.publish(args.type, args.payload))
+        elif args.command == "sub":
+            asyncio.run(client.subscribe(args.type))
+    except KeyboardInterrupt:
+        sys.exit(0)
+
+if __name__ == "__main__":
+    main()

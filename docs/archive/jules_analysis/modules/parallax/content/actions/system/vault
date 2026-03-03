@@ -1,0 +1,54 @@
+#!/bin/bash
+# Vault - Secure Secrets Manager
+# @param ACTION: What to do [list, add, delete]
+# @param KEY_NAME: Secret key $(px-vault list 2>/dev/null)
+
+set -e
+
+case "$ACTION" in
+    list)
+        echo "🔐 Stored Secrets:"
+        echo ""
+        SECRETS=$(px-vault list 2>/dev/null || true)
+        if [[ -z "$SECRETS" ]]; then
+            echo "  (No secrets stored)"
+        else
+            echo "$SECRETS" | while read -r key; do
+                echo "  ✓ $key"
+            done
+        fi
+        ;;
+    add)
+        if [[ -z "$KEY_NAME" ]]; then
+            echo "❌ KEY_NAME is required."
+            exit 1
+        fi
+        
+        # Uppercase and normalize
+        KEY_NAME=$(echo "$KEY_NAME" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+        
+        echo "🔐 Enter value for $KEY_NAME:"
+        read -sp "Value (hidden): " KEY_VALUE
+        echo ""
+        
+        if [[ -z "$KEY_VALUE" ]]; then
+            echo "❌ No value provided."
+            exit 1
+        fi
+        
+        echo "$KEY_VALUE" | px-vault set "$KEY_NAME" -
+        echo "✅ Saved '$KEY_NAME' to Keychain."
+        ;;
+    delete)
+        if [[ -z "$KEY_NAME" ]]; then
+            echo "❌ KEY_NAME is required."
+            exit 1
+        fi
+        
+        px-vault delete "$KEY_NAME" 2>/dev/null && echo "✅ Deleted '$KEY_NAME'." || echo "❌ Key not found."
+        ;;
+    *)
+        echo "Usage: ACTION=[list|add|delete]"
+        exit 1
+        ;;
+esac
