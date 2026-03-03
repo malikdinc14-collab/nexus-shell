@@ -95,7 +95,8 @@ fi
 export NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
 export NEXUS_FILES="${NEXUS_FILES:-yazi}"
 export NEXUS_CHAT="${NEXUS_CHAT:-opencode}"
-PARALLAX_BIN="$HOME/.parallax/bin/parallax"
+MENU_BIN="$NEXUS_HOME/modules/menu/bin/nexus-menu"
+ROUTER_BIN="$NEXUS_CORE/exec/router.sh"
 
 # Build isolated state directory
 export PX_STATE_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME/parallax"
@@ -105,7 +106,7 @@ mkdir -p "$PX_STATE_DIR"
 NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe"
 export EDITOR_CMD="$NEXUS_EDITOR"
 [[ "$NEXUS_EDITOR" == *"nvim"* ]] && export EDITOR_CMD="$NEXUS_EDITOR --listen $NVIM_PIPE"
-export PARALLAX_CMD="PX_NEXUS_MODE=1 PX_NEXUS_SESSION=$SESSION_ID PX_STATE_DIR=$PX_STATE_DIR $PARALLAX_BIN --nexus"
+export PARALLAX_CMD="PX_STATE_DIR=$PX_STATE_DIR $MENU_BIN | $ROUTER_BIN"
 export HAS_CHAT=true HAS_FILES=true
 
 # 5. Mandatory State Reset & Initialization

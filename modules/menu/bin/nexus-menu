@@ -1,0 +1,70 @@
+#!/usr/bin/env zsh
+# bin/nexus-menu
+# The "Dumb Dashboard" Interface for Nexus
+# Renders the FZF menu and outputs the executed payload for Nexus to route.
+
+# Find the real directory (resolve symlinks)
+BIN_DIR="${0:A:h}"
+PROJECT_ROOT="${BIN_DIR:h}"
+
+# Make sure we have our state directory loaded
+export PX_STATE_DIR="${PX_STATE_DIR:-$HOME/.parallax}"
+mkdir -p "$PX_STATE_DIR"
+
+# Generate a unique session ID if we don't have one
+export PX_SESSION_ID="${PX_SESSION_ID:-$(date +%s%N)}"
+export PX_CTX_FILE="/tmp/px-ctx-${PX_SESSION_ID}.log"
+
+# Clean up context on start
+echo "library" > "$PX_CTX_FILE"
+
+# The core FZF UI Loop
+while true; do
+    # 1. Read the current context
+    CURRENT_CTX=$(cat "$PX_CTX_FILE" 2>/dev/null || echo "library")
+    
+    # 2. Render the payload via the python engine
+    # We pipe the python engine output (which is the list of items) directly to FZF
+    selection=$( "${BIN_DIR}/px-engine" --context "$CURRENT_CTX" | fzf \
+        --ansi --layout=reverse --border --prompt="Select > " \
+        --bind "enter:become(echo {})" \
+        --bind "esc:become(echo ACTION:ESC)" \
+        --expect=esc,enter )
+    fzf_exit=$?
+
+    # fzf with --expect outputs the key pressed on line 1, and the selected text on line 2+
+    # We need to parse that.
+    key=$(echo "$selection" | head -n1)
+    item=$(echo "$selection" | tail -n+2)
+    
+    # 3. Handle selection
+    if [[ "$key" == "esc" || $fzf_exit -eq 130 ]]; then
+         # User pressed Escape or Ctrl-C
+         break
+    elif [[ -n "$item" && "$item" != "ACTION:ESC" ]]; then
+         # We need to tell the engine that an item was selected so it can process it
+         # The engine will output the final payload (e.g., ACTION|cmd)
+         engine_result=$("${BIN_DIR}/px-engine" --context "$CURRENT_CTX" --ui-event enter "$item")
+         
+         # IF the engine returns a reload action (e.g. changing folders), we catch it and loop.
+         if echo "$engine_result" | grep -q "reload("; then
+              # Parse out the new context from the reload command (hacky but works for now)
+              new_ctx=$(echo "$engine_result" | grep -o "px-engine --context [^)]*" | awk '{print $3}')
+              if [[ -n "$new_ctx" ]]; then
+                  echo "$new_ctx" > "$PX_CTX_FILE"
+              fi
+              continue
+         fi
+         
+         # Otherwise, the python engine printed the final stdout payload.
+         # Print it for the Router to catch and exit.
+         echo "$engine_result"
+         break
+    else
+         # Empty selection (somehow)
+         break
+    fi
+done
+
+# Cleanup
+rm -f "$PX_CTX_FILE"

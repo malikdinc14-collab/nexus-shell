@@ -58,8 +58,6 @@ from lib.core.pillars import (
     projects,
     places,
     brains,
-    models,
-    notes,
     user_lists
 )
 
@@ -68,8 +66,6 @@ PILLARS = {
     "projects": projects,
     "places": places,
     "brains": brains,
-    "models": models,
-    "notes": notes,
     "user_lists": user_lists
 }
 
@@ -485,307 +481,54 @@ def main():
             ctx_file = os.environ.get("PX_CTX_FILE", f"/tmp/px-ctx-{session_id}.log")
 
             if e_type == "PLANE":
-                header = run_styler(payload)
+                header_lines = build_context(config, payload)
+                final_header = "\\n".join(header_lines)
+                import re
+                safe_header = re.sub(r"([()|\"\\'])", r"\\\\\\1", final_header)
                 print(
-                    f"execute-silent(echo {payload} > {ctx_file})+reload(px-engine --context {payload})+change-header({header})+clear-query"
+                    f"execute-silent(echo {payload} > {ctx_file})+reload(px-engine --context {payload})+change-header({safe_header})+clear-query"
                 )
             elif e_type == "FOLDER":
                 # Navigate into folder (e.g., actions:git)
-                header = run_styler(
-                    payload.split(":")[0]
-                )  # Use parent plane for header
+                parent_plane = payload.split(":")[0]
+                header_lines = build_context(config, parent_plane)
+                final_header = "\\n".join(header_lines)
+                import re
+                safe_header = re.sub(r"([()|\"\\'])", r"\\\\\\1", final_header)
                 print(
-                    f"execute-silent(echo {payload} > {ctx_file})+reload(px-engine --context {payload})+change-header({header})+clear-query"
+                    f"execute-silent(echo {payload} > {ctx_file})+reload(px-engine --context {payload})+change-header({safe_header})+clear-query"
                 )
-            elif e_type == "CONTEXT":
-                # Activate Context: load YAML and export env vars (Zero-dependency parser)
-                env_file = os.environ.get("PX_ENV_FILE", f"/tmp/px-env-{session_id}.sh")
-                active_ctx_name_file = f"/tmp/px-active-context-{session_id}.log"
-                try:
-                    env_data = {}
-                    with open(payload, "r") as f:
-                        in_env_block = False
-                        for line in f:
-                            raw_line = line
-                            line = line.strip()
-                            if not line or line.startswith("#"):
-                                continue
-
-                            # Detect env: block
-                            if line.rstrip(":") == "env":
-                                in_env_block = True
-                                continue
-
-                            if in_env_block:
-                                # In YAML, indented lines after 'env:' are the values
-                                # raw_line[0] works if there's any leading whitespace
-                                if raw_line[0].isspace():
-                                    if ":" in line:
-                                        k, v = line.split(":", 1)
-                                        # Clean up key and value
-                                        env_data[k.strip()] = (
-                                            v.strip().strip('"').strip("'")
-                                        )
-                                else:
-                                    # Dedented line means block ended
-                                    in_env_block = False
-
-                    # Ensure env_file is absolute and normalized
-                    env_file = os.path.realpath(env_file)
-                    with open(env_file, "w") as f:
-                        for k, v in env_data.items():
-                            # Escape single quotes in value for zsh safety
-                            safe_v = v.replace("'", "'\\''")
-                            f.write(f"export {k}='{safe_v}'\\n")
-
-                    # Store context name for styler
-                    with open(active_ctx_name_file, "w") as f:
-                        f.write(label)
-                except Exception as e:
-                    pass
-
-                header = run_styler("contexts")
-                # FZF Feedback: change-header then execute-silent sleep to let UI breathe
-                print(
-                    f"change-header( ⚡ ACTIVATED: {label} )+execute-silent(sleep 0.5)+reload(px-engine --context contexts)+change-header({header})+clear-query"
-                )
-            elif e_type == "ACTION":
-                # Check for active linked shells
-                link_dir = PX_STATE_DIR / "links"
-                is_linked = False
-                if link_dir.exists():
-                    for lk in glob.glob(f"{link_dir}/shell-*.link"):
-                        try:
-                            l_target_pid = Path(lk).read_text().strip()
-                            # Check if this link points to our current Parallax session
-                            if l_target_pid == session_id:
-                                is_linked = True
-                                break
-                        except:
-                            pass
-                env_source = '[[ -f "$PX_ENV_FILE" ]] && source "$PX_ENV_FILE";'
-
-                # Log Action Trigger
-                with open("/tmp/px-debug.log", "a") as f:
-                    f.write(f"ACTION TRIGGER: {payload}\\n")
-
-                # Delegate Action Init to Wizard
-                params = wizard.init_wizard(payload, context)
-
-                if params:
-                    p = params[0]
-                    desc = p["desc"]
-                    var = p["var"]
-                    next_ctx = "prompt-0"
-
-                    # Zero Pollution: Show question in Header
-                    import re
-
-                    # Escape chars that break FZF action strings: ( ) | ' "
-                    safe_desc = re.sub(r"([()|\"\'])", r"\\\1", desc)
-                    header = f"PARALLAX │ INPUT │ {safe_desc} ({var.upper()})"
-                    ctx_file = os.environ.get(
-                        "PX_CTX_FILE", f"/tmp/px-ctx-{session_id}.log"
-                    )
-                    # No need to send to stage here manually, wizard.init_wizard already did it
-                    cmd = f"execute-silent(echo '{next_ctx}' > {ctx_file})+reload('{BIN_DIR}/px-engine' --context '{next_ctx}')+change-header({header})+change-prompt(Input > )+clear-query"
-                    print(cmd)
-                else:
-                    # Final Execution
-                    params_file = f"/tmp/px-collected-params-{session_id}.sh"
-                    params_source = f"[[ -f {params_file} ]] && source {params_file};"
-
-                    if os.environ.get("PX_TMUX_NATIVE"):
-                        # Native: Send to Stage (PRIORITY OVER LINK)
-                        # We use px-exec wrapper for clean output
-                        cmd = f'px-exec {session_id} "{payload}"'
-                        cmd_safe = cmd.replace('"', '\\"')
-
-                        styler_ctx = (
-                            context.split(":")[0] if ":" in context else context
-                        )
-                        header = run_styler(styler_ctx)
-                        print(
-                            f'change-header( ⚡ SENT TO STAGE )+execute-silent(tmux send-keys -t 0 "{cmd_safe}" Enter)+change-header({header})'
-                        )
-
-                    elif is_linked:
-                        signal_file = f"/tmp/px-signal-{session_id}.sh"
-                        spy_cmd = f"px-spy EXEC 'Remote Action: {payload}'"
-                        # Add a timestamp comment to ensure file change is unique
-                        raw_cmd = f"{env_source} {params_source} {spy_cmd} && eval {payload} # {time.time()}"
-                        # Structured signal with metadata for px-link
-                        remote_cmd = f"LABEL:{label}|CMD:{raw_cmd}"
-                        with open(signal_file, "w") as f:
-                            f.write(f"{remote_cmd}\\n")
-                        # Stay in current context
-                        styler_ctx = (
-                            context.split(":")[0] if ":" in context else context
-                        )
-                        print(
-                            f"change-header( ⚡ SENT TO LINKED SHELL: {label} )+execute-silent(sleep 0.5)+reload(px-engine --context {context})+change-header({run_styler(styler_ctx)})"
-                        )
-                    else:
-                        styler_ctx = (
-                            context.split(":")[0] if ":" in context else context
-                        )
-                        header = run_styler(styler_ctx)
-                        print(
-                            f'change-header( ⚡ WORKING: {payload} )+execute({env_source} {params_source} px-spy EXEC "Action: {payload}" && eval {payload} && echo ">>> Press Enter..." && read)+change-header({header})'
-                        )
-            elif e_type == "AGENT":
-                env_source = '[[ -f "$PX_ENV_FILE" ]] && source "$PX_ENV_FILE";'
-                # Surface logic currently not supported in flat ENTER event
-                # Surface would need to be encoded in payload
-                print(
-                    f'execute({env_source} px-spy AGENT "Invoke: {payload}" && px-agent chat {payload})'
-                )
-            elif e_type == "PROMPT":
-                # Edit Prompt then Sync
-                print(
-                    f'execute(px-spy INTEL "Edit Prompt: {label}" && ${{EDITOR:-vi}} {payload} && px-prompt-sync {payload} && echo ">>> Press Enter..." && read)'
-                )
-            elif e_type == "SURFACE":
-                # Materialize Tmux Layout
-                print(
-                    f"change-header( 🔳 MATERIALIZING SURFACE: {label} )+execute-silent(px-surface apply {payload})+execute-silent(sleep 0.5)+change-header({run_styler(context)})"
-                )
-            elif e_type == "PLACE":
-                # Check for active linked shells
-                link_dir = PX_STATE_DIR / "links"
-                is_linked = False
-                if link_dir.exists():
-                    for lk in glob.glob(f"{link_dir}/*.link"):
-                        try:
-                            if Path(lk).read_text().strip() == session_id:
-                                is_linked = True
-                                break
-                        except:
-                            pass
-                env_source = '[[ -f "$PX_ENV_FILE" ]] && source "$PX_ENV_FILE";'
-                signal_file = os.environ.get(
-                    "PX_SIGNAL_FILE", f"/tmp/px-signal-{session_id}.sh"
-                )
-                # Write signal for linked shells
-                try:
-                    with open(signal_file, "w") as f:
-                        f.write(f"SILENT:cd {payload} # {time.time()}\\n")
-                except:
-                    pass
-
-                # Place Navigation Priority:
-                # 1. Native Mode (Direct send-keys)
-                # 2. Linked Shell (Signal file)
-                # 3. Standard (Inline execution)
-
-                if os.environ.get("PX_TMUX_NATIVE"):
-                    # Native: cd in Stage
-                    # SMART NAV: Check for environment activation
-                    nav_cmd = (
-                        f'cd "{payload}" && '
-                        'if [[ -f ".venv/bin/activate" ]]; then source .venv/bin/activate; '
-                        'elif [[ -f "venv/bin/activate" ]]; then source venv/bin/activate; '
-                        'elif [[ -f ".envrc" ]] && command -v direnv &>/dev/null; then direnv allow; fi'
-                    )
-
-                    cmd = f"px-spy NAV 'Place: {payload}'; {nav_cmd}"
-                    cmd_safe = cmd.replace('"', '\\\\"')
-                    print(
-                        f'change-header( ⚡ NAVIGATING )+execute-silent(tmux send-keys -t 0 "{cmd_safe}" Enter)+change-header({run_styler("places")})'
-                    )
-                elif is_linked:
-                    # Silent navigation if linked
-                    signal_file = os.environ.get(
-                        "PX_SIGNAL_FILE", f"/tmp/px-signal-{session_id}.sh"
-                    )
-                    try:
-                        with open(signal_file, "w") as f:
-                            # Linked shells might need their own smart hook in px-link,
-                            # but sending a basic cd is safer for remote control for now.
-                            f.write(f"SILENT:cd {payload} # {time.time()}\\n")
-                    except:
-                        pass
-                    print(
-                        f"change-header( ✈️ SYNCING NAV: {payload} )+execute-silent(sleep 0.5)+change-header({run_styler('places')})"
-                    )
-                else:
-                    # Standard Mode (Foregroud)
-                    nav_cmd = (
-                        f"cd {payload} && "
-                        'if [[ -f ".venv/bin/activate" ]]; then source .venv/bin/activate; '
-                        'elif [[ -f "venv/bin/activate" ]]; then source venv/bin/activate; fi && zsh'
-                    )
-                    print(
-                        f'change-header( ✈️ NAVIGATING: {payload} )+execute({env_source} px-spy NAV "Place: {payload}" && {nav_cmd})'
-                    )
             elif e_type == "PROMPT_VAL" or e_type == "PROMPT_INPUT":
-                # Delegate to Wizard Manager
+                # Delegate to Wizard Manager inline parsing
                 print(wizard.process_input(payload, label))
             elif e_type == "SETTING":
-                parts = payload.split(":")
-                if len(parts) >= 3:
-                    key = parts[1]
-                    curr = parts[2]
-                    new_val = ""
+                # Settings usually want to reload the UI or restart
+                print(f"reload(px-engine --context settings)")
+            else:
+                # ---------------------------------------------------------
+                # NEW ROUTER ARCHITECTURE
+                # ---------------------------------------------------------
+                # Any execution type (ACTION, PLACE, NOTE, MODEL, AGENT) 
+                # is no longer handled internally. We drop out of FZF and 
+                # let the stdout be caught by the nexus-router.
+                
+                # Check if it requires a wizard parameter collection first
+                if e_type == "ACTION":
+                    params = wizard.init_wizard(payload, context)
+                    if params:
+                        p = params[0]
+                        desc, var = p["desc"], p["var"]
+                        import re
+                        safe_desc = re.sub(r"([()|\"\\'])", r"\\\\\\1", desc)
+                        header = f"PARALLAX │ INPUT │ {safe_desc} ({var.upper()})"
+                        cmd = f"execute-silent(echo 'prompt-0' > {ctx_file})+reload('{BIN_DIR}/px-engine' --context 'prompt-0')+change-header({header})+change-prompt(Input > )+clear-query"
+                        print(cmd)
+                        return
 
-                    if key == "PX_LAYOUT_STYLE":
-                        new_val = "default" if curr == "reverse" else "reverse"
-                    elif key == "PX_VERBOSE":
-                        new_val = "false" if curr == "true" else "true"
-                    elif key == "PX_SHOW_LEGEND":
-                        new_val = "false" if curr == "true" else "true"
-                    elif key == "PX_HUD_PATH_STYLE":
-                        new_val = "full" if curr == "short" else "short"
-
-                    # 1. Update Persistent Config (If it's the old format)
-                    # For YAML, we'd need a more complex updater, so for now we just
-                    # update the immediate session state if it's a layout toggle.
-                    cfg = GLOBAL_CONFIG
-                    lines = []
-                    if cfg.exists() and cfg.name.endswith(".config"):
-                        with open(cfg, "r") as f:
-                            lines = f.readlines()
-
-                        found = False
-                        new_lines = []
-                        for line in lines:
-                            if line.startswith(f"export {key}="):
-                                new_lines.append(f'export {key}="{new_val}"\\n')
-                                found = True
-                            else:
-                                new_lines.append(line)
-                        if not found:
-                            new_lines.append(f'export {key}="{new_val}"\\n')
-
-                        with open(cfg, "w") as f:
-                            f.writelines(new_lines)
-                    # 2. Update Immediate State (Files)
-                    if key == "PX_VERBOSE":
-                        p = os.environ.get("PX_VERBOSE_FILE")
-                        if p:
-                            Path(p).write_text(new_val)
-                    elif key == "PX_SHOW_LEGEND":
-                        p = os.environ.get("PX_SHOW_LEGEND_FILE")
-                        if p:
-                            Path(p).write_text(new_val)
-
-                    if key == "PX_LAYOUT_STYLE":
-                        restart_flag = f"/tmp/px-restart-{os.environ.get('PX_SESSION_ID', str(os.getpid()))}.flag"
-                        with open(restart_flag, "w") as f:
-                            f.write("1")
-                        print(
-                            f"change-header( ⚡ RESTARTING... )+execute-silent(sleep 0.1)+abort"
-                        )
-                    else:
-                        print(
-                            f"reload(px-engine --context settings)+change-header( ⚙️ UPDATED {key} )"
-                        )
-
-            return
+                # Print to STDOUT: The menu wrapper script parses this.
+                print(f"{e_type}|{payload}")
         elif event == "TOGGLE_DASHBOARD":
             # Toggle between normal dashboard and custom dashboard
-            import subprocess
-
             try:
                 # Get the current dashboard mode
                 state_dir = os.path.expanduser("~/.parallax/state")
