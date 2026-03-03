@@ -23,7 +23,6 @@ trap 'pkill -P $$; exit 0' SIGTERM SIGINT SIGHUP
 COMMAND="$@"
 SESSION_NAME=$(tmux display-message -p '#S' 2>/dev/null || echo "detached")
 
-# 5. Graceful Guard
 show_hub() {
     clear
     # Ensure we don't spin if there's no TTY
@@ -32,27 +31,21 @@ show_hub() {
         while [[ ! -t 0 ]]; do sleep 2; done
     fi
 
-    echo -e "\033[1;36m[ NEXUS PANE HUB ]\033[0m"
-    echo "──────────────────────────────"
-    echo "Project: $NEXUS_PROJECT"
-    echo ""
+    # Instead of a hardcoded FZF menu, use the centralized Nexus-Menu pipeline.
+    # We pipe the output into the Router exactly like the main Parallax bar does.
+    # The context 'system:modules' can be added to the python engine, or we can just run the generic 'system' context for now.
+    MENU_BIN="${NEXUS_HOME:-/Users/Shared/Projects/nexus-shell}/modules/menu/bin/nexus-menu"
+    ROUTER_BIN="${NEXUS_HOME:-/Users/Shared/Projects/nexus-shell}/core/exec/router.sh"
     
-    # Future: Generate this from registry.json
-    local menu_items="editor|Editor\nrender|Render\nshell|Terminal\nfiles|Files\nchat|AI Chat\ngit|Git\nexit|EXIT STATION"
+    # We set a temporary context so the menu opens to the system tools by default
+    export PX_CTX_FILE="/tmp/nexus_pane_hub_$$"
+    echo "system" > "$PX_CTX_FILE"
     
-    selection=$(echo -e "$menu_items" | fzf --reverse --height=50% --border --header="Choose Tool")
-    key="${selection%%|*}"
+    # Run the standard menu -> router pipeline
+    $MENU_BIN | $ROUTER_BIN
     
-    case "$key" in
-        "editor") COMMAND="$EDITOR_CMD" ;;
-        "shell")  COMMAND="/bin/zsh -i" ;;
-        "files")  COMMAND="$NEXUS_FILES" ;;
-        "chat")   COMMAND="$NEXUS_CHAT" ;;
-        "render") COMMAND="$NEXUS_HOME/lib/swap.sh" ;;
-        "git")    COMMAND="$NEXUS_HOME/lib/tree_swap.sh" ;;
-        "exit")   tmux kill-session -t "$SESSION_NAME"; exit 0 ;;
-        *)        COMMAND="/bin/zsh -i" ;;
-    esac
+    # If the router executes something that exits immediately, give it a tiny delay to avoid a crazy spinning loop
+    sleep 0.5
 }
 
 run_tool() {

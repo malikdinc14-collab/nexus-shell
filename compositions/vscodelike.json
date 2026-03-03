@@ -7,7 +7,7 @@
             {
                 "id": "files",
                 "size": 30,
-                "command": "$NEXUS_FILES '$PROJECT_ROOT'"
+                "command": "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
             },
             {
                 "type": "vsplit",
@@ -44,12 +44,12 @@
                 "panes": [
                     {
                         "id": "chat",
-                        "command": "gptme"
+                        "command": "$NEXUS_CHAT"
                     },
                     {
                         "id": "ui",
                         "size": 5,
-                        "command": "/bin/zsh -i"
+                        "command": "echo 'Nexus UI Reserved' && /bin/zsh -i"
                     }
                 ]
             }
