@@ -1,1 +1,11 @@
-- label: "Hello World"\n  type: "ACTION"\n  payload: "echo HelloWorld"
+title: My Custom Actions
+items:
+  - label: 🌍 Ping Google
+    type: ACTION
+    payload: "ping -c 3 google.com"
+  - label: 📂 Go to Downloads
+    type: PLACE
+    payload: "~/Downloads"
+  - label: 📝 Read Readme
+    type: NOTE
+    payload: "README.md"

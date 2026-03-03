@@ -1,6 +1,6 @@
 # Nexus-Shell Yazi Keymap
 
-[manager]
+[mgr]
 keymap = [
     # Navigation (vim-style)
     { on = ["k"], run = "arrow -1", desc = "Move up" },

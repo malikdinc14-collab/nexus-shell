@@ -2,12 +2,15 @@ import os
 import yaml
 from pathlib import Path
 
-def render(session_data):
+def render(context, config, paths):
     """
     Scans for custom YAML lists in:
     1. Project: .nexus/lists/*.yaml
     2. Global: ~/.config/nexus-shell/lists/*.yaml
     """
+    if context != "lists":
+        return None
+        
     items = []
     
     cwd = Path(os.getcwd())
@@ -55,12 +58,23 @@ def _parse_list(data, scope="GLOBAL"):
                     "meta": f"[{scope}]"
                 })
             elif isinstance(item, dict):
-                entities.append({
+                e_type = item.get("type", "ACTION")
+                payload = item.get("payload", "")
+                
+                new_ent = {
                     "label": item.get("label", "Unknown"),
-                    "type": item.get("type", "ACTION"),
-                    "payload": item.get("payload", ""),
+                    "type": e_type,
+                    "payload": payload,
                     "meta": f"[{scope}]"
-                })
+                }
+                
+                if e_type == "PLACE":
+                    new_ent["place"] = payload
+                else:
+                    new_ent["path"] = payload
+                    new_ent["action"] = payload
+                    
+                entities.append(new_ent)
                 
     # Handle structured object: { "title": "My List", "items": [...] }
     elif isinstance(data, dict):
@@ -76,11 +90,22 @@ def _parse_list(data, scope="GLOBAL"):
         if isinstance(items, list):
             for item in items:
                 if isinstance(item, dict):
-                    entities.append({
+                    e_type = item.get("type", "ACTION")
+                    payload = item.get("payload", "")
+                    
+                    new_ent = {
                         "label": item.get("label", "Unknown"),
-                        "type": item.get("type", "ACTION"),
-                        "payload": item.get("payload", ""),
+                        "type": e_type,
+                        "payload": payload,
                         "meta": f"[{scope}] {item.get('meta', '')}".strip()
-                    })
+                    }
+                    
+                    if e_type == "PLACE":
+                        new_ent["place"] = payload
+                    else:
+                        new_ent["path"] = payload
+                        new_ent["action"] = payload
+                        
+                    entities.append(new_ent)
 
     return entities

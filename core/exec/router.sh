@@ -3,7 +3,12 @@
 # The Execution Router for Nexus
 # Intercepts the pure STDOUT of the Menu and routes it to the specific environment action.
 
-PAYLOAD="$1"
+# Read from STDIN if piped, otherwise take $1
+if [[ -p /dev/stdin ]]; then
+    read -r PAYLOAD
+else
+    PAYLOAD="$1"
+fi
 
 # If no payload, do nothing
 if [[ -z "$PAYLOAD" ]]; then
@@ -14,20 +19,25 @@ fi
 TYPE="${PAYLOAD%%|*}"
 DATA="${PAYLOAD#*|}"
 
-# Ensure we have our environment loaded
-[[ -f "$PX_ENV_FILE" ]] && source "$PX_ENV_FILE"
+# Helper to find a pane by its exact title
+get_pane_by_title() {
+    local target_title="$1"
+    tmux list-panes -F "#{pane_id} #{pane_title}" | grep -E " $target_title$" | head -n 1 | awk '{print $1}'
+}
 
-# Log the routing decision
-PX_LOG_FILE="/tmp/nxs-router-$(date +%s).log"
-echo "ROUTING [$TYPE]: $DATA" >> "$PX_LOG_FILE"
+# Find commonly used panes
+EDITOR_PANE=$(get_pane_by_title "editor")
+TERM_PANE=$(get_pane_by_title "terminal")
 
 case "$TYPE" in
     PLACE)
         # Directory Navigation
-        # Just cd into it and start a new zsh shell if running directly, 
-        # or sendkeys if we are in a tmux orchestrator mode
         if [[ -n "$TMUX" ]]; then
-            tmux send-keys 'cd "'"$DATA"'" && clear' Enter
+            if [[ -n "$TERM_PANE" ]]; then
+                tmux send-keys -t "$TERM_PANE" "cd \"$DATA\" && clear" Enter
+            else
+                tmux send-keys "cd \"$DATA\" && clear" Enter
+            fi
         else
             cd "$DATA" || exit
             zsh
@@ -37,8 +47,11 @@ case "$TYPE" in
     ACTION)
         # Execute the string (script or command)
         if [[ -n "$TMUX" ]]; then
-            # Spawn a new pane or just run it here
-            tmux send-keys "$DATA\n"
+            if [[ -n "$TERM_PANE" ]]; then
+                tmux send-keys -t "$TERM_PANE" "$DATA" Enter
+            else
+                tmux send-keys "$DATA" Enter
+            fi
         else
             eval "$DATA"
             echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
@@ -47,14 +60,24 @@ case "$TYPE" in
         ;;
 
     NOTE|DOC)
-        # Open in Glowing Markdown Viewer or Editor
-        if command -v glow &>/dev/null; then
-            glow "$DATA" -p
+        # Open in Editor or Viewer
+        if [[ -n "$TMUX" ]]; then
+            if [[ -n "$EDITOR_PANE" ]]; then
+                # Send escape to ensure we are in normal mode, then open the file
+                tmux send-keys -t "$EDITOR_PANE" Escape Escape ":e $DATA" Enter
+            else
+                # Popup window for the note if no editor exists
+                tmux display-popup -w 80% -h 80% -E "glow \"$DATA\" -p || less \"$DATA\""
+            fi
         else
-            cat "$DATA"
+            if command -v glow &>/dev/null; then
+                glow "$DATA" -p
+            else
+                cat "$DATA"
+            fi
+            echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
+            read -r
         fi
-        echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
-        read -r
         ;;
 
     MODEL|AGENT)
@@ -71,7 +94,6 @@ case "$TYPE" in
     PROJECT)
         # Switch into a project workspace
         echo "Starting Workspace: $DATA"
-        # Since router is running inside nxs, we might just need to pass this up to the python launcher
         cd "$DATA" || exit
         zsh
         ;;

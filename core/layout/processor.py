@@ -42,6 +42,10 @@ def build(config, target_pane, project_root, wrapper):
         # Leaf: Return the command to run
         cmd = config.get("command", "/bin/zsh -i")
         cmd = expand_vars(cmd, project_root)
+        
+        if config.get("id"):
+            tmux(["select-pane", "-t", target_pane, "-T", str(config["id"])])
+            
         return cmd
 
     ltype = config.get("type")
@@ -84,11 +88,18 @@ def build(config, target_pane, project_root, wrapper):
         cmd = build(pane_cfg, new_pane, project_root, wrapper)
         if cmd:
             tmux(["send-keys", "-t", new_pane, f"{wrapper} {cmd}", "Enter"])
+        
+        # Set Pane Title if ID is present
+        if pane_cfg.get("id"):
+            tmux(["select-pane", "-t", new_pane, "-T", str(pane_cfg["id"])])
             
     # The last pane is whatever is left of the original target_pane
     cmd = build(panes[-1], remaining_pane, project_root, wrapper)
     if cmd:
         tmux(["send-keys", "-t", remaining_pane, f"{wrapper} {cmd}", "Enter"])
+        
+    if panes[-1].get("id"):
+        tmux(["select-pane", "-t", remaining_pane, "-T", str(panes[-1]["id"])])
     
     return None
 

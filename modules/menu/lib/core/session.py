@@ -416,6 +416,7 @@ def main():
                         "Surfaces",
                         "Docs",
                         "Prompts",
+                        "Lists",
                         "Context",
                         "System",
                     ]
@@ -614,6 +615,9 @@ def main():
                     {"label": "🚀 Projects", "type": "PLANE", "payload": "projects"}
                 )
                 output.append(
+                    {"label": "📋 Lists", "type": "PLANE", "payload": "lists"}
+                )
+                output.append(
                     {
                         "label": "🔙 Global Dashboard",
                         "type": "PLANE",
@@ -781,6 +785,7 @@ def main():
         output.append({"label": "📚 Library", "type": "PLANE", "payload": "library"})
         output.append({"label": "🧠 Brains", "type": "PLANE", "payload": "brains"})
         output.append({"label": "🏙️  Places", "type": "PLANE", "payload": "places"})
+        output.append({"label": "📋 Lists", "type": "PLANE", "payload": "lists"})
         output.append({"label": "⚙️  System", "type": "PLANE", "payload": "system"})
 
     # 2. Plugin Dispatch
@@ -816,6 +821,8 @@ def main():
             plugins.append(history)
         if "workflow" in globals():
             plugins.append(workflow)
+        if "user_lists" in globals():
+            plugins.append(user_lists)
         if "nexus" in globals():
             res = nexus.render(context, config, paths_map)
             if res is not None:
