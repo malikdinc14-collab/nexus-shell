@@ -45,10 +45,10 @@ while true; do
             continue
             ;;
         ACTION)
-            # Run the tool/command IN THIS PANE
-            # When it exits, the menu loop resumes at the same context
+            # Run the tool/command IN THIS PANE with full TTY attachment
             clear
-            eval "$payload"
+            # Execute with explicit TTY to fix terminal UI apps like nvim
+            eval "$payload" < /dev/tty > /dev/tty
             # Tool exited — loop back to the same context
             continue
             ;;
