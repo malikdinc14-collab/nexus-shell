@@ -1,0 +1,5 @@
+# Nexus-Shell Workspace Registry
+# Add your projects here or use `nxs register` from inside a project directory.
+projects:
+  - name: Nexus Shell
+    path: /Users/Shared/Projects/nexus-shell

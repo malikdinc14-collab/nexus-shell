@@ -1,0 +1,11 @@
+# AI Agents / Personas
+# Copy this file to .nexus/lists/ inside a project to activate.
+title: "🤖 Agents"
+items:
+  - label: "🎭 Create New Persona"
+    type: ACTION
+    payload: "$NEXUS_HOME/modules/menu/content/actions/factory/create-persona.sh"
+
+  - label: "🏗️ Initialize Workspace"
+    type: ACTION
+    payload: "$NEXUS_HOME/modules/menu/content/actions/system/init-workspace.sh"

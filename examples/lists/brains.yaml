@@ -1,0 +1,31 @@
+# AI Brains & Model Management
+# Copy this file to ~/.config/nexus-shell/lists/ or .nexus/lists/ to activate.
+title: "🧠 AI Brains"
+items:
+  - label: "📊 Intelligence Dashboard"
+    type: ACTION
+    payload: "$LIBRARY_ROOT/actions/intel/dashboard"
+
+  - label: "🚀 Start Letta Server"
+    type: ACTION
+    payload: "export ACTION=start; $LIBRARY_ROOT/actions/intel/letta"
+
+  - label: "💬 Chat with Letta"
+    type: ACTION
+    payload: "export ACTION=chat; $LIBRARY_ROOT/actions/intel/letta"
+
+  - label: "🧪 HuggingFace Lab"
+    type: ACTION
+    payload: "$LIBRARY_ROOT/actions/intel/hf-lab"
+
+  - label: "🛑 Kill Brain (Port 8080)"
+    type: ACTION
+    payload: "lsof -ti :8080 | xargs kill -9 2>/dev/null; echo 'Done.'"
+
+  - label: "🛑 Kill Brain (Port 8081)"
+    type: ACTION
+    payload: "lsof -ti :8081 | xargs kill -9 2>/dev/null; echo 'Done.'"
+
+  - label: "📉 Unload All Brains"
+    type: ACTION
+    payload: "$NEXUS_HOME/core/api/unload_brains.sh"

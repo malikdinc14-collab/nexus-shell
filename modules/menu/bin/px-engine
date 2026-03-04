@@ -3,19 +3,18 @@ import sys
 import os
 from pathlib import Path
 
-# Bridge to lib.core.session
-# This allows bin/parallax to continue calling `px-engine` 
-# while the logic lives in a proper Python module.
+# Bridge to lib.core.menu_engine (the new YAML-driven engine)
 
 # Add project root to sys.path
 BIN_DIR = Path(__file__).parent.resolve()
 PROJECT_ROOT = BIN_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Run the session module
+# Run the new engine
 try:
-    from lib.core import session
-    session.main()
+    from lib.core import menu_engine
+    menu_engine.main()
 except ImportError as e:
-    print(f"CRITICAL ERROR: Could not load Parallax Core Session: {e}", file=sys.stderr)
+    print(f"CRITICAL ERROR: Could not load Menu Engine: {e}", file=sys.stderr)
     sys.exit(1)
+

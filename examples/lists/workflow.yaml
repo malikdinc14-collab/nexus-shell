@@ -1,0 +1,19 @@
+# Project Workflow Shortcuts
+# Copy this file to .nexus/lists/ inside a project to activate.
+title: "✅ Workflow"
+items:
+  - label: "✨ New Requirement"
+    type: ACTION
+    payload: "touch docs/workflow/requirements/NEW.md && ${EDITOR:-nvim} docs/workflow/requirements/NEW.md"
+
+  - label: "🎨 New Design Doc"
+    type: ACTION
+    payload: "touch docs/workflow/design/NEW.md && ${EDITOR:-nvim} docs/workflow/design/NEW.md"
+
+  - label: "✅ New Task"
+    type: ACTION
+    payload: "touch docs/workflow/tasks/NEW.md && ${EDITOR:-nvim} docs/workflow/tasks/NEW.md"
+
+  - label: "📁 Open Workflow Folder"
+    type: PLACE
+    payload: "docs/workflow"

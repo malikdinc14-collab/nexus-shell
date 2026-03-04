@@ -1,0 +1,23 @@
+# Git Quick Actions
+# Copy this file to .nexus/lists/ inside any project to get git shortcuts.
+title: "🐙 Git Operations"
+items:
+  - label: "📊 Git Status"
+    type: ACTION
+    payload: "git status"
+
+  - label: "⬇️ Git Pull"
+    type: ACTION
+    payload: "git pull"
+
+  - label: "⬆️ Git Push"
+    type: ACTION
+    payload: "git push"
+
+  - label: "📝 Commit All"
+    type: ACTION
+    payload: "git add . && git commit -v"
+
+  - label: "📋 Git Log (last 10)"
+    type: ACTION
+    payload: "git log --oneline -n 10"
