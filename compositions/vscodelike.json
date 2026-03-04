@@ -13,7 +13,7 @@
                 "type": "vsplit",
                 "panes": [
                     {
-                        "id": "parallax",
+                        "id": "menu",
                         "size": 8,
                         "command": "$PARALLAX_CMD"
                     },

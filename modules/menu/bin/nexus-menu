@@ -9,8 +9,8 @@ BIN_DIR="${0:A:h}"
 ENGINE="${BIN_DIR}/px-engine"
 ROUTER="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}/core/exec/router.sh"
 
-# Start at the tools context (the most useful default)
-CURRENT_CTX="${1:-tools}"
+# Start at the home context by default
+CURRENT_CTX="${1:-home}"
 
 while true; do
     # Render items via the YAML engine, pipe to FZF
@@ -23,13 +23,10 @@ while true; do
 
     # User pressed Escape or Ctrl-C
     if [[ $fzf_exit -ne 0 ]]; then
-        # If we're not at home, go back one level
+        # If we're not at home, go back to home
         if [[ "$CURRENT_CTX" != "home" ]]; then
             CURRENT_CTX="home"
-            continue
         fi
-        # At home and pressed Esc — restart at tools
-        CURRENT_CTX="tools"
         continue
     fi
 
