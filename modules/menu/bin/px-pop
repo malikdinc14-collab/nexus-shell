@@ -1,8 +1,0 @@
-#!/bin/bash
-# px-pop - Open a temporary monitoring pane
-# Usage: px-pop "htop"
-
-CMD="$1"
-[[ -z "$CMD" ]] && exit 1
-
-tmux split-window -v -l 30% "bash -c '$CMD; echo \"[Press Enter to close] \"; read'"

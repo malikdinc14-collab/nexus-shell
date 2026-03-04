@@ -1,8 +1,0 @@
-name: AI Chat Session
-panes:
-  - name: Dashboard
-    command: px-local
-    size: 20%
-  - name: Chat
-    command: zsh
-    size: 80%

@@ -1,5 +1,0 @@
-label: Ollama Chat (Llama3)
-type: AGENT
-payload: ollama run llama3
-surface: library/surfaces/ai-chat.yaml
-description: Local model interaction via Ollama.
