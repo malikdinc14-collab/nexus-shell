@@ -10,10 +10,10 @@ linemode = "size"
 
 [opener]
 edit = [
-    { run = 'zsh $HOME/.config/nexus-shell/lib/yazi_open.sh "$@"', block = false, desc = "Open in Editor" }
+    { run = 'zsh "${NEXUS_HOME:-$HOME/.config/nexus-shell}/lib/yazi_open.sh" "$@"', block = false, desc = "Open in Editor" }
 ]
 nexus_open = [
-    { run = 'zsh $HOME/.config/nexus-shell/lib/yazi_open.sh "$@"', block = false, desc = "Nexus Open" }
+    { run = 'zsh "${NEXUS_HOME:-$HOME/.config/nexus-shell}/lib/yazi_open.sh" "$@"', block = false, desc = "Nexus Open" }
 ]
 
 [open]
