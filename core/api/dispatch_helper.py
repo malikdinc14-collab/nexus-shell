@@ -15,21 +15,26 @@ def load_registry():
         sys.exit(1)
 
 def check_dirty():
-    nexus_bin = os.getenv("NEXUS_BIN", os.path.expanduser("~/.nexus-shell/bin"))
-    nexus_state = os.getenv("NEXUS_STATE", f"/tmp/nexus_{os.getlogin()}")
-    session_name = subprocess.check_output(["tmux", "display-message", "-p", "#S"]).decode().strip()
-    project_name = session_name.replace("nexus_", "")
-    pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
-    
-    if os.path.exists(pipe):
-        try:
-            res = subprocess.check_output([
-                os.path.join(nexus_bin, "nvim"), "--server", pipe, "--remote-expr", "v:lua.is_dirty()"
-            ], stderr=subprocess.DEVNULL).decode().strip()
-            return res == "true"
-        except:
-            pass
-    return False
+    """Check if nvim has unsaved changes. Returns False if nvim isn't running."""
+    try:
+        nexus_state = os.getenv("NEXUS_STATE", f"/tmp/nexus_{os.getlogin()}")
+        session_name = subprocess.check_output(
+            ["tmux", "display-message", "-p", "#S"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        project_name = session_name.replace("nexus_", "")
+        pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
+        
+        if not os.path.exists(pipe):
+            return False  # No nvim running, safe to quit
+            
+        res = subprocess.check_output(
+            ["nvim", "--server", pipe, "--remote-expr", "v:lua.is_dirty()"],
+            stderr=subprocess.DEVNULL, timeout=2
+        ).decode().strip()
+        return res == "true"
+    except Exception:
+        return False  # Any failure = assume safe to quit
 
 def save_all():
     nexus_bin = os.getenv("NEXUS_BIN", os.path.expanduser("~/.nexus-shell/bin"))

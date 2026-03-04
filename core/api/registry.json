@@ -6,9 +6,8 @@
                 ":q"
             ],
             "action": "$NEXUS_BOOT/guard.sh exit",
-            "description": "Quit Nexus (checks for unsaved changes)",
-            "category": "Exit",
-            "preflight": "check_dirty"
+            "description": "Quit Nexus",
+            "category": "Exit"
         },
         {
             "names": [
