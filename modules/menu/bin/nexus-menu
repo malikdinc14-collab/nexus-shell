@@ -1,18 +1,20 @@
 #!/usr/bin/env zsh
 # bin/nexus-menu
 # The "Dumb Dashboard" Interface for Nexus
-# Renders the FZF menu and outputs the selected payload for Nexus to route.
+# Renders the FZF menu and handles execution in-pane.
+# Tools run IN this pane — when they exit, the menu comes back.
 
 # Find the real directory (resolve symlinks)
 BIN_DIR="${0:A:h}"
-PROJECT_ROOT="${BIN_DIR:h}"
+ENGINE="${BIN_DIR}/px-engine"
+ROUTER="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}/core/exec/router.sh"
 
-# The core FZF UI Loop
-CURRENT_CTX="${1:-home}"
+# Start at the tools context (the most useful default)
+CURRENT_CTX="${1:-tools}"
 
 while true; do
     # Render items via the YAML engine, pipe to FZF
-    selection=$( "${BIN_DIR}/px-engine" --context "$CURRENT_CTX" | fzf \
+    selection=$( "$ENGINE" --context "$CURRENT_CTX" | fzf \
         --ansi --layout=reverse --border \
         --prompt="[$CURRENT_CTX] > " \
         --header="Nexus Menu" \
@@ -21,12 +23,14 @@ while true; do
 
     # User pressed Escape or Ctrl-C
     if [[ $fzf_exit -ne 0 ]]; then
-        # If we're not at home, go back to home
+        # If we're not at home, go back one level
         if [[ "$CURRENT_CTX" != "home" ]]; then
             CURRENT_CTX="home"
             continue
         fi
-        break
+        # At home and pressed Esc — restart at tools
+        CURRENT_CTX="tools"
+        continue
     fi
 
     # Parse the tab-delimited selection: LABEL<TAB>TYPE<TAB>PAYLOAD
@@ -34,13 +38,8 @@ while true; do
     payload=$(echo "$selection" | awk -F'\t' '{print $3}' | xargs)
 
     case "$e_type" in
-        PLANE)
+        PLANE|FOLDER)
             # Navigate into a sub-menu
-            CURRENT_CTX="$payload"
-            continue
-            ;;
-        FOLDER)
-            # Same as PLANE for navigation
             CURRENT_CTX="$payload"
             continue
             ;;
@@ -48,11 +47,33 @@ while true; do
             # Non-interactive items, ignore
             continue
             ;;
+        ACTION)
+            # Run the tool/command IN THIS PANE
+            # When it exits, the menu loop resumes at the same context
+            clear
+            eval "$payload"
+            # Tool exited — loop back to the same context
+            continue
+            ;;
+        PLACE)
+            # cd in this shell, then continue the menu
+            cd "$payload" 2>/dev/null || true
+            continue
+            ;;
+        NOTE|DOC)
+            # View in this pane with glow or less, then return to menu
+            clear
+            if command -v glow &>/dev/null; then
+                glow "$payload" -p
+            else
+                less "$payload"
+            fi
+            continue
+            ;;
         *)
-            # Executable payload (ACTION, PLACE, NOTE, etc.)
-            # Output for the router and exit
-            echo "${e_type}|${payload}"
-            break
+            # Unknown type — route externally (fallback)
+            echo "${e_type}|${payload}" | "$ROUTER"
+            continue
             ;;
     esac
 done

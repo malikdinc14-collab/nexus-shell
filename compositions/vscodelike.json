@@ -22,36 +22,16 @@
                         "command": "$EDITOR_CMD"
                     },
                     {
-                        "type": "hsplit",
+                        "id": "terminal",
                         "size": 12,
-                        "panes": [
-                            {
-                                "id": "terminal",
-                                "command": "/bin/zsh -i"
-                            },
-                            {
-                                "id": "trace",
-                                "size": 35,
-                                "command": "tail -f /tmp/px-agent-trace.log"
-                            }
-                        ]
+                        "command": "/bin/zsh -i"
                     }
                 ]
             },
             {
-                "type": "vsplit",
+                "id": "chat",
                 "size": 45,
-                "panes": [
-                    {
-                        "id": "chat",
-                        "command": "$NEXUS_CHAT"
-                    },
-                    {
-                        "id": "ui",
-                        "size": 5,
-                        "command": "echo 'Nexus UI Reserved' && /bin/zsh -i"
-                    }
-                ]
+                "command": "$NEXUS_CHAT"
             }
         ]
     }

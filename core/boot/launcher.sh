@@ -107,7 +107,7 @@ NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe"
 mkdir -p "$(dirname "$NVIM_PIPE")"
 export EDITOR_CMD="$NEXUS_EDITOR"
 [[ "$NEXUS_EDITOR" == *"nvim"* ]] && export EDITOR_CMD="$NEXUS_EDITOR --listen $NVIM_PIPE"
-export PARALLAX_CMD="PX_STATE_DIR=$PX_STATE_DIR $MENU_BIN | $ROUTER_BIN"
+export PARALLAX_CMD="PX_STATE_DIR=$PX_STATE_DIR $MENU_BIN"
 export HAS_CHAT=true HAS_FILES=true
 
 # 5. Mandatory State Reset & Initialization
