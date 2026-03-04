@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Nexus Pane Wrapper ---
-# Indestructible viewports with FZF tool switching
+# Indestructible viewports: runs a command and auto-restarts it on exit.
 
 # 1. Zero-Entropy Path Resolution
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,53 +11,31 @@ export NEXUS_SCRIPTS="$SCRIPT_DIR"
 LOG="/tmp/nexus_station.log"
 echo "[$(date)] PANE_WRAPPER PID:$$ STARTING CMD: $*" >> "$LOG"
 
-# 3. Invariant Assertion: Environment Integrity
-if [[ -z "$TMUX" && -z "$TERM_PROGRAM" && ! -t 0 ]]; then
-    echo "[!] INVARIANT VIOLATION: Execution without TTY or TMUX context." >> "$LOG"
-    exit 101 
-fi
-
-# 4. Process Containment: Cleanup children on exit
+# 3. Process Containment: Cleanup children on exit
 trap 'pkill -P $$; exit 0' SIGTERM SIGINT SIGHUP
 
 COMMAND="$@"
-SESSION_NAME=$(tmux display-message -p '#S' 2>/dev/null || echo "detached")
 
-show_hub() {
-    clear
-    # Ensure we don't spin if there's no TTY
-    if [[ ! -t 0 ]]; then
-        echo "[!] PANE WAITING FOR ATTACHMENT..."
-        while [[ ! -t 0 ]]; do sleep 2; done
-    fi
-
-    # Instead of launching the FZF menu (which now runs in-pane and expects TTY),
-    # we just pause and wait for the user to decide what to do.
-    echo ""
-    echo -e "\033[1;33m  [Nexus] Process exited or crashed.\033[0m"
-    echo -e "  Press \033[1;32mENTER\033[0m to restart the tool, or type '\033[1;36mshell\033[0m' to drop to zsh."
-    echo ""
-    read -r action
-    
-    if [[ "$action" == "shell" ]]; then
+# Main loop: run the command, and if it exits, offer to restart it
+while true; do
+    if [[ -n "$COMMAND" ]]; then
+        echo "[$(date)] PANE_WRAPPER PID:$$ RUNNING: $COMMAND" >> "$LOG"
+        eval "$COMMAND"
+        EXIT_CODE=$?
+        
+        # If the command exited cleanly (0), just restart it silently
+        # If it crashed, show a brief message before restarting
+        if [[ $EXIT_CODE -ne 0 ]]; then
+            echo ""
+            echo -e "\033[1;33m  [Nexus] Process exited (code $EXIT_CODE).\033[0m"
+            echo -e "  Restarting in 2 seconds... (press \033[1;36mCtrl-C\033[0m to drop to shell)"
+            sleep 2
+        else
+            # Clean exit — tiny pause to avoid spin loop, then restart
+            sleep 0.3
+        fi
+    else
+        # No command given — just run a shell
         /bin/zsh -i
     fi
-    # Returning from this function will trigger run_tool to respawn the command
-}
-
-run_tool() {
-    [[ -z "$COMMAND" ]] && return
-    echo "[$(date)] PANE_WRAPPER PID:$$ RUNNING: $COMMAND" >> "$LOG"
-    eval "$COMMAND"
-}
-
-# Main loop
-if [[ -n "$COMMAND" ]]; then
-    run_tool
-fi
-
-while true; do
-    show_hub
-    run_tool
-    sleep 1
 done
