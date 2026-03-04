@@ -31,21 +31,18 @@ show_hub() {
         while [[ ! -t 0 ]]; do sleep 2; done
     fi
 
-    # Instead of a hardcoded FZF menu, use the centralized Nexus-Menu pipeline.
-    # We pipe the output into the Router exactly like the main Parallax bar does.
-    # The context 'system:modules' can be added to the python engine, or we can just run the generic 'system' context for now.
-    MENU_BIN="${NEXUS_HOME:-/Users/Shared/Projects/nexus-shell}/modules/menu/bin/nexus-menu"
-    ROUTER_BIN="${NEXUS_HOME:-/Users/Shared/Projects/nexus-shell}/core/exec/router.sh"
+    # Instead of launching the FZF menu (which now runs in-pane and expects TTY),
+    # we just pause and wait for the user to decide what to do.
+    echo ""
+    echo -e "\033[1;33m  [Nexus] Process exited or crashed.\033[0m"
+    echo -e "  Press \033[1;32mENTER\033[0m to restart the tool, or type '\033[1;36mshell\033[0m' to drop to zsh."
+    echo ""
+    read -r action
     
-    # We set a temporary context so the menu opens to the system tools by default
-    export PX_CTX_FILE="/tmp/nexus_pane_hub_$$"
-    echo "system" > "$PX_CTX_FILE"
-    
-    # Run the standard menu -> router pipeline
-    $MENU_BIN | $ROUTER_BIN
-    
-    # If the router executes something that exits immediately, give it a tiny delay to avoid a crazy spinning loop
-    sleep 0.5
+    if [[ "$action" == "shell" ]]; then
+        /bin/zsh -i
+    fi
+    # Returning from this function will trigger run_tool to respawn the command
 }
 
 run_tool() {
