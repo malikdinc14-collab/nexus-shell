@@ -79,3 +79,10 @@ cat << EOF
 bind-key -n $KEY_SWAP run-shell "$NEXUS_HOME/lib/swap.sh"
 bind-key -n $KEY_COMMAND command-prompt -p ":" "run-shell '$NEXUS_HOME/core/boot/dispatch.sh %%'"
 EOF
+
+# Terminal tab bindings
+cat << EOF
+bind-key -n M-t run-shell "$NEXUS_HOME/core/terminal_tabs.sh new"
+bind-key -n M-] run-shell "$NEXUS_HOME/core/terminal_tabs.sh next"
+bind-key -n M-[ run-shell "$NEXUS_HOME/core/terminal_tabs.sh prev"
+EOF
