@@ -5,6 +5,11 @@
 
 set -e
 
+# 0. Early State Cleanup (Before any session checks)
+# This ensures a clean slate for critical components like the nvim pipe.
+# Note: NEXUS_STATE is not yet defined, so we use the explicit path.
+rm -rf "/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe" 2>/dev/null
+
 # 1. Identity Guard (Recursive/Re-entry Prevention)
 if [[ -n "$NEXUS_STATION_ACTIVE" ]]; then
     echo "[!] ERROR: Station already active in this shell." >&2
@@ -146,10 +151,15 @@ tmux -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace" -c "$PROJECT
 tmux set-option -gs exit-empty off
 tmux set-option -gs exit-unattached off
 
-# 8. Propagate Environment to Session
+# 8. Propagate Environment to Server (Global)
+tmux set-environment -g NEXUS_HOME "$NEXUS_HOME"
+tmux set-environment -g NEXUS_CORE "$NEXUS_CORE"
+tmux set-environment -g NEXUS_BOOT "$NEXUS_CORE/boot"
+tmux set-environment -g NEXUS_SCRIPTS "$NEXUS_CORE/boot"
+
+# Propagate Environment to Session (Local)
 tmux set-environment -t "$SESSION_ID" NEXUS_STATION_ACTIVE 1
 tmux set-environment -t "$SESSION_ID" NEXUS_PROJECT "$PROJECT_NAME"
-tmux set-environment -t "$SESSION_ID" NEXUS_HOME "$NEXUS_HOME"
 tmux set-environment -t "$SESSION_ID" NEXUS_CONFIG "$NEXUS_CONFIG_DIR"
 tmux set-environment -t "$SESSION_ID" EDITOR_CMD "$EDITOR_CMD"
 tmux set-environment -t "$SESSION_ID" PARALLAX_CMD "$PARALLAX_CMD"

@@ -1,0 +1,24 @@
+title: "Home"
+context: "home"
+items:
+  - label: "🔧 Tools"
+    type: "PLANE"
+    payload: "tools"
+
+  - label: "🪟 Compositions"
+    type: "PLANE"
+    payload: "compositions"
+
+  - label: "⚙️ Settings"
+    type: "PLANE"
+    payload: "settings"
+
+  - separator: true
+
+  - label: "📁 Workspaces"
+    type: "PLANE"
+    payload: "workspaces"
+
+  - label: "📋 Lists"
+    type: "PLANE"
+    payload: "lists"

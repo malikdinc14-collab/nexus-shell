@@ -139,9 +139,9 @@
                 ":a",
                 ":actions"
             ],
-            "action": "tmux send-keys -t ${PX_NEXUS_PARALLAX_PANE:-parallax} 'library' Enter && tmux select-pane -t ${PX_NEXUS_PARALLAX_PANE:-parallax}",
+            "action": "tmux send-keys -t ${PX_NEXUS_MENU_PANE:-menu} 'library' Enter && tmux select-pane -t ${PX_NEXUS_MENU_PANE:-menu}",
             "description": "Switch to Quick Actions",
-            "category": "Parallax"
+            "category": "Menu"
         },
         {
             "names": [

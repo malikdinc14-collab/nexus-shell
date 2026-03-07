@@ -1,0 +1,26 @@
+#!/bin/bash
+# bin/nxs-switch-layout
+# Switches the current Nexus window to a different composition.
+
+if [[ -z "$1" ]]; then
+    echo "Usage: nxs-switch-layout <composition_name>"
+    exit 1
+fi
+
+COMPOSITION="$1"
+SESSION_ID=$(tmux display-message -p '#S')
+WINDOW_ID=$(tmux display-message -p '#I')
+PROJECT_ROOT=$(tmux display-message -p '#{pane_current_path}')
+
+# 1. Clean the current window
+# Kill all panes except the one running this command
+tmux kill-pane -a -t "$WINDOW_ID"
+
+# 2. Re-run the layout engine
+# We need to export core variables for the engine
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
+export NEXUS_CORE="$NEXUS_HOME/core"
+export NEXUS_BOOT="$NEXUS_CORE/boot"
+export WRAPPER="$NEXUS_BOOT/pane_wrapper.sh"
+
+"$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:$WINDOW_ID" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"

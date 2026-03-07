@@ -205,16 +205,18 @@ def fmt(label, e_type, payload):
 # ---------------------------------------------------------------------------
 # Main entry point (called by px-engine / nexus-menu)
 # ---------------------------------------------------------------------------
-def main():
-    context = "home"
-    for i, arg in enumerate(sys.argv):
-        if arg == "--context" and i + 1 < len(sys.argv):
-            context = sys.argv[i + 1].lower()
+    # Dynamic YAML contexts
+    menus = load_all_menus()
+    if context in menus:
+        for line in render_yaml_menu(menus[context]):
+            print(line)
+        return
 
-    # Built-in contexts
+    # Built-in fallback contexts
     if context == "home":
         print(fmt("🔧 Tools", "PLANE", "tools"))
         print(fmt("🪟 Compositions", "PLANE", "compositions"))
+        print(fmt("⚙️ Settings", "PLANE", "settings"))
         print(fmt("📁 Workspaces", "PLANE", "workspaces"))
         print(fmt("📋 Lists", "PLANE", "lists"))
         return
