@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Nexus Shell - nxs-chat
+# Wraps the 'pi' CLI to connect to the Agent Zero background daemon.
+
+# Standard Nexus UI Tokens (Inherited from theme engine)
+PRIMARY_COLOR=$(nxs-theme get primary || echo "blue")
+
+# Default Agent Zero API endpoint
+AGENT_WS_URL=${AGENT_WS_URL:-"ws://localhost:5000"}
+
+echo -e "\033[1;34m[nexus]\033[0m Initializing Pi Client..."
+echo -e "\033[1;30m[nexus]\033[0m Connecting to Headless Brain: $AGENT_WS_URL"
+
+# Execute pi with custom backend configuration
+# Note: This assumes 'pi' is installed and supports --api-url or similar flags
+# derived from our design spec.
+pi --api-url "$AGENT_WS_URL" \
+   --theme "cyber" \
+   --no-history-header \
+   "$@"
