@@ -1,0 +1,6 @@
+{
+    "name": "agent-zero",
+    "description": "Autonomous AI Agent Backend for Sandboxed Ghost Panes.",
+    "command": "cd $NEXUS_HOME/services/agent-zero && if [ -f \".venv/bin/python\" ]; then .venv/bin/python run_ui.py; else python3 run_ui.py; fi",
+    "category": "ai"
+}
