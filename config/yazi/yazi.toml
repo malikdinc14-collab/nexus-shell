@@ -2,7 +2,7 @@
 # VSCode-style file navigator
 
 [mgr]
-ratio = [1, 3, 0]
+ratio = [2, 1, 0]
 show_hidden = true
 sort_by = "natural"
 sort_dir_first = true
@@ -18,6 +18,5 @@ nexus_open = [
 
 [open]
 prepend_rules = [
-    { mime = "inode/directory", use = "open" },
     { name = "*", use = "nexus_open" }
 ]

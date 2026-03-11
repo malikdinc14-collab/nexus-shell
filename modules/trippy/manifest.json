@@ -1,0 +1,7 @@
+{
+    "name": "trippy",
+    "description": "Network diagnostic tool (mtr + traceroute + ping)",
+    "command": "trip",
+    "category": "network",
+    "url": "https://github.com/fujiapple852/trippy"
+}

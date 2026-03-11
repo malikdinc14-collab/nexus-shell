@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Nexus Shell - Agent Control Plane
+# Orchestrates Agent Zero lifecycle, configuration editing, and Ghost Driving observability.
+
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
+export NEXUS_HOME="$DIR"
+
+# Source theme if it exists for colored output
+if [ -f "$NEXUS_HOME/core/boot/theme.sh" ]; then
+    source "$NEXUS_HOME/core/boot/theme.sh"
+else
+    # Fallbacks if theme is unavailable
+    COLOR_PRIMARY="\033[38;2;103;52;195m" # #6734c3
+    COLOR_SECONDARY="\033[38;2;48;162;255m" # #30a2ff
+    COLOR_SUCCESS="\033[38;2;12;230;183m" # #0ce6b7
+    COLOR_ERROR="\033[38;2;255;48;82m" # #ff3052
+    COLOR_RESET="\033[0m"
+fi
+
+if [ -z "$NEXUS_SESSION" ]; then
+    echo -e "${COLOR_ERROR}Error: NEXUS_SESSION is not set. Are you inside Nexus Shell?${COLOR_RESET}" >&2
+    exit 1
+fi
+
+DAEMON_SCRIPT="$NEXUS_HOME/core/services/daemon_manager.sh"
+AGENT_NAME="agent-zero"
+SETTINGS_FILE="$NEXUS_HOME/modules/agent-zero/usr/settings.json"
+
+function show_help() {
+    echo -e "${COLOR_PRIMARY}==========================================${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}      Nexus Shell - Agent Control Node    ${COLOR_RESET}"
+    echo -e "${COLOR_PRIMARY}==========================================${COLOR_RESET}"
+    echo -e "Usage: nxs-agent <command>"
+    echo -e ""
+    echo -e "Commands:"
+    echo -e "  ${COLOR_SECONDARY}start${COLOR_RESET}     Start the Agent Zero background daemon."
+    echo -e "  ${COLOR_SECONDARY}stop${COLOR_RESET}      Stop the Agent Zero daemon."
+    echo -e "  ${COLOR_SECONDARY}restart${COLOR_RESET}   Restart the Agent Zero daemon."
+    echo -e "  ${COLOR_SECONDARY}status${COLOR_RESET}    Check the status of the Agent Zero daemon."
+    echo -e "  ${COLOR_SECONDARY}config|c${COLOR_RESET}  Edit the Agent's configuration (Settings JSON)."
+    echo -e "  ${COLOR_SECONDARY}follow|f${COLOR_RESET}  Trigger Ghost Driving (pull Agent Zero into a visible pane)."
+    echo -e "${COLOR_PRIMARY}==========================================${COLOR_RESET}"
+}
+
+function check_status() {
+    if "$DAEMON_SCRIPT" list | grep -q "${AGENT_NAME}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+cmd="$1"
+
+case "$cmd" in
+    start)
+        echo -e "${COLOR_SECONDARY}Starting Agent Zero...${COLOR_RESET}"
+        "$DAEMON_SCRIPT" start "$AGENT_NAME" "cd \"$NEXUS_HOME/modules/agent-zero\" && python main.py"
+        echo -e "${COLOR_SUCCESS}Agent Zero is now running in the shadows.${COLOR_RESET}"
+        ;;
+        
+    stop)
+        echo -e "${COLOR_SECONDARY}Stopping Agent Zero...${COLOR_RESET}"
+        "$DAEMON_SCRIPT" stop "$AGENT_NAME"
+        echo -e "${COLOR_SUCCESS}Agent Zero terminated.${COLOR_RESET}"
+        ;;
+        
+    restart)
+        "$0" stop || true
+        sleep 1
+        "$0" start
+        ;;
+        
+    status)
+        if check_status; then
+            echo -e "Agent Zero Status: ${COLOR_SUCCESS}[ RUNNING ]${COLOR_RESET}"
+        else
+            echo -e "Agent Zero Status: ${COLOR_ERROR}[ STOPPED ]${COLOR_RESET}"
+        fi
+        ;;
+        
+    config|c)
+        if [ ! -f "$SETTINGS_FILE" ]; then
+            echo -e "${COLOR_ERROR}Settings file not found at: $SETTINGS_FILE${COLOR_RESET}" >&2
+            echo -e "${COLOR_ERROR}Has Agent Zero been initialized at least once?${COLOR_RESET}" >&2
+            exit 1
+        fi
+        
+        EDITOR="${EDITOR:-nvim}"
+        $EDITOR "$SETTINGS_FILE"
+        echo -e "${COLOR_SUCCESS}Agent configuration updated.${COLOR_RESET}"
+        # A trigger for reloading the internal daemon can be added here if agent supports SIGHUP or similar.
+        ;;
+        
+    follow|f)
+        if ! check_status; then
+            echo -e "${COLOR_ERROR}Agent Zero is not running. Please 'nxs-agent start' first.${COLOR_RESET}" >&2
+            exit 1
+        fi
+        
+        # Calculate Target Pane 
+        TARGET_PANE="${NEXUS_SESSION}:[services].${AGENT_NAME}"
+        
+        echo -e "${COLOR_SUCCESS}Ghost Driving active.${COLOR_RESET}"
+        echo -e "To detach and send the agent back to the shadows, type:"
+        echo -e "${COLOR_SECONDARY}Prefix + !${COLOR_RESET} (break-pane), or simply detach using ${COLOR_SECONDARY}Prefix + d${COLOR_RESET}"
+        
+        # Briefly wait so the user can read the instruction message before the join occurs
+        sleep 2
+        
+        # Pull the pane into the current visual window
+        tmux join-pane -s "$TARGET_PANE"
+        ;;
+        
+    *)
+        show_help
+        exit 1
+        ;;
+esac

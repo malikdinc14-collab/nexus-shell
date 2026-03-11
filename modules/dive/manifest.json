@@ -1,0 +1,7 @@
+{
+    "name": "dive",
+    "description": "Explore Docker image layers",
+    "command": "dive",
+    "category": "devops",
+    "url": "https://github.com/wagoodman/dive"
+}

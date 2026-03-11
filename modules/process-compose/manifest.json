@@ -1,0 +1,7 @@
+{
+    "name": "process-compose",
+    "description": "TUI for running and managing multiple processes",
+    "command": "process-compose",
+    "category": "devops",
+    "url": "https://github.com/F1bonacc1/process-compose"
+}

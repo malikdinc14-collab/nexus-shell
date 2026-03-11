@@ -1,0 +1,7 @@
+{
+    "name": "Pi-Mono Agent",
+    "description": "Next-gen coding agent from badlogic",
+    "command": "pi",
+    "category": "ai"
+}
+

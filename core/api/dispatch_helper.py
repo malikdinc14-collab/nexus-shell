@@ -37,15 +37,23 @@ def check_dirty():
         return False  # Any failure = assume safe to quit
 
 def save_all():
-    nexus_bin = os.getenv("NEXUS_BIN", os.path.expanduser("~/.nexus-shell/bin"))
-    nexus_state = os.getenv("NEXUS_STATE", f"/tmp/nexus_{os.getlogin()}")
-    session_name = subprocess.check_output(["tmux", "display-message", "-p", "#S"]).decode().strip()
-    project_name = session_name.replace("nexus_", "")
-    pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
-    
-    if os.path.exists(pipe):
-        print("Saving buffers...")
-        subprocess.run([os.path.join(nexus_bin, "nvim"), "--server", pipe, "--remote-send", ":wa<CR>"], stderr=subprocess.DEVNULL)
+    """Best-effort save of all nvim buffers. Must never crash."""
+    try:
+        nexus_state = os.getenv("NEXUS_STATE", f"/tmp/nexus_{os.getlogin()}")
+        session_name = subprocess.check_output(
+            ["tmux", "display-message", "-p", "#S"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        project_name = session_name.replace("nexus_", "")
+        pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
+        
+        if os.path.exists(pipe):
+            subprocess.run(
+                ["nvim", "--server", pipe, "--remote-send", ":wa<CR>"],
+                stderr=subprocess.DEVNULL, timeout=3
+            )
+    except Exception:
+        pass  # Never block exit
 
 def show_help(registry):
     print("╔══════════════════════════════════════════════════════════╗")
@@ -98,7 +106,7 @@ def main():
     if preflight == "check_dirty":
         if check_dirty():
             subprocess.run(["tmux", "display-message", "Unsaved changes! Use :wq to save or :q! to force quit"])
-            sys.exit(1)
+            sys.exit(2)
     elif preflight == "save_all":
         save_all()
         
@@ -116,7 +124,8 @@ def main():
     if matched_cmd.get("args") and args:
         expanded_action += " " + " ".join(args)
         
-    subprocess.run(expanded_action, shell=True)
+    res = subprocess.run(expanded_action, shell=True)
+    sys.exit(res.returncode)
 
 if __name__ == "__main__":
     main()

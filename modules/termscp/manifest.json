@@ -1,0 +1,7 @@
+{
+    "name": "termscp",
+    "description": "TUI file transfer & explorer (SCP/SFTP/FTP/S3)",
+    "command": "termscp",
+    "category": "network",
+    "url": "https://github.com/veeso/termscp"
+}

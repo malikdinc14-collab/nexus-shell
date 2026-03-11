@@ -1,0 +1,19 @@
+# Nexus Dark Theme
+name: dark
+
+tmux:
+  status_bg: "#1e1e2e"
+  status_fg: "#cdd6f4"
+  border: "#313244"
+  active_border: "#89b4fa"
+  message_bg: "#1e1e2e"
+  message_fg: "#f9e2af"
+  inactive_dim: "fg=#585b70,bg=default"
+  active_style: "fg=default,bg=default"
+
+nvim:
+  colorscheme: "catppuccin-mocha"
+  background: "dark"
+
+yazi:
+  theme: "dark"

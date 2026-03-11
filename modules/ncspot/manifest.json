@@ -1,0 +1,7 @@
+{
+    "name": "ncspot",
+    "description": "Cross-platform ncurses Spotify client",
+    "command": "ncspot",
+    "category": "multimedia",
+    "url": "https://github.com/honsber/ncspot"
+}

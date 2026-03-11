@@ -1,0 +1,7 @@
+{
+    "name": "k9s",
+    "description": "Kubernetes cluster manager TUI",
+    "command": "k9s",
+    "category": "devops",
+    "url": "https://github.com/derailed/k9s"
+}

@@ -1,0 +1,7 @@
+{
+    "name": "lazydocker",
+    "description": "Terminal UI for Docker & Docker Compose",
+    "command": "lazydocker",
+    "category": "devops",
+    "url": "https://github.com/jesseduffield/lazydocker"
+}

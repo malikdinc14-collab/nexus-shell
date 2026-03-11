@@ -1,0 +1,7 @@
+{
+    "name": "television",
+    "description": "Fast and versatile fuzzy finder TUI",
+    "command": "television",
+    "category": "search",
+    "url": "https://github.com/alexpasmantier/television"
+}

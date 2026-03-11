@@ -1,0 +1,7 @@
+{
+    "name": "presenterm",
+    "description": "Terminal-based presentations using Markdown",
+    "command": "presenterm",
+    "category": "productivity",
+    "url": "https://github.com/mfontanini/presenterm"
+}

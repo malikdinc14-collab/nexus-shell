@@ -1,0 +1,7 @@
+{
+    "name": "bandwhich",
+    "description": "Terminal bandwidth utilization tool",
+    "command": "bandwhich",
+    "category": "network",
+    "url": "https://github.com/imsnif/bandwhich"
+}

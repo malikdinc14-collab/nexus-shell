@@ -1,0 +1,43 @@
+{
+    "name": "sre",
+    "description": "Site Reliability Engineering: monitoring, network diagnostics, and logs.",
+    "layout": {
+        "type": "vsplit",
+        "panes": [
+            {
+                "type": "hsplit",
+                "size": 60,
+                "panes": [
+                    {
+                        "id": "menu",
+                        "size": 25,
+                        "command": "$PARALLAX_CMD"
+                    },
+                    {
+                        "id": "monitor",
+                        "command": "btop 2>/dev/null || glances 2>/dev/null || top"
+                    },
+                    {
+                        "id": "network",
+                        "size": 35,
+                        "command": "bandwhich 2>/dev/null || echo 'Install: brew install bandwhich'"
+                    }
+                ]
+            },
+            {
+                "type": "hsplit",
+                "panes": [
+                    {
+                        "id": "logs",
+                        "size": 60,
+                        "command": "tail -f /var/log/system.log 2>/dev/null || echo 'No system log. Use: journalctl -f'"
+                    },
+                    {
+                        "id": "terminal",
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            }
+        ]
+    }
+}

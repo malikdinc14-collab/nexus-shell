@@ -65,7 +65,8 @@ echo "[*] Loading Workspace Configuration..."
 eval "$(python3 "$NEXUS_CORE/api/config_helper.py")"
 
 # Apply Overrides from Flags (CLI Priority)
-COMPOSITION="${NEXUS_COMPOSITION:-vscodelike}"
+# By default, we always try to restore the slot's saved state first.
+COMPOSITION="${NEXUS_COMPOSITION:-__saved_session__}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --composition|-c) COMPOSITION="$2"; shift 2 ;;
@@ -124,28 +125,49 @@ STATION_EXISTS=$(tmux has-session -t "$SESSION_ID" 2>/dev/null && echo "yes" || 
 
 if [[ "$STATION_EXISTS" == "yes" ]]; then
     echo "[*] Station already exists for $PROJECT_NAME."
-    # Generate a unique session ID for this window (e.g., suffix _2, _3)
-    # MAX_SESSIONS safety guard
-    MAX_SESSIONS=10
-    i=2
-    while tmux has-session -t "${SESSION_ID}_$i" 2>/dev/null; do
-        if [[ $i -ge $MAX_SESSIONS ]]; then
-             echo "[!] CRITICAL: Session limit ($MAX_SESSIONS) reached for this project." >&2
-             echo "    Is there a recursive loop in your .zshrc calling 'nxs'?" >&2
-             exit 112
+    
+    # 1. Find the lowest available window index (0-9)
+    MAX_WINDOWS=10
+    WINDOW_IDX=-1
+    
+    # Build a string of currently used window indices
+    USED_WINDOWS=$(tmux list-windows -t "$SESSION_ID" -F '#{window_index}')
+    
+    for ((i=1; i<MAX_WINDOWS; i++)); do
+        if ! echo "$USED_WINDOWS" | grep -q "^$i$"; then
+            WINDOW_IDX=$i
+            break
         fi
-        ((i++))
     done
-    SESSION_ID="${SESSION_ID}_$i"
-    echo "[*] Opening secondary observer: $SESSION_ID"
+    
+    if [[ $WINDOW_IDX -eq -1 ]]; then
+         echo "[!] CRITICAL: Window limit ($MAX_WINDOWS) reached for this project." >&2
+         exit 112
+    fi
+    
+    echo "    [*] Opening new window slot: $WINDOW_IDX"
+    tmux new-window -d -t "$SESSION_ID:$WINDOW_IDX" -n "workspace_$WINDOW_IDX" -c "$PROJECT_ROOT" "/bin/zsh"
+    
+    # Generate a unique client session ID so this terminal can view a different window than the first terminal
+    CLIENT_SESSION="${SESSION_ID}_client_$$"
+    tmux new-session -d -t "$SESSION_ID" -s "$CLIENT_SESSION"
+    
+else
+    echo "[*] Initializing Station Core..."
+    WINDOW_IDX=0
+    # Create the root session and window 0
+    tmux -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace_0" -c "$PROJECT_ROOT" -x 200 -y 50 "/bin/zsh"
+    
+    # Generate the first client session
+    CLIENT_SESSION="${SESSION_ID}_client_$$"
+    tmux new-session -d -t "$SESSION_ID" -s "$CLIENT_SESSION"
 fi
 
 rm -rf "/tmp/nexus_$(whoami)/$PROJECT_NAME/pipes"
 mkdir -p "/tmp/nexus_$(whoami)/$PROJECT_NAME/pipes"
 # sleep 0.5 # Reduced sleep
 
-# 6. THE ATOMIC INVARIANT: Session-First Creation
-tmux -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace" -c "$PROJECT_ROOT" -x 200 -y 50 "/bin/zsh"
+# 6. (Replaced by earlier atomic creation block)
 
 # 7. Global Server Options
 tmux set-option -gs exit-empty off
@@ -167,8 +189,8 @@ tmux set-environment -t "$SESSION_ID" NEXUS_FILES "$NEXUS_FILES"
 tmux set-environment -t "$SESSION_ID" NEXUS_CHAT "$NEXUS_CHAT"
 
 # 9. Build the Layout (Synchronous & Staggered)
-echo "[*] Building Station Architecture..."
-"$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:0" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
+echo "[*] Building Station Architecture in Slot $WINDOW_IDX..."
+"$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:$WINDOW_IDX" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
 
 # Restore active theme from persistent state
 if [[ -x "$NEXUS_SCRIPTS/theme.sh" ]]; then
@@ -184,5 +206,7 @@ export NEXUS_STATION_ACTIVE=1
 # The station MUST NOT exist without an active observer (terminal window).
 # We anchor the session's life to the client's attachment state.
 # tmux set-hook -t "$SESSION_ID" client-detached "kill-session -t '$SESSION_ID'"
+# Ensure the client session focuses the window we just built
+tmux select-window -t "$CLIENT_SESSION:$WINDOW_IDX"
 
-exec tmux attach-session -t "$SESSION_ID"
+exec tmux attach-session -t "$CLIENT_SESSION"

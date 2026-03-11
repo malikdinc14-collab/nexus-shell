@@ -5,14 +5,10 @@ Welcome to your upgraded development environment. This guide covers the navigati
 ---
 
 ## 🧭 Global Navigation (Layout Tabs)
-Nexus is organized into specialized windows (tabs). Switch between them instantly using **Alt + Key**.
+Nexus is organized into specialized independent Window Slots. You can open up to 10 distinct workspaces within the same project.
 
-| Key | Window | Purpose |
-| :--- | :--- | :--- |
-| **`Alt + O`** | **Workspace** | Primary coding environment (Editor, Chat, Tree). |
-| **`Alt + W`** | **Workflow** | Planning Mode (Requirements -> Design -> Tasks). |
-| **`Alt + M`** | **Monitor** | Hardware telemetry, Agent Trace logs, Task status. |
-| **`Alt + S`** | **Shells** | Quad-split interactive terminals for manual work. |
+Switch between your active slots instantly using **`Alt + 1`** through **`Alt + 9`**. 
+(`Alt + 0` jumps back to the initial Window 0).
 
 ---
 
@@ -47,8 +43,11 @@ Press **`Ctrl + \`** to open the prompt at the bottom of your screen.
 | **`:spawn [idx]`**| Open a **new OS window** for the specified layout index (0-3). |
 | **`:kill`** | Immediately terminate all active background agents. |
 | **`:down`** | **Unload all models** and shut down local backends (reclaim RAM). |
-| **`:q`** | Safe Exit (Nexus will ask if you want to unload models). |
-| **`:q!`** | Force Exit (Immediate shutdown of everything). |
+| **`:q`** | Safe Exit for the **current window** only. |
+| **`:qa`** | Safe Exit for the **entire session** (all slots). |
+| **`:wq`** | Save layout for the current window and exit it. |
+| **`:wqa`** | Save all 10 slots and gracefully shutdown the session. |
+| **`:q!`** | Force Exit (Immediate shutdown without saving). |
 
 ---
 

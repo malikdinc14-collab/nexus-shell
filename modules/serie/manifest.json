@@ -1,0 +1,7 @@
+{
+    "name": "serie",
+    "description": "Rich git commit graph in the terminal",
+    "command": "serie",
+    "category": "git",
+    "url": "https://github.com/lusingander/serie"
+}

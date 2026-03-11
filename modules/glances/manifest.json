@@ -1,0 +1,7 @@
+{
+    "name": "glances",
+    "description": "Cross-platform system monitoring tool",
+    "command": "glances",
+    "category": "system",
+    "url": "https://github.com/nicolargo/glances"
+}

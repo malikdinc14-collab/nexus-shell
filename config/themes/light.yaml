@@ -1,0 +1,19 @@
+# Nexus Light Theme
+name: light
+
+tmux:
+  status_bg: "#eff1f5"
+  status_fg: "#4c4f69"
+  border: "#ccd0da"
+  active_border: "#1e66f5"
+  message_bg: "#eff1f5"
+  message_fg: "#df8e1d"
+  inactive_dim: "fg=#9ca0b0,bg=default"
+  active_style: "fg=default,bg=default"
+
+nvim:
+  colorscheme: "catppuccin-latte"
+  background: "light"
+
+yazi:
+  theme: "light"

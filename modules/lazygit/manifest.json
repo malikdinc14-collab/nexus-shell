@@ -1,6 +1,7 @@
 {
     "name": "lazygit",
     "description": "Simple terminal UI for git commands",
+    "command": "lazygit",
     "category": "git",
     "version": "latest"
 }

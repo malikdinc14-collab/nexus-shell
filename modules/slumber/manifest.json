@@ -1,0 +1,7 @@
+{
+    "name": "slumber",
+    "description": "Terminal-based HTTP/REST client",
+    "command": "slumber",
+    "category": "development",
+    "url": "https://github.com/LucasPickering/slumber"
+}

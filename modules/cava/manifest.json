@@ -1,0 +1,7 @@
+{
+    "name": "cava",
+    "description": "Console-based audio visualizer for ALSA/PulseAudio",
+    "command": "cava",
+    "category": "multimedia",
+    "url": "https://github.com/karlstav/cava"
+}

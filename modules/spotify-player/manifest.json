@@ -1,0 +1,7 @@
+{
+    "name": "spotify-player",
+    "description": "Spotify client with full feature parity",
+    "command": "spotify_player",
+    "category": "multimedia",
+    "url": "https://github.com/aome510/spotify-player"
+}

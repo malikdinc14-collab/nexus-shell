@@ -1,0 +1,19 @@
+# Nexus Cyber Theme (Default)
+name: cyber
+
+tmux:
+  status_bg: "#0a0e14"
+  status_fg: "cyan"
+  border: "#1a1f2c"
+  active_border: "cyan"
+  message_bg: "#0a0e14"
+  message_fg: "yellow"
+  inactive_dim: "fg=#666666,bg=default"
+  active_style: "fg=default,bg=default"
+
+nvim:
+  colorscheme: "tokyonight-night"
+  background: "dark"
+
+yazi:
+  theme: "dark"

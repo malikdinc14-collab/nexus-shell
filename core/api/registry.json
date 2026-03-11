@@ -5,8 +5,17 @@
                 "q",
                 ":q"
             ],
-            "action": "$NEXUS_BOOT/guard.sh exit",
-            "description": "Quit Nexus",
+            "action": "$NEXUS_BOOT/guard.sh exit_window",
+            "description": "Quit current window",
+            "category": "Exit"
+        },
+        {
+            "names": [
+                "qa",
+                ":qa"
+            ],
+            "action": "$NEXUS_BOOT/guard.sh exit_session",
+            "description": "Quit entire session (all windows)",
             "category": "Exit"
         },
         {
@@ -14,18 +23,46 @@
                 "wq",
                 ":wq"
             ],
-            "action": "$NEXUS_BOOT/guard.sh exit",
-            "description": "Save all and quit",
+            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py 2>/dev/null; $NEXUS_BOOT/guard.sh exit_window",
+            "description": "Save layout, save files, and quit current window",
             "category": "Exit",
             "preflight": "save_all"
+        },
+        {
+            "names": [
+                "wqa",
+                ":wqa"
+            ],
+            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py --all 2>/dev/null; $NEXUS_BOOT/guard.sh exit_session",
+            "description": "Save all layouts and quit entire session",
+            "category": "Exit",
+            "preflight": "save_all"
+        },
+        {
+            "names": [
+                "save",
+                ":save"
+            ],
+            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py",
+            "description": "Save current layout to project configuration",
+            "category": "System"
         },
         {
             "names": [
                 "q!",
                 ":q!"
             ],
-            "action": "$NEXUS_BOOT/guard.sh force",
-            "description": "Force quit without saving",
+            "action": "$NEXUS_BOOT/guard.sh force_window",
+            "description": "Force quit current window without saving",
+            "category": "Exit"
+        },
+        {
+            "names": [
+                "qa!",
+                ":qa!"
+            ],
+            "action": "$NEXUS_BOOT/guard.sh force_session",
+            "description": "Force quit entire session without saving",
             "category": "Exit"
         },
         {
@@ -153,6 +190,116 @@
             "action": "internal:help",
             "description": "Show this help menu",
             "category": "System"
+        },
+        {
+            "names": [
+                "build",
+                ":build"
+            ],
+            "action": "$NEXUS_HOME/core/exec/task_runner.sh build",
+            "description": "Run build task",
+            "category": "Tasks"
+        },
+        {
+            "names": [
+                "test",
+                ":test"
+            ],
+            "action": "$NEXUS_HOME/core/exec/task_runner.sh test",
+            "description": "Run test task",
+            "category": "Tasks"
+        },
+        {
+            "names": [
+                "lint",
+                ":lint"
+            ],
+            "action": "$NEXUS_HOME/core/exec/task_runner.sh lint",
+            "description": "Run lint task",
+            "category": "Tasks"
+        },
+        {
+            "names": [
+                "find",
+                ":find"
+            ],
+            "action": "tmux display-popup -E -w 80% -h 80% '$NEXUS_HOME/core/search/quick_find.sh'",
+            "description": "Find files in project",
+            "category": "Search"
+        },
+        {
+            "names": [
+                "grep",
+                ":grep"
+            ],
+            "action": "tmux display-popup -E -w 80% -h 80% '$NEXUS_HOME/core/search/live_grep.sh'",
+            "description": "Live grep across project",
+            "category": "Search",
+            "args": true
+        },
+        {
+            "names": [
+                "git",
+                ":git"
+            ],
+            "action": "tmux display-popup -E -w 90% -h 90% 'lazygit'",
+            "description": "Open lazygit",
+            "category": "Git"
+        },
+        {
+            "names": [
+                "ai",
+                ":ai"
+            ],
+            "action": "$NEXUS_HOME/core/ai/send_context.sh",
+            "description": "Send editor context to AI",
+            "category": "AI"
+        },
+        {
+            "names": [
+                "ai-error",
+                ":ai-error"
+            ],
+            "action": "$NEXUS_HOME/core/ai/pipe_error.sh",
+            "description": "Send terminal errors to AI",
+            "category": "AI"
+        },
+        {
+            "names": [
+                "theme",
+                ":theme"
+            ],
+            "action": "tmux display-popup -E -w 50% -h 50% '$NEXUS_HOME/core/boot/theme.sh menu'",
+            "description": "Switch theme",
+            "category": "System"
+        },
+        {
+            "names": [
+                "settings",
+                ":settings"
+            ],
+            "action": "tmux send-keys -t menu '$NEXUS_HOME/modules/menu/bin/nexus-menu settings' Enter",
+            "description": "Open settings menu",
+            "category": "System"
+        },
+        {
+            "names": [
+                "tools",
+                ":tools"
+            ],
+            "action": "tmux send-keys -t menu '$NEXUS_HOME/modules/menu/bin/nexus-menu tools' Enter",
+            "description": "Show installed tools",
+            "category": "System"
+        },
+        {
+            "names": [
+                "run",
+                ":run"
+            ],
+            "action": "$NEXUS_HOME/core/exec/task_runner.sh",
+            "description": "Run a named task from .nexus.yaml",
+            "category": "Tasks",
+            "args": true
         }
     ]
 }

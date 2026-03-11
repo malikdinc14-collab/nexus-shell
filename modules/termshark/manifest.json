@@ -1,0 +1,7 @@
+{
+    "name": "termshark",
+    "description": "Terminal UI for tshark (packet capture & analysis)",
+    "command": "termshark",
+    "category": "network",
+    "url": "https://github.com/gcla/termshark"
+}

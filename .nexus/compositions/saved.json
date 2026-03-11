@@ -1,0 +1,38 @@
+{
+    "name": "saved",
+    "description": "Auto-saved layout from :wq",
+    "layout": {
+        "type": "vsplit",
+        "panes": [
+            {
+                "type": "hsplit",
+                "panes": [
+                    {
+                        "id": "Yazi: /Users/Shared/Projects/nexus-shell",
+                        "size": 57,
+                        "command": "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
+                    },
+                    {
+                        "id": "menu",
+                        "size": 92,
+                        "command": "$PARALLAX_CMD"
+                    },
+                    {
+                        "id": "OpenCode",
+                        "command": "$NEXUS_CHAT"
+                    }
+                ],
+                "size": 51
+            },
+            {
+                "id": "editor",
+                "size": 24,
+                "command": "$EDITOR_CMD"
+            },
+            {
+                "id": "terminal",
+                "command": "/bin/bash /Users/Shared/Projects/nexus-shell/core/boot/pane_wrapper.sh /bin/zsh -i"
+            }
+        ]
+    }
+}

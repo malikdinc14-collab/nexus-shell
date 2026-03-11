@@ -1,0 +1,7 @@
+{
+    "name": "visidata",
+    "description": "Interactive multitool for tabular data (CSV, JSON, SQL, etc.)",
+    "command": "vd",
+    "category": "data",
+    "url": "https://visidata.org"
+}

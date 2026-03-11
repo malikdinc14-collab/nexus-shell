@@ -1,210 +1,155 @@
-# Nexus-Shell
+# Nexus Shell
 
-**Transform your terminal into a powerhouse.** Nexus-Shell is a modular, high-performance terminal IDE built on TMUX, powered by the **Parallax** automation engine.
+**A modular, high-performance terminal IDE framework built on TMUX.**
 
-![Nexus-Shell Preview](./preview.png)
+Nexus Shell transforms your terminal into a powerhouse IDE. It uses a "Bring Your Own Tools" philosophy—acting as an orchestration engine that perfectly arranges your favorite CLI and TUI applications (like Neovim, Yazi, Lazygit, and AI chats) into indestructible, hot-swappable workspaces.
 
-A VSCode-style terminal IDE with a focus on speed, modularity, and "indestructible" workflows. Features a multi-pane layout with Neovim, Yazi, integrated terminal, and optional AI chat.
+## ✨ Core Features
 
-## Features
+*   **Hot-Swappable Compositions:** Switch your entire terminal layout in milliseconds. Go from a standard VSCode-like layout to a dedicated Data Engineering or SRE layout instantly.
+*   **Branch-Aware Workspaces:** (New) Nexus auto-saves window geometries based on your current Git branch. Check out a new branch, and your entire IDE layout shape-shifts automatically.
+*   **Multi-Window Project Slots:** Open up to 10 independent layout slots in the exact same directory and jump between them instantly using `Alt-1` through `Alt-9`.
+*   **Indestructible Panes:** Applications run in isolated, respawnable wrappers. If a tool crashes or you exit it, the pane immediately returns to the Nexus Tools menu—your layout never breaks.
+*   **Zero-Config Module Auto-Discovery:** Install a tool via Homebrew/apt, drop a 5-line JSON manifest into `modules/`, and it instantly appears in the UI. No compiling, no restarting.
+*   **Layout Snapshots:** Arrange your panes exactly how you like them, then type `:wq` to instantly serialize the live tmux geometry and running processes into a reusable `.nexus.yaml` composition or branch-specific state.
+*   **Deep Nvim Integration:** Built-in RPC allows Nexus bounds to talk directly to your Neovim instance (e.g., global file searches open instantly in your running editor pane).
 
-- **Indestructible Panes**: Tools exit gracefully into a hub menu - panes never die
-- **VSCode Workflow**: `edit file.txt` from terminal opens in editor pane
-- **Render Mode**: `view file.md` shows rendered markdown with Glow
-- **Modal Controls**: Alt-Esc for navigation/resizing, Ctrl+\ for commands
-- **Themes**: Multiple color schemes (nexus-cyber, dracula, nord, etc.)
-- **Modular Tools**: Use downloaded binaries or your system tools
-- **Optional AI Chat**: Configure any chat tool or disable the chat pane
+---
 
-## Requirements
-
-- [Parallax](https://github.com/samir-alsayad/parallax) - Shell session management (required)
-- tmux
-- fzf
-- macOS or Linux
-
-## Installation
+## 🚀 Getting Started
 
 ```bash
-git clone --recursive https://github.com/samir-alsayad/nexus-shell.git
+git clone https://github.com/samir-alsayad/nexus-shell.git
 cd nexus-shell
-./install.sh
+
+# Install Git hooks (Optional: for branch-aware workspaces)
+./bin/nxs-hook
+
+# Launch the default VSCode-like workspace
+./bin/nxs
 ```
 
-The installer will:
-1.  Initialize and install the **Parallax** submodule
-2.  Optionally download tools (nvim, yazi, glow, gum)
-3.  Set up Nexus-specific Parallax actions
-4.  Configure shell integration
+*Tip: Symlink `./bin/nxs` to your `PATH` or add an alias to your `.zshrc`.*
 
-The installer will ask:
-- **Download tools?** - Downloads nvim, yazi, glow to `~/.nexus-shell/bin/`
-- **Use system tools?** - Uses nvim, yazi, glow from your PATH
+---
 
-## Usage
+## 🪟 Compositions (Layouts)
 
+Compositions are JSON/YAML files that define how your terminal is split and what tool runs in each pane. Switch them on the fly via the `Compositions` menu or CLI.
+
+**Included Domain Workspaces:**
+*   `vscodelike` - The default: File tree, Editor, Terminal, and AI Chat.
+*   `ai-pair` - 55% width dedicated to AI chat (Opencode/Aider) for pair programming.
+*   `git-review` - Lazygit + GH-Dash PR dashboard for code review.
+*   `devops` - Lazydocker + Btop + Editor for cluster management.
+*   `data-eng` - Harlequin SQL IDE + Visidata for data exploration.
+*   `sre` - Live logs + network bandwidth (Bandwhich) + system monitoring.
+*   `music-studio` - Spotify Player + Cava visualizer.
+*   `writer` - Distraction-free editor + Glow markdown preview.
+*   `network` - Termshark packet capture + Trippy diagnostics.
+*   `minimal` - Just an editor and a terminal.
+
+**CLI Usage:**
 ```bash
-# Start nexus in current directory
-cd ~/my-project
-nexus
-
-# Or use the short alias
-nxs
+nxs -c devops      # Launch directly into the DevOps layout
+nxs -c ai-pair     # Launch directly into the AI layout
 ```
 
-## Commands
+---
 
-### Parallax Integration (Deep Mode)
+## ⌨️ Keybinds & Controls
 
-Nexus-Shell is powered by **Parallax**. Use `Alt+P` to open the Parallax dashboard as a popup overlay.
+Nexus Shell uses **`Alt` (Option on Mac)** for pane navigation and global actions, and **`Ctrl+\`** for the command prompt.
 
+### Global Actions
 | Key | Action |
 |-----|--------|
-| `Alt+P` | Open Parallax Dashboard |
-| `Ctrl+Shift+A` | Quick Actions Menu |
-| `:px` | Open Parallax (Command) |
-| `:a` | Quick Actions (Command) |
+| `Ctrl + \` | Open the Command Prompt (e.g., type `:wq`, `:theme`) |
+| `Alt + 1...9`| Jump instantly between Window Slots 1-9 |
+| `Alt + X` | Escape to Menu (Kills current tool, opens Nexus Menu) |
+| `Alt + P` | Focus Menu Pane |
+| `Alt + F` | Project Search (fd + fzf) → Opens in Nvim |
+| `Alt + Shift + F` | Live Grep (ripgrep) → Opens in Nvim |
+| `Alt + Shift + G`| Toggle File Tree |
+| `Alt + G` | Open Git (Lazygit) in popup |
+| `Alt + I` | Send Nvim Context to AI Chat |
+| `Alt + Shift + I`| Send Terminal Error to AI Chat |
 
-Configure the Parallax UI in `~/.config/nexus-shell/tools.conf`:
-```bash
-NEXUS_PX_UI="gum"   # Use sleek gum popups
-NEXUS_PX_UI="tmux"  # Use standard tmux dashboard (default)
-```
-
-### Global (Ctrl+\ then type)
-
-| Command | Action |
-|---------|--------|
-| `:q` | Quit (checks for unsaved changes) |
-| `:wq` | Save all and quit |
-| `:q!` | Force quit |
-| `:v` | Toggle Editor/Render mode |
-| `:theme` | Change color theme |
-| `:help` | Show all commands |
-
-### Navigation (Alt-Esc first, then)
-
+### Navigation (Normal Mode)
+Press `Alt + Escape` to enter Normal mode (hide the UI for deep focus), then:
 | Key | Action |
 |-----|--------|
-| `n` | Focus Navigator (Tree) |
+| `n` | Focus File Tree |
 | `e` | Focus Editor |
 | `t` | Focus Terminal |
 | `c` | Focus Chat |
-| `Shift+H/J/K/L` | Resize panes |
-| `Esc` | Exit navigation mode |
+| `Esc` | Return to Insert mode |
 
-### From Terminal Pane
+---
 
+## 💬 Command Prompt registry
+
+Press `Ctrl+\` to open the prompt, then type:
+
+| Command | Description |
+|---------|-------------|
+| `:save` | Snapshots the current tmux layout and saves it manually |
+| `:wq` | Saves layout for current window, and closes the current window |
+| `:wqa` | Saves layouts for all open windows, and shuts down the entire session |
+| `:q` | Graceful shutdown of the current window only |
+| `:qa` | Graceful shutdown of the entire session (all slots) |
+| `:theme` | Open the Theme Picker (Cyber, Dark, Light) |
+| `:settings`| Open the Configuration Menu |
+| `:tools` | Open the Installed Tools Menu |
+| `:run` | Execute a task defined in `.nexus.yaml` |
+| `:build` | Shortcut for `:run build` |
+| `:test` | Shortcut for `:run test` |
+| `:help` | Show the comprehensive help popup |
+
+---
+
+## 🔧 Modules (Bring Your Own Tools)
+
+Nexus currently ships with manifests for **34 popular TUIs**.
+
+If you have the tool installed on your system (e.g., `brew install btop`), Nexus will automatically detect it and enable it in your `Alt-X -> Tools` menu. If you don't have it, clicking it will tell you exactly how to install it.
+
+### Adding a Custom Tool
+Nexus doesn't use a package manager. Adding a custom tool takes 10 seconds.
+
+**1. Create a folder:**
 ```bash
-edit file.txt    # Open file in editor pane
-view readme.md   # Show rendered markdown
+mkdir -p modules/my-tool
 ```
 
-## Configuration
-
-### Tool Configuration
-
-Edit `~/.config/nexus-shell/tools.conf`:
-
-```bash
-# Use custom editor
-NEXUS_EDITOR="/path/to/nvim"
-
-# Use different file navigator
-NEXUS_FILES="ranger"
-
-# Enable AI chat pane (e.g., with aider, opencode)
-NEXUS_CHAT="aider"
-
-# Or disable chat pane entirely
-NEXUS_CHAT=""
-```
-
-### Themes
-
-Available themes:
-- `nexus-cyber` (default) - Cyan on dark
-- `ghost-noir` - Black and white
-- `axiom-amber` - Warm amber tones
-- `dracula` - Classic purple
-- `nord` - Arctic blue
-- `the-void` - Blood red on black
-
-Change with `:theme` command inside Nexus.
-
-### Creating Custom Themes
-
-Create a JSON file in `~/.config/nexus-shell/themes/`:
-
+**2. Create a `manifest.json`:**
 ```json
 {
-  "name": "my-theme",
-  "bg": "#000000",
-  "fg": "#ffffff",
-  "accent": "#00ff00",
-  "border": "#333333"
+    "name": "My Awesome Tool",
+    "description": "Does something cool",
+    "command": "my_cli_command --flag",
+    "category": "productivity"
 }
 ```
+*That's it.* It will instantly appear in the Nexus UI, fully integrated.
 
-## Directory Structure
+---
 
-```
-~/.config/nexus-shell/
-├── tools.conf         # Tool configuration
-├── tmux/              # TMUX configuration
-├── themes/            # Color themes
-├── core/boot/         # The core logic (Launcher, Architect, Wrapper).
+## 🎨 Themes
 
-~/.nexus-shell/bin/    # Downloaded binaries (if using download option)
-```
+Themes are managed via simple YAML files in `config/themes/`. Switching a theme inside Nexus automatically updates the TMUX status bar, borders, popups, and sends an RPC call to Neovim to change its colorscheme and background simultaneously.
 
-## Architecture
+Available by default: `cyber` (Cyan/Neon), `dark` (Catppuccin Mocha), `light` (Catppuccin Latte).
 
-Nexus-Shell is built on:
-- **TMUX** - Terminal multiplexer for pane management
-- **Parallax** - Shell session sync and integration
-- **Neovim** - Editor with RPC support for remote commands
-- **Yazi** - Fast file navigator
-- **FZF** - Interactive selection menus
+---
 
-## Troubleshooting
+## 🏗️ Architecture Stack
 
-### Panes not showing correctly
-
-Make sure tmux is installed:
-```bash
-tmux -V
-```
-
-### Editor commands not working
-
-Verify Neovim has RPC support:
-```bash
-nvim --version | grep -i "build type"
-```
-
-### Chat pane not appearing
-
-Set `NEXUS_CHAT` in your tools.conf:
-```bash
-echo 'NEXUS_CHAT="opencode"' >> ~/.config/nexus-shell/tools.conf
-```
-
-## Uninstalling
-
-```bash
-# From the nexus-shell directory
-./uninstall.sh
-```
-
-## Related Projects
-
-- [Parallax](https://github.com/samir-alsayad/parallax) - Shell session management framework
+*   **Multiplexer:** `tmux` (Handles the window geometry and layout saving)
+*   **Menu Engine:** Custom Python engine wrapping `fzf`
+*   **Editor RPC:** `nvim --listen` + `nvim --server`
+*   **Search Engine:** `ripgrep`, `fd`, `fzf`, `bat`
+*   **Core Shell:** `zsh` / `bash` 
 
 ## License
-
-MIT License - see [LICENSE](LICENSE)
-
-## Contributing
-
-Contributions welcome! Please open an issue or PR.
+MIT

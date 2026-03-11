@@ -15,6 +15,24 @@ items:
 
   - separator: true
 
+  - label: "🔍 Find File (Alt-f)"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 80% -h 80% '$NEXUS_HOME/core/search/quick_find.sh'"
+
+  - label: "🔎 Live Grep (Alt-F)"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 80% -h 80% '$NEXUS_HOME/core/search/live_grep.sh'"
+
+  - label: "🔀 Git (Alt-g)"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 90% -h 90% 'lazygit'"
+
+  - label: "🎨 Themes"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 50% -h 50% '$NEXUS_HOME/core/boot/theme.sh menu'"
+
+  - separator: true
+
   - label: "📁 Workspaces"
     type: "PLANE"
     payload: "workspaces"

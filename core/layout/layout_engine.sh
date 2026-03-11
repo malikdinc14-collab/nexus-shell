@@ -81,8 +81,32 @@ PROJECT_ROOT="$4"
 
 echo "    [*] Seeking Composition: $LAYOUT"
 
-# 1. Check for JSON Composition in compositions/
-COMP_JSON="$NEXUS_HOME/compositions/$LAYOUT.json"
+# 0. Saved session restore (from :wq / :save)
+if [[ "$LAYOUT" == "__saved_session__" ]]; then
+    WINDOW_IDX="${WINDOW_ID#*:}"
+    GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current 2>/dev/null || echo "main")
+    [[ -z "$GIT_BRANCH" ]] && GIT_BRANCH="main"
+    SAFE_BRANCH="${GIT_BRANCH//\//_}"
+    
+    STATE_FILE="$PROJECT_ROOT/.nexus/branches/$SAFE_BRANCH/window_$WINDOW_IDX.json"
+    
+    if [[ -f "$STATE_FILE" ]]; then
+        echo "    [*] Restoring layout for window $WINDOW_IDX on branch $SAFE_BRANCH..."
+        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "$STATE_FILE" "$PROJECT_ROOT"
+        exit $?
+    else
+        echo "    [!] No saved state for window $WINDOW_IDX on branch $SAFE_BRANCH, loading default."
+        LAYOUT="vscodelike"
+    fi
+fi
+
+# 1. Check for JSON Composition
+# Support absolute paths (e.g. from .nexus/compositions/saved.json)
+if [[ "$LAYOUT" == /* && -f "$LAYOUT" ]]; then
+    COMP_JSON="$LAYOUT"
+else
+    COMP_JSON="$NEXUS_HOME/compositions/$LAYOUT.json"
+fi
 
 if [[ -f "$COMP_JSON" ]]; then
     echo "    [*] Applying Data-Driven Composition..."

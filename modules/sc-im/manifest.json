@@ -1,0 +1,7 @@
+{
+    "name": "sc-im",
+    "description": "Spreadsheet calculator for the terminal (ncurses)",
+    "command": "sc-im",
+    "category": "productivity",
+    "url": "https://github.com/andmarti1424/sc-im"
+}

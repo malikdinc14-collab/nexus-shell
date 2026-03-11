@@ -107,6 +107,8 @@ def render_workspaces():
 # ---------------------------------------------------------------------------
 # Built-in: Tools (from modules/ directory)
 # ---------------------------------------------------------------------------
+import shutil
+
 def render_tools():
     """Discover installed tool modules from the modules/ directory."""
     items = []
@@ -128,7 +130,12 @@ def render_tools():
             else:
                 label = d.name.title()
                 cmd = d.name
-            items.append(fmt(f"🔧 {label}", "ACTION", cmd))
+                
+            cmd_base = cmd.split()[0] if cmd else ""
+            if cmd_base and shutil.which(cmd_base):
+                items.append(fmt(f"🔧 {label}", "ACTION", cmd))
+            else:
+                items.append(fmt(f"📥 {label} (Not Installed)", "ACTION", f"echo 'This tool is not installed on your system.\\n\\nTry: brew install {cmd_base}\\n'; read -k 1 -s"))
 
     return items
 
@@ -139,20 +146,32 @@ def render_tools():
 def render_compositions():
     """List available layout compositions."""
     items = []
-    comp_dir = NEXUS_HOME / "compositions"
-    if not comp_dir.exists():
+    
+    comp_dirs = [
+        (NEXUS_HOME / "compositions", "Global"),
+        (Path(os.environ.get("PROJECT_ROOT", ".")) / ".nexus" / "compositions", "Project")
+    ]
+    
+    found_any = False
+    for comp_dir, scope in comp_dirs:
+        if not comp_dir.exists():
+            continue
+            
+        found_any = True
+        for f in sorted(comp_dir.glob("*.json")):
+            try:
+                data = json.loads(f.read_text())
+                name = data.get("name", f.stem)
+            except Exception:
+                name = f.stem
+            
+            # Use absolute path for project compositions to ensure nxs-switch-layout finds it
+            cmd_arg = str(f) if scope == "Project" else f.stem
+            items.append(fmt(f"🪟 {name} [{scope}]", "ACTION", f"nxs-switch-layout '{cmd_arg}'"))
+
+    if not found_any:
         return [fmt("No compositions found", "DISABLED", "NONE")]
-
-    for f in sorted(comp_dir.glob("*.json")):
-        try:
-            data = json.loads(f.read_text())
-            name = data.get("name", f.stem)
-            desc = data.get("description", "")
-        except Exception:
-            name = f.stem
-            desc = ""
-        items.append(fmt(f"🪟 {name}", "ACTION", f"nxs-switch-layout {f.stem}"))
-
+        
     return items
 
 
@@ -205,6 +224,12 @@ def fmt(label, e_type, payload):
 # ---------------------------------------------------------------------------
 # Main entry point (called by px-engine / nexus-menu)
 # ---------------------------------------------------------------------------
+def main():
+    context = "home"
+    for i, arg in enumerate(sys.argv):
+        if arg == "--context" and i + 1 < len(sys.argv):
+            context = sys.argv[i + 1].lower()
+
     # Dynamic YAML contexts
     menus = load_all_menus()
     if context in menus:

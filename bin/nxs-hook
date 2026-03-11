@@ -1,0 +1,36 @@
+#!/bin/bash
+# bin/nxs-hook
+# Installs the Nexus-Shell branch-aware workspace hook into the current Git project.
+
+if [[ ! -d ".git" ]]; then
+    echo -e "\033[1;31mError: Not in the root of a Git repository.\033[0m"
+    exit 1
+fi
+
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
+HOOK_SRC="$NEXUS_HOME/lib/git_hooks/post-checkout"
+HOOK_DEST=".git/hooks/post-checkout"
+
+if [[ ! -f "$HOOK_SRC" ]]; then
+    echo "Error: Hook template not found at $HOOK_SRC"
+    exit 1
+fi
+
+mkdir -p .git/hooks
+
+if [[ -e "$HOOK_DEST" && ! -L "$HOOK_DEST" ]]; then
+    if grep -q "NEXUS_HOME=" "$HOOK_DEST"; then
+        echo "Nexus hook is already present in $HOOK_DEST."
+    else
+        echo "" >> "$HOOK_DEST"
+        cat "$HOOK_SRC" | sed "s|\$HOME/.config/nexus-shell|$NEXUS_HOME|g" >> "$HOOK_DEST"
+        echo -e "\033[1;32mAppended Nexus hook to existing post-checkout script.\033[0m"
+    fi
+else
+    # Generate the hook script with hardcoded path instead of symlink
+    cat "$HOOK_SRC" | sed "s|\$HOME/.config/nexus-shell|$NEXUS_HOME|g" > "$HOOK_DEST"
+    echo -e "\033[1;32mNexus Branch-Sync hook installed. Workspaces are now branch-aware.\033[0m"
+fi
+
+chmod +x "$HOOK_DEST"
+exit 0

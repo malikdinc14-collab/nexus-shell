@@ -1,0 +1,7 @@
+{
+    "name": "harlequin",
+    "description": "SQL IDE for your terminal (DuckDB, SQLite, Postgres, MySQL)",
+    "command": "harlequin",
+    "category": "database",
+    "url": "https://github.com/tconbeer/harlequin"
+}

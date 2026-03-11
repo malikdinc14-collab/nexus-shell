@@ -1,0 +1,7 @@
+{
+    "name": "posting",
+    "description": "Powerful HTTP client for API testing (Postman alternative)",
+    "command": "posting",
+    "category": "development",
+    "url": "https://github.com/darrenburns/posting"
+}
