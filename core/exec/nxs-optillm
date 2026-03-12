@@ -2,14 +2,17 @@
 # core/exec/nxs-optillm
 # Launcher for OptiLLM reasoning proxy.
 
-EXTERNAL_DIR="/Users/Shared/Projects/external_repos/optillm"
+# 0. Resolve Paths
+export PI_MONO_ROOT="$NEXUS_HOME/external/pi-mono"
+export OPTILLM_ROOT="$NEXUS_HOME/external/optillm"
+VENV_PATH="$OPTILLM_ROOT/venv"
 
-if [[ ! -d "$EXTERNAL_DIR" ]]; then
-    echo "Error: OptiLLM repository not found at $EXTERNAL_DIR"
+if [[ ! -d "$OPTILLM_ROOT" ]]; then
+    echo "Error: OptiLLM repository not found at $OPTILLM_ROOT"
     exit 1
 fi
 
-cd "$EXTERNAL_DIR"
+cd "$OPTILLM_ROOT"
 
 # Check for virtualenv
 if [[ ! -d ".venv" ]]; then

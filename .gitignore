@@ -1,0 +1,11 @@
+# Nexus Shell: Portability Refactor (external/)
+# Ignore all vendors and secondary clones to keep the core repo lean.
+external/*
+!external/.gitkeep
+**/__pycache__/
+*.pyc
+.DS_Store
+.nexus/state.json
+node_modules/
+venv/
+.venv/

@@ -4,7 +4,7 @@
 
 NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
 GAP_DIR="$NEXUS_HOME/.gap"
-PI_MONO_DIR="$NEXUS_HOME/modules/pi-mono"
+PI_MONO_DIR="$NEXUS_HOME/external/pi-mono"
 
 # 1. Discover Active Mission or File
 # If a file is passed, we include it in the briefing.
@@ -51,8 +51,18 @@ if [[ -f "$FEATURE_DIR/tasks.md" ]]; then
     BRIEFING="${BRIEFING}## Active Tasks\n$(grep "\[ \]" "$FEATURE_DIR/tasks.md" | head -n 10)\n\n"
 fi
 
+    # Add Specialist Division (Nexus Hub)
+    # This allows Pi to use 142 specialized agents from agency-agents
+    if [[ -d "$NEXUS_HOME/external/agency-agents" ]]; then
+        export PI_SYSTEM_MESSAGE="${PI_SYSTEM_MESSAGE}
+
+SPECIALIST DIVISION:
+You have access to 142 specialized agency-agents personalities. Use them for cross-domain validation."
+        export AGENCY_AGENTS_PATH="$NEXUS_HOME/external/agency-agents"
+    fi
+
 # 3. External Superpowers Integration
-EXTERNAL_REPOS="/Users/Shared/Projects/external_repos"
+EXTERNAL_REPOS="$NEXUS_HOME/external"
 EXTRA_FLAGS=(
     --skill "$EXTERNAL_REPOS/superpowers/skills"
     --skill "$EXTERNAL_REPOS/hve-core/.github/skills"

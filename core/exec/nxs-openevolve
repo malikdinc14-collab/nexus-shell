@@ -2,14 +2,17 @@
 # core/exec/nxs-openevolve
 # Launcher for OpenEvolve evolutionary coding agent.
 
-EXTERNAL_DIR="/Users/Shared/Projects/external_repos/openevolve"
+# 0. Resolve Paths
+export PI_MONO_ROOT="$NEXUS_HOME/external/pi-mono"
+export OPENEVOLVE_ROOT="$NEXUS_HOME/external/openevolve"
+VENV_PATH="$OPENEVOLVE_ROOT/venv"
 
-if [[ ! -d "$EXTERNAL_DIR" ]]; then
-    echo "Error: OpenEvolve repository not found at $EXTERNAL_DIR"
+if [[ ! -d "$OPENEVOLVE_ROOT" ]]; then
+    echo "Error: OpenEvolve repository not found at $OPENEVOLVE_ROOT"
     exit 1
 fi
 
-cd "$EXTERNAL_DIR"
+cd "$OPENEVOLVE_ROOT"
 
 # Check for virtualenv
 if [[ ! -d ".venv" ]]; then
