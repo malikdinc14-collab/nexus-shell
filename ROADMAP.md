@@ -17,15 +17,16 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 - [x] **Global Jump-to-Definition**: Cross-pane LSP intelligence for instant editor navigation from stack traces.
 - [x] **The Merge Conflict Matrix**: Auto-detect conflicts and auto-spawn a dedicated 3-way split review layout.
 - [x] **Headless DAP (Debug Adapter Protocol)**: Decoupled debug REPLs for Python and Node.js.
-- [x] **Aggregate Search**: Unified `fd` and `ripgrep` across all workspace roots.
 - [ ] **Diagnostics Hub**: Background piping of LSP errors/linting into the Status HUD.
+- [ ] **Ghostty Native Rendering**: Leverage Ghostty features for real Markdown rendering and rich media within the terminal.
 - [ ] **Symbolic Navigation**: Workspace-wide fuzzy symbol search (`Alt-s`).
 - [ ] **Local History**: Local "Time Machine" for per-file shadow backups and undo-history.
 - [ ] **Interactive Command Palette**: Unified `Alt-p` entry point for commands, manifests, and buffers.
 
-## 🚀 Phase 6: AI Sovereignty (SystemPrompt OS Fusion)
+## 🚀 Phase 6: AI Sovereignty & Multimodal Creative Labs
 - [x] **Daemon Manager**: Invisible background orchestration for LSPs, DAPs, and AI backends.
 - [x] **Pi Frontend Integration**: Lightweight, conversational TUI bridge to background agent engines.
+- [ ] **Music/DSP Module**: Specialized workspace for code-driven music composition (FluidSynth/SuperCollider integration).
 - [ ] **Agent Zero: Headless Migration**: Complete decoupling of the reasoning engine from the Gradio UI.
 - [ ] **SystemPrompt OS Integration**: Adopt the **Context Bucket** memory model and **Separation of Powers** from the `@agents` project.
 - [/] **Agent Follow Mode ("Ghost Driving")**: Real-time editor/shell orchestration where the agent physically demonstrates changes in the visible UI.
