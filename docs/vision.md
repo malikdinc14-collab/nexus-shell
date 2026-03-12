@@ -17,12 +17,14 @@ A **Composition** (`compositions/*.json`) is the "Project File" of Nexus. It def
 - **HUD Provider**: Which script renders the status bar.
 - **Keybind Overlay**: Domain-specific hotkeys (e.g., `Alt-s` for "Submit" in one, "Search" in another).
 
-## 4. The "Pure Modularity" Target
+## 4. Domain-Driven Modularity
 We move away from "Global Features" toward "Domain Modules". 
-- **Core**: Tmux, Session Management, Router, GAP.
-- **Extensions**: Ascent, Music-DSP, Research-Ops, Diagnostics.
-- **UI Renderers**: Ghostty-native Markdown rendering, TUI visualization layers.
-- **Profiles**: The logic that binds Extensions to the Core for a specific mission.
+- **Core**: The Engine (Tmux, Sessions, GAP, Router).
+- **Domains**:
+    - **Coding**: LSPs, DAPs, Unit Testing, Conflict Matrix.
+    - **Music**: MIDI Monitors, Waveform Renderers, BPM Trackers.
+    - **Writing**: Word Counters, Focus Timers, Ghostty Markdown.
+    - **AI/ML**: GPU Telemetry, Dataset Browsers, Training Progress.
 
 ## 5. Summary
 Nexus Shell is the substrate. The **Workspace** is the specialized tool. The user does not "use Nexus"; they "load the specialized factory" for the mission at hand.
