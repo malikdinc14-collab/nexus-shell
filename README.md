@@ -18,18 +18,16 @@ Nexus Shell transforms your terminal into a powerhouse IDE. It uses a "Bring You
 
 ## 🚀 Getting Started
 
+Nexus Shell is designed for speed and portability. 
+
+- **Installation**: See [**docs/INSTALLATION.md**](file:///Users/Shared/Projects/nexus-shell/docs/INSTALLATION.md) for quick install and prerequisites.
+- **User Guide**: See [**docs/USER_GUIDE.md**](file:///Users/Shared/Projects/nexus-shell/docs/USER_GUIDE.md) for keybinds and commands.
+- **Vision**: See [**docs/vision.md**](file:///Users/Shared/Projects/nexus-shell/docs/vision.md) for the "Universal Creative Workstation" philosophy.
+
 ```bash
-git clone https://github.com/samir-alsayad/nexus-shell.git
-cd nexus-shell
-
-# Install Git hooks (Optional: for branch-aware workspaces)
-./bin/nxs-hook
-
-# Launch the default VSCode-like workspace
-./bin/nxs
+# Quick Launch (after installation)
+nxs
 ```
-
-*Tip: Symlink `./bin/nxs` to your `PATH` or add an alias to your `.zshrc`.*
 
 ---
 

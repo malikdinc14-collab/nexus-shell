@@ -14,8 +14,15 @@ RED='\033[0;31m'
 while true; do
     if [ -f "$TELEMETRY_FILE" ]; then
         # Read values
-        ascent_lv=$(jq -r '.env.level // empty' "$TELEMETRY_FILE")
-        branch=$(jq -r '.env.git_branch' "$TELEMETRY_FILE")
+        agent_status=$(jq -r '.agent.status' "$TELEMETRY_FILE")
+        agent_mission=$(jq -r '.agent.mission' "$TELEMETRY_FILE" 2>/dev/null)
+        workspace=$(jq -r '.env.workspace' "$TELEMETRY_FILE")
+        profile=$(jq -r '.env.profile' "$TELEMETRY_FILE")
+        locality=$(jq -r '.env.locality' "$TELEMETRY_FILE")
+        ascent_lv=$(jq -r '.env.level // empty' "$TELEMETRY_FILE" 2>/dev/null)
+        bpm=$(jq -r '.env.bpm // empty' "$TELEMETRY_FILE" 2>/dev/null)
+        midi_ch=$(jq -r '.env.midi_ch // empty' "$TELEMETRY_FILE" 2>/dev/null)
+        branch=$(jq -r '.env.git_branch // empty' "$TELEMETRY_FILE" 2>/dev/null)
 
         # Select status icon/color
         case $agent_status in
