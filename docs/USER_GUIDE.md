@@ -7,6 +7,8 @@ Welcome to the Factory. Nexus Shell is a high-performance development environmen
 | Key | Action | Description |
 | :--- | :--- | :--- |
 | **Alt-x** | **The Menu** | Open/Close the Parallax Command Menu. |
+| **Alt-m** | **Switcher** | Cinematic Mosaic Switcher (Mission Control). |
+| **Alt-z** | **Focus** | Maximize current pane (Toggle Zoom). |
 | **Alt-f** | **Quick Find** | Fuzzy search for files across all workspace roots. |
 | **Alt-F** | **Live Grep** | Search for text inside every file in the workspace. |
 | **Alt-j** | **Global Jump** | Jump to code from any stack trace (Editor navigation). |
@@ -23,7 +25,8 @@ Enter these in the Parallax Menu (`Alt-x`):
 ### Workspace & Profiles
 - `:workspace <path>` : Load a new project or multi-folder workspace.
 - `:profile <name>` : Hot-swap your environment (e.g., `focus`, `swarm`, `ascent`).
-- `:composition <name>` : Switch layouts (e.g., `vscodelike`, `ascent`, `writer`).
+- `:composition <name>` : Switch layouts (e.g., `vscodelike`, `music`, `writer`).
+- `:focus` : Toggle maximization of the current pane (Alt-z).
 
 ### Intelligence & Debugging
 - `:debug start <file>` : Launch a headless background debugger (Python/Node).

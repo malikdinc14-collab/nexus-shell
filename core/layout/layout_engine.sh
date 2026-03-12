@@ -126,7 +126,8 @@ if [[ -f "$COMP_JSON" ]]; then
     # Execute the Python Processor
     python3 "$SCRIPT_DIR/processor.py" "$COMP_JSON" "$START_PANE" "$PROJECT_ROOT"
     
-    # Final Focus
+    # Final Focus and State Save
+    tmux set-window-option -t "$WINDOW_ID" @nexus_last_composition "$LAYOUT"
     tmux select-pane -t "$START_PANE"
     exit 0
 fi

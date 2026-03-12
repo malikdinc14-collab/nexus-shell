@@ -39,8 +39,10 @@ while true; do
         else
             # Check for supplemental telemetry
             custom_info=""
-            if [[ -n "$ascent_lv" && "$ascent_lv" != "null" ]]; then
+            if [[ -n "$ascent_lv" && "$ascent_lv" != "null" && "$ascent_lv" != "" ]]; then
                 custom_info="| ${CYAN}Level:${NC} ${ascent_lv} "
+            elif [[ -n "$bpm" && "$bpm" != "null" && "$bpm" != "" ]]; then
+                custom_info="| ${CYAN}BPM:${NC} ${bpm} | ${CYAN}MIDI:${NC} ch${midi_ch} "
             fi
             
             printf "${status_color}${icon} ${agent_status}${NC} | ${CYAN}Workspace:${NC} ${workspace} ${custom_info}| ${CYAN}Profile:${NC} ${profile} | ${CYAN}Node:${NC} ${locality}\n"
