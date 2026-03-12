@@ -37,5 +37,13 @@ while true; do
     ascent_level=$(jq -r '.level' "/tmp/nexus_$(whoami)/ascent/progress.json" 2>/dev/null || echo "1")
     update_telemetry ".env.level" "$ascent_level"
 
+    # 5. Detect Git Branch
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git_branch=$(git rev-parse --abbrev-ref HEAD)
+    else
+        git_branch="none"
+    fi
+    update_telemetry ".env.git_branch" "$git_branch"
+
     sleep 1
 done
