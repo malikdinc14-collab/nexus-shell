@@ -28,14 +28,11 @@ Enter these in the Parallax Menu (`Alt-x`):
 ### Intelligence & Debugging
 - `:debug start <file>` : Launch a headless background debugger (Python/Node).
 - `:debug attach` : Switch view to the active debug console.
-- `:debug stop` : Terminate the background debugger.
-- `:theme <theme>` : Switch between `nord`, `dracula`, or `gruvbox`.
 
 ## 🚨 Automated Features
 
 1. **Conflict Matrix**: If a Git merge fails, Nexus will automatically lock the HUD to `RED ALERT` and force a 3-way split layout for resolution.
-2. **Status HUD**: The bottom bar shows your Workspace name, Learner Level (Ascent), Git Branch, and Agent State in real-time.
-3. **Headless LSPs**: Language servers run in the background; you just type, and they provide instant feedback.
+2. **Modular HUD**: The bottom bar is profile-aware. It shows Workspace name and status, but adapts to show domain-specific data (like Learner Level in Ascent) only when that profile is active.
 
-## 📖 Access & Help
-For a full list of commands and modules, open the menu and navigate to **Help** or use the `:help` command.
+## 📄 Further Reading
+- [**Vision: The Composable Engine**](file:///Users/Shared/Projects/nexus-shell/docs/vision.md)

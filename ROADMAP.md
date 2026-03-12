@@ -7,11 +7,11 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 - [x] **Engine Layer**: Theme engine, task registry, and dynamic RPC-driven searching (fd/ripgrep).
 - [x] **Domain Configurations**: 34+ module manifests and 15+ specialized compositions.
 
-## 🎯 Phase 4: Core Orchestration (The Workspace Engine) ✅
-- [x] **Multi-Folder Workspaces**: Ability to load multiple root directories into a single unified workspace, with aggregate search and LSP indexing.
-- [x] **Project Profiles**: Hot-swappable IDE configurations (Theme + Keybinds + Daemon Set) for different roles (e.g., Focus, Swarm, Ascent).
-- [x] **The Status HUD (Cockpit)**: Persistent 1-line strip showing real-time agent status, branch context, and learner level.
-- [x] **Workspace: Ascent (Adaptive School)**: Specialized layout for personal learning, featuring learner-level tracking panes and progress visualization.
+## 🎯 Phase 4: Composable Orchestration (The Multi-Root Engine) ✅
+- [x] **Multi-Folder Workspaces**: Ability to load multiple root directories into a single unified workspace.
+- [x] **Project Profiles**: Hot-swappable environment definitions (Theme + Keybinds + Composition).
+- [x] **Modular HUD Architecture**: Decoupled status rendering. Each workspace/profile can now provision its own specialized HUD telemetry.
+- [x] **Ascent (Domain Workspace)**: First specialized environment for learning, featuring standalone progress tracking.
 
 ## 🛠️ Phase 5: IDE Intelligence (The Desktop Killer) 🛠️
 - [x] **Global Jump-to-Definition**: Cross-pane LSP intelligence for instant editor navigation from stack traces.

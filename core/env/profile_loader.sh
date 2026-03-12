@@ -29,7 +29,15 @@ load_profile() {
     # 3. Set environment variables
     eval "$(yq -r '.env // empty | to_entries | .[] | "export " + .key + "=\"" + .value + "\""' "$profile_file")"
     
-    # 4. Update HUD
+    # 4. Launch specialized HUD Provider if it exists
+    local hud_provider=$(yq -r '.hud_provider // empty' "$profile_file")
+    if [[ -n "$hud_provider" ]]; then
+        # Kill any existing providers first (clean swap)
+        pkill -f "hud/.*_provider.sh" 2>/dev/null || true
+        # Start the new provider in background
+        "${NEXUS_HOME}/${hud_provider}" &
+    fi
+
     export NEXUS_PROFILE="$profile_name"
     # The telemetry aggregator will pick this up
 }

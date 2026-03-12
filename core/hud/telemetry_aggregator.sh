@@ -33,13 +33,18 @@ while true; do
     if [[ $(hostname) == *"m4"* ]]; then locality="m4-remote"; fi
     update_telemetry ".env.locality" "$locality"
 
-    # 4. Detect Learner Level (Ascent)
-    ascent_level=$(jq -r '.level' "/tmp/nexus_$(whoami)/ascent/progress.json" 2>/dev/null || echo "1")
-    update_telemetry ".env.level" "$ascent_level"
-
     # 5. Detect Git Branch
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         git_branch=$(git rev-parse --abbrev-ref HEAD)
+        
+        # 6. Automatic Conflict Check
+        if git diff --name-only --diff-filter=U | grep -q .; then
+             update_telemetry ".agent.status" "blocked"
+             update_telemetry ".agent.mission" "RESOLVE CONFLICTS"
+        elif [[ "$(jq -r '.agent.mission' "$TELEMETRY_FILE")" == "RESOLVE CONFLICTS" ]]; then
+             update_telemetry ".agent.status" "idle"
+             update_telemetry ".agent.mission" ""
+        fi
     else
         git_branch="none"
     fi
