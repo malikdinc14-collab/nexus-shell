@@ -22,6 +22,7 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 - [ ] **Symbolic Navigation**: Workspace-wide fuzzy symbol search (`Alt-s`).
 - [ ] **Local History**: Local "Time Machine" for per-file shadow backups and undo-history.
 - [ ] **Interactive Command Palette**: Unified `Alt-p` entry point for commands, manifests, and buffers.
+- [ ] **Master Switcher**: Context-aware `Alt-m` for fuzzy-switching between Nvim tabs, Shell tabs, and Project Slots.
 
 ## 🚀 Phase 6: AI Sovereignty & Multimodal Creative Labs
 - [x] **Daemon Manager**: Invisible background orchestration for LSPs, DAPs, and AI backends.
