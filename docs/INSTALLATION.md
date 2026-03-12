@@ -34,5 +34,18 @@ Once installed, you can launch Nexus by calling the `nxs` binary (added to your 
 nxs
 ```
 
-## 4. uConsole Specifics
-If you are running on the **uConsole**, ensure your screen resolution is set correctly. Nexus will auto-detect the terminal dimensions, but a minimum of 80x24 is recommended for the specialized compositions.
+## 4. Tooling Strategy: System vs. Isolated
+
+Nexus uses a dual-path execution strategy for its modular workstation:
+
+- **System Tools (Global)**: By default, Nexus checks your system `PATH`. If you have `lazygit` or `btop` installed via `brew`, Nexus will use them.
+- **Isolated Modules (Local)**: For specialized creative tools or AI engines (like `agent-zero`), Nexus can use "Internal" versions located in the `services/` or `lib/` directories. 
+- **Portability**: This allows you to have a production-grade IDE on your MacBook while maintaining a lightweight, self-contained set of scripts on the **uConsole**.
+
+## 5. Hardware Optimization
+
+### MacBook & Desktop
+For maximum performance, ensure `iTerm2` or `Ghostty` is used. Nexus leverages Ghostty's GPU-native features for future rich-media rendering.
+
+### uConsole
+If you are running on the **uConsole**, Nexus will auto-detect the terminal dimensions. A minimum of 80x24 is recommended for the specialized creative compositions.

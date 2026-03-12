@@ -46,12 +46,30 @@ case "$TYPE" in
 
     ACTION)
         # Execute the string (script or command)
-        if [[ "$DATA" == :workspace* ]]; then
-            "${NEXUS_HOME}/core/commands/workspace.sh" ${DATA#*:workspace }
-        elif [[ "$DATA" == :profile* ]]; then
-            "${NEXUS_HOME}/core/commands/profile.sh" ${DATA#*:profile }
-        elif [[ "$DATA" == :debug* ]]; then
-            "${NEXUS_HOME}/core/exec/dap_handler.sh" ${DATA#*:debug }
+        if [[ "$DATA" == :* ]]; then
+            # Handle special Nexus commands
+            local COMMAND_TYPE="${DATA%% *}"
+            local COMMAND_ARGS="${DATA#* }"
+            case "$COMMAND_TYPE" in
+                ":workspace") "${NEXUS_HOME}/core/commands/workspace.sh" "$COMMAND_ARGS" ;;
+                ":profile")   "${NEXUS_HOME}/core/commands/profile.sh" load "$COMMAND_ARGS" ;;
+                ":focus")     "${NEXUS_HOME}/core/commands/focus.sh" ;;
+                ":debug")     "${NEXUS_HOME}/core/exec/dap_handler.sh" "$COMMAND_ARGS" ;;
+                *)
+                    # If it's a colon command but not recognized, treat as regular action
+                    if [[ -n "$TMUX" ]]; then
+                        if [[ -n "$TERM_PANE" ]]; then
+                            tmux send-keys -t "$TERM_PANE" "$DATA" Enter
+                        else
+                            tmux send-keys "$DATA" Enter
+                        fi
+                    else
+                        eval "$DATA"
+                        echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
+                        read -r
+                    fi
+                    ;;
+            esac
         elif [[ -n "$TMUX" ]]; then
             if [[ -n "$TERM_PANE" ]]; then
                 tmux send-keys -t "$TERM_PANE" "$DATA" Enter
