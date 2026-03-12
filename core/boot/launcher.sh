@@ -142,25 +142,13 @@ if [[ "$STATION_EXISTS" == "yes" ]]; then
     
     if [[ $WINDOW_IDX -eq -1 ]]; then
          echo "[!] CRITICAL: Window limit ($MAX_WINDOWS) reached for this project." >&2
-         exit 112
-    fi
-    
-    echo "    [*] Opening new window slot: $WINDOW_IDX"
-    tmux new-window -d -t "$SESSION_ID:$WINDOW_IDX" -n "workspace_$WINDOW_IDX" -c "$PROJECT_ROOT" "/bin/zsh"
-    
-    # Generate a unique client session ID so this terminal can view a different window than the first terminal
-    CLIENT_SESSION="${SESSION_ID}_client_$$"
-    tmux new-session -d -t "$SESSION_ID" -s "$CLIENT_SESSION"
-    
-else
-    echo "[*] Initializing Station Core..."
-    WINDOW_IDX=0
-    # Create the root session and window 0
-    tmux -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace_0" -c "$PROJECT_ROOT" -x 200 -y 50 "/bin/zsh"
-    
-    # Generate the first client session
-    CLIENT_SESSION="${SESSION_ID}_client_$$"
-    tmux new-session -d -t "$SESSION_ID" -s "$CLIENT_SESSION"
+# PHASE 4: Core Orchestration (HUD)
+if [[ -f "$NEXUS_HOME/core/services/hud_service.sh" ]]; then
+    "$NEXUS_HOME/core/services/hud_service.sh" start
+fi
+
+if ! tmux has-session -t "$SESSION_ID:HUD" 2>/dev/null; then
+    tmux new-window -d -t "$SESSION_ID:10" -n "HUD" -c "$PROJECT_ROOT" "$NEXUS_HOME/core/hud/renderer.sh"
 fi
 
 rm -rf "/tmp/nexus_$(whoami)/$PROJECT_NAME/pipes"

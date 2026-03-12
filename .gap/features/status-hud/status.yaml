@@ -1,0 +1,7 @@
+status: ALIGNMENT
+phase: DESIGN
+features:
+  - id: status-hud
+    status: PROPOSED
+    mission: "Implement the persistent Telemetry HUD."
+    contract: ".gap/features/status-hud/proposals/plan.md"

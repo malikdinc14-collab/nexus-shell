@@ -10,13 +10,16 @@ NVIM_PIPE="$NEXUS_STATE/pipes/nvim_${PROJECT_NAME}.pipe"
 
 INITIAL_QUERY="${1:-}"
 
+# Resolve search paths (colon-separated NEXUS_ROOTS or current directory)
+IFS=':' read -ra SEARCH_PATHS <<< "${NEXUS_ROOTS:-.}"
+
 # Ripgrep + fzf with live reload
-SELECTION=$(FZF_DEFAULT_COMMAND="rg --column --line-number --no-heading --color=always --smart-case '${INITIAL_QUERY:-.}'" \
+SELECTION=$(FZF_DEFAULT_COMMAND="rg --column --line-number --no-heading --color=always --smart-case '${INITIAL_QUERY:-.}' ${SEARCH_PATHS[@]}" \
     fzf --ansi --layout=reverse --border=rounded \
         --prompt="🔎 Grep > " \
         --header="Live Grep (type to search)" \
         --disabled --query "$INITIAL_QUERY" \
-        --bind "change:reload:rg --column --line-number --no-heading --color=always --smart-case {q} || true" \
+        --bind "change:reload:rg --column --line-number --no-heading --color=always --smart-case {q} ${SEARCH_PATHS[@]} || true" \
         --preview 'bat --color=always --style=numbers --highlight-line {2} {1} 2>/dev/null' \
         --preview-window='right:60%:+{2}-10' \
         --delimiter ':')

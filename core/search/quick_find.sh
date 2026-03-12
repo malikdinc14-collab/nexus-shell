@@ -8,11 +8,14 @@ SESSION_NAME=$(tmux display-message -p '#S' 2>/dev/null)
 PROJECT_NAME=${SESSION_NAME#nexus_}
 NVIM_PIPE="$NEXUS_STATE/pipes/nvim_${PROJECT_NAME}.pipe"
 
+# Resolve search paths
+IFS=':' read -ra SEARCH_PATHS <<< "${NEXUS_ROOTS:-.}"
+
 # Use fd if available, otherwise find
 if command -v fd &>/dev/null; then
-    FIND_CMD="fd --type f --hidden --exclude .git"
+    FIND_CMD="fd --type f --hidden --exclude .git . ${SEARCH_PATHS[@]}"
 else
-    FIND_CMD="find . -type f -not -path '*/.git/*'"
+    FIND_CMD="find ${SEARCH_PATHS[@]} -type f -not -path '*/.git/*'"
 fi
 
 # Run fzf with preview

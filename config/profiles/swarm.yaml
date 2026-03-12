@@ -1,0 +1,6 @@
+name: "Swarm Mode"
+theme: "dracula"
+composition: "ai-pair"
+env:
+  GAP_APPROVAL_MODE: "auto"
+  NEXUS_AI_ENABLED: "true"

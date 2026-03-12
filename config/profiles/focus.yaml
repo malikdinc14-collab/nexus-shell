@@ -1,0 +1,6 @@
+name: "Focus Mode"
+theme: "nord"
+composition: "standard"
+env:
+  GAP_APPROVAL_MODE: "manual"
+  NEXUS_AI_ENABLED: "false"
