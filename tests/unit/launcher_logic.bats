@@ -85,7 +85,7 @@ else
     echo "mock_tmux $@" >> "$BATS_TMPDIR/calls.log"
 fi
 INNER_EOF
-    sed -i 's/e\\xit/exit/g' "$BATS_TMPDIR/tmux"
+    sed 's/e\\xit/exit/g' "$BATS_TMPDIR/tmux" > "$BATS_TMPDIR/tmux.tmp" && mv "$BATS_TMPDIR/tmux.tmp" "$BATS_TMPDIR/tmux"
     chmod +x "$BATS_TMPDIR/tmux"
 
     export PATH="$BATS_TMPDIR:$PATH"
