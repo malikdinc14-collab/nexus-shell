@@ -9,18 +9,26 @@ log() { echo "[$(date +%H:%M:%S)] $*" >> "$LOG"; }
 
 ACTION="$1"
 
-# Resolve session ID. display-message needs a client, which may not exist
-# after terminal close. Fall back to listing sessions.
+# Resolve session ID.
+# CRITICAL: We must resolve the MASTER session, even if we are in a client session.
 SESSION_ID=$(tmux display-message -p '#S' 2>/dev/null)
-if [[ -z "$SESSION_ID" ]]; then
+if [[ -n "$SESSION_ID" ]]; then
+    # Strip client suffix if present (e.g. nexus_foo_client_123 -> nexus_foo)
+    MASTER_SESSION="${SESSION_ID%_client_*}"
+    log "Contextual Session: $SESSION_ID -> Master: $MASTER_SESSION"
+    SESSION_ID="$MASTER_SESSION"
+else
     # No client — find nexus sessions by name pattern
     SESSION_ID=$(tmux list-sessions -F '#S' 2>/dev/null | grep '^nexus_' | head -1)
     log "No client context. Resolved session via list-sessions: $SESSION_ID"
 fi
+
 if [[ -z "$SESSION_ID" ]]; then
     log "WARNING: Could not determine session ID. Exiting."
     exit 1
 fi
+
+PROJECT_NAME="${SESSION_ID#nexus_}"
 
 # Recursively collect all descendant PIDs of a given PID
 get_descendants() {
@@ -70,13 +78,24 @@ kill_pids() {
 }
 
 kill_session_tree() {
-    log "=== guard.sh session exit ==="
+    log "=== guard.sh session exit [$SESSION_ID] ==="
+    
+    # 1. Kill background services via station manager
+    log "Cleaning up station: $PROJECT_NAME"
+    "$NEXUS_HOME/core/api/station_manager.sh" "$PROJECT_NAME" cleanup >> "$LOG" 2>&1
+
+    # 2. Collect ALL PIDs from ALL windows in this master session
     local pane_pids
     pane_pids=$(tmux list-panes -s -t "$SESSION_ID" -F '#{pane_pid}' 2>/dev/null)
     kill_pids "$pane_pids"
     
-    log "Killing tmux session $SESSION_ID"
+    # 3. Destroy the master session (kills all client sessions automatically)
+    log "Killing master tmux session $SESSION_ID"
     tmux kill-session -t "$SESSION_ID" 2>/dev/null || true
+    
+    # 4. Final stale pipe cleanup
+    rm -f "/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe" 2>/dev/null
+    
     log "=== guard.sh session complete ==="
 }
 

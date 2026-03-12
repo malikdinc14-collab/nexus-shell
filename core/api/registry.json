@@ -5,8 +5,8 @@
                 "q",
                 ":q"
             ],
-            "action": "$NEXUS_BOOT/guard.sh exit_window",
-            "description": "Quit current window",
+            "action": "$NEXUS_BOOT/guard.sh exit_session",
+            "description": "Quit Station",
             "category": "Exit"
         },
         {
@@ -23,8 +23,8 @@
                 "wq",
                 ":wq"
             ],
-            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py 2>/dev/null; $NEXUS_BOOT/guard.sh exit_window",
-            "description": "Save layout, save files, and quit current window",
+            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py 2>/dev/null; $NEXUS_BOOT/guard.sh exit_session",
+            "description": "Save layout and quit station",
             "category": "Exit",
             "preflight": "save_all"
         },
@@ -52,8 +52,8 @@
                 "q!",
                 ":q!"
             ],
-            "action": "$NEXUS_BOOT/guard.sh force_window",
-            "description": "Force quit current window without saving",
+            "action": "$NEXUS_BOOT/guard.sh force_session",
+            "description": "Force quit station without saving",
             "category": "Exit"
         },
         {
