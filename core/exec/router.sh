@@ -46,7 +46,13 @@ case "$TYPE" in
 
     ACTION)
         # Execute the string (script or command)
-        if [[ -n "$TMUX" ]]; then
+        if [[ "$DATA" == :workspace* ]]; then
+            "${NEXUS_HOME}/core/commands/workspace.sh" ${DATA#*:workspace }
+        elif [[ "$DATA" == :profile* ]]; then
+            "${NEXUS_HOME}/core/commands/profile.sh" ${DATA#*:profile }
+        elif [[ "$DATA" == :debug* ]]; then
+            "${NEXUS_HOME}/core/exec/dap_handler.sh" ${DATA#*:debug }
+        elif [[ -n "$TMUX" ]]; then
             if [[ -n "$TERM_PANE" ]]; then
                 tmux send-keys -t "$TERM_PANE" "$DATA" Enter
             else

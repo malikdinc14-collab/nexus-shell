@@ -18,6 +18,7 @@ while true; do
         workspace=$(jq -r '.env.workspace' "$TELEMETRY_FILE")
         profile=$(jq -r '.env.profile' "$TELEMETRY_FILE")
         locality=$(jq -r '.env.locality' "$TELEMETRY_FILE")
+        ascent_lv=$(jq -r '.env.level' "$TELEMETRY_FILE")
 
         # Select status icon/color
         case $agent_status in
@@ -28,7 +29,7 @@ while true; do
 
         # Render 1-liner
         clear
-        printf "${status_color}${icon} ${agent_status}${NC} | ${CYAN}Workspace:${NC} ${workspace} | ${CYAN}Profile:${NC} ${profile} | ${CYAN}Node:${NC} ${locality}\n"
+        printf "${status_color}${icon} ${agent_status}${NC} | ${CYAN}Workspace:${NC} ${workspace} | ${CYAN}Level:${NC} ${ascent_lv} | ${CYAN}Profile:${NC} ${profile} | ${CYAN}Node:${NC} ${locality}\n"
     fi
     sleep 0.5
 done

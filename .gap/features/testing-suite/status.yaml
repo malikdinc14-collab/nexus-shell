@@ -1,0 +1,7 @@
+status: ALIGNMENT
+phase: PLANNING
+features:
+  - id: testing-suite
+    status: PROPOSED
+    mission: "Implement comprehensive unit testing suite using BATS."
+    contract: ".gap/features/testing-suite/proposals/plan.md"

@@ -1,0 +1,7 @@
+status: EXECUTION
+phase: IMPLEMENTATION
+features:
+  - id: jump-to-definition
+    status: IN_PROGRESS
+    mission: "Implement cross-pane editor navigation from stack traces."
+    contract: ".gap/features/jump-to-definition/proposals/plan.md"

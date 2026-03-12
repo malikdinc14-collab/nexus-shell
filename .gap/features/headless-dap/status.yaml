@@ -1,0 +1,7 @@
+status: EXECUTION
+phase: BOOTSTRAP
+features:
+  - id: headless-dap
+    status: IN_PROGRESS
+    mission: "Implement background debug adapter orchestration."
+    contract: ".gap/features/headless-dap/proposals/plan.md"

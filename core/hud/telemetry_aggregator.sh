@@ -33,5 +33,9 @@ while true; do
     if [[ $(hostname) == *"m4"* ]]; then locality="m4-remote"; fi
     update_telemetry ".env.locality" "$locality"
 
+    # 4. Detect Learner Level (Ascent)
+    ascent_level=$(jq -r '.level' "/tmp/nexus_$(whoami)/ascent/progress.json" 2>/dev/null || echo "1")
+    update_telemetry ".env.level" "$ascent_level"
+
     sleep 1
 done
