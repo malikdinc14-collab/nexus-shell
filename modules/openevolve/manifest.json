@@ -1,0 +1,6 @@
+{
+    "name": "OpenEvolve",
+    "description": "Evolutionary coding and optimization engine.",
+    "command": "$NEXUS_CORE/exec/nxs-openevolve",
+    "category": "AI"
+}

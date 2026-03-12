@@ -18,25 +18,33 @@ NEXUS_CORE="${NEXUS_CORE:-$NEXUS_HOME/core}"
 WRAPPER="${WRAPPER:-$NEXUS_CORE/boot/pane_wrapper.sh}"
 
 WINDOW_ID="$1"
-STATE_FILE="$2"
+STATE_DATA="$2"
 PROJECT_ROOT="${3:-.}"
+LOG_FILE="/tmp/nexus_restore_$(whoami).log"
 
-if [[ ! -f "$STATE_FILE" ]]; then
-    echo "[!] State file not found: $STATE_FILE" >&2
-    exit 1
-fi
+echo "$(date) --- Restoring window $WINDOW_ID ---" >> "$LOG_FILE"
 
-# Parse JSON with python (always available)
-eval "$(python3 -c "
+# Step 1: Parse JSON Context
+# We use a heredoc to pass the JSON safely to Python to avoid shell quoting hell.
+PARSE_CMD=$(cat <<EOF
 import json, sys
-with open('$STATE_FILE') as f:
-    s = json.load(f)
-print(f'LAYOUT_STRING=\"{s[\"layout_string\"]}\"')
-print(f'PANE_COUNT={s[\"pane_count\"]}')
-for i, p in enumerate(s['panes']):
-    print(f'PANE_TITLE_{i}=\"{p[\"title\"]}\"')
-    print(f'PANE_CMD_{i}=\"{p[\"command\"]}\"')
-")"
+try:
+    s = json.loads('''$STATE_DATA''') if not '''$STATE_DATA'''.startswith('/') else json.load(open('''$STATE_DATA'''))
+    print(f"LAYOUT_STRING='{s['layout_string']}'")
+    print(f"PANE_COUNT={s['pane_count']}")
+    for i, p in enumerate(s['panes']):
+        print(f"PANE_TITLE_{i}='{p['title']}'")
+        print(f"PANE_CMD_{i}='{p['command']}'")
+except Exception as e:
+    print(f"ERROR='{str(e)}'")
+    sys.exit(1)
+EOF
+)
+
+eval "$(python3 -c "$PARSE_CMD" 2>>"$LOG_FILE")" || {
+    echo "    [!] ERROR: Failed to parse state data. See $LOG_FILE"
+    exit 1
+}
 
 echo "    [*] Restoring saved session ($PANE_COUNT panes)..."
 
@@ -47,7 +55,9 @@ for ((i=1; i<PANE_COUNT; i++)); do
 done
 
 # 2. Apply the saved layout string — this sets EXACT geometry
-tmux select-layout -t "$WINDOW_ID" "$LAYOUT_STRING"
+if ! tmux select-layout -t "$WINDOW_ID" "$LAYOUT_STRING" 2>>"$LOG_FILE"; then
+    echo "    [!] WARNING: Could not apply exact pixel layout. Tmux will use defaults."
+fi
 sleep 0.2
 
 # 3. Get the pane IDs in order (they match the saved order)

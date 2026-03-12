@@ -1,0 +1,42 @@
+title: "AI Cockpit & Models"
+context: "ai"
+items:
+  - label: "🤖 Select Active Model"
+    type: "ACTION"
+    payload: "/Users/Shared/Projects/sovereign-inference/bin/sov list | fzf --header 'Select Model' | xargs -I {} /Users/Shared/Projects/sovereign-inference/bin/sov host {}"
+
+  - label: "💬 Start Link to Pi"
+    type: "ACTION"
+    payload: "tmux send-keys -t chat 'pi' Enter"
+
+  - label: "🔄 Sync Pi to Sovereign"
+    type: "ACTION"
+    payload: "/Users/Shared/Projects/sovereign-inference/bin/sov pi-sync && echo 'Synced!'"
+
+  - label: "🛠️ Setup AI Partner (Wizard)"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 60% -h 60% '$NEXUS_HOME/core/boot/ai_setup.sh'"
+
+  - label: "🛡️ GAP Mission Chat (Pi)"
+    type: "ACTION"
+    payload: "tmux select-pane -t chat && tmux send-keys '$NEXUS_HOME/core/ai/nxs-pi-gap.sh' Enter"
+
+  - label: "🚀 Launch GAP Mission Control"
+    type: "ACTION"
+    payload: "tmux new-window -n 'GAP:Mission' 'nxs-launcher --comp gap-mission'"
+
+  - separator: true
+
+  - label: "📊 Monitor Resources"
+    type: "ACTION"
+    payload: "/Users/Shared/Projects/sovereign-inference/bin/sov monitor"
+
+  - label: "📉 Stop Inference"
+    type: "ACTION"
+    payload: "/Users/Shared/Projects/sovereign-inference/bin/sov stop --all"
+
+  - separator: true
+
+  - label: "🛡️ Sovereignty Menu"
+    type: "PLANE"
+    payload: "sovereignty"

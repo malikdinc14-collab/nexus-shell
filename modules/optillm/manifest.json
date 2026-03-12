@@ -1,0 +1,6 @@
+{
+    "name": "OptiLLM",
+    "description": "Optimized LLM reasoning engine.",
+    "command": "$NEXUS_CORE/exec/nxs-optillm",
+    "category": "AI"
+}

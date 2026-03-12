@@ -48,10 +48,14 @@ def save_all():
         pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
         
         if os.path.exists(pipe):
+            # Send write all command
             subprocess.run(
                 ["nvim", "--server", pipe, "--remote-send", ":wa<CR>"],
-                stderr=subprocess.DEVNULL, timeout=3
+                stderr=subprocess.DEVNULL, timeout=2
             )
+            # Give nvim a moment to flush to disk before session is torn down
+            import time
+            time.sleep(0.3)
     except Exception:
         pass  # Never block exit
 

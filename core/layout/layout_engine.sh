@@ -81,21 +81,31 @@ PROJECT_ROOT="$4"
 
 echo "    [*] Seeking Composition: $LAYOUT"
 
-# 0. Saved session restore (from :wq / :save)
+# 0. Saved session restore
 if [[ "$LAYOUT" == "__saved_session__" ]]; then
     WINDOW_IDX="${WINDOW_ID#*:}"
-    GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current 2>/dev/null || echo "main")
-    [[ -z "$GIT_BRANCH" ]] && GIT_BRANCH="main"
-    SAFE_BRANCH="${GIT_BRANCH//\//_}"
+    STATE_ENGINE="$NEXUS_CORE/state/state_engine.sh"
     
+    # Check State Engine for session data
+    SAVED_LAYOUT=$("$STATE_ENGINE" get "session.windows.$WINDOW_IDX")
+    
+    if [[ -n "$SAVED_LAYOUT" && "$SAVED_LAYOUT" != "{}" && "$SAVED_LAYOUT" != "null" ]]; then
+        echo "    [*] Restoring layout for window $WINDOW_IDX from State Engine..."
+        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "$SAVED_LAYOUT" "$PROJECT_ROOT"
+        exit $?
+    fi
+
+    # Fallback to legacy branch-specific files
+    GIT_BRANCH=$(git -C "$PROJECT_ROOT" branch --show-current 2>/dev/null || echo "main")
+    SAFE_BRANCH="${GIT_BRANCH//\//_}"
     STATE_FILE="$PROJECT_ROOT/.nexus/branches/$SAFE_BRANCH/window_$WINDOW_IDX.json"
     
     if [[ -f "$STATE_FILE" ]]; then
-        echo "    [*] Restoring layout for window $WINDOW_IDX on branch $SAFE_BRANCH..."
+        echo "    [*] Restoring legacy layout for window $WINDOW_IDX from $STATE_FILE..."
         "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "$STATE_FILE" "$PROJECT_ROOT"
         exit $?
     else
-        echo "    [!] No saved state for window $WINDOW_IDX on branch $SAFE_BRANCH, loading default."
+        echo "    [!] No saved state found, loading default composition."
         LAYOUT="vscodelike"
     fi
 fi

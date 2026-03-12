@@ -5,6 +5,10 @@ items:
     type: "ACTION"
     payload: "$EDITOR_CMD $NEXUS_HOME/config/tmux/nexus.conf"
 
+  - label: "⌨️ Switch Keybind Profile"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 50% -h 50% '$NEXUS_HOME/core/exec/nxs-keybind.sh'"
+
   - label: "⚙️ Command Registry (registry.json)"
     type: "ACTION"
     payload: "$EDITOR_CMD $NEXUS_HOME/core/api/registry.json"

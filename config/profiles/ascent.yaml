@@ -1,6 +1,29 @@
 theme: dracula
 composition: ascent
 hud_provider: core/hud/ascent_provider.sh
+tools:
+  chat:
+    - pi
+    - opencode
+    - aider
+  editor:
+    - nvim
+    - micro
+  models:
+    - pi
+    - Qwen2.5-Coder-14B-Instruct-4bit
+    - DeepSeek-R1-Distill-Qwen-32B-6bit
+  content:
+    - domains
+    - modules
+  prompts:
+    - strategy
+    - generator
+    - resolver
+  learners:
+    - default
+    - advanced
+    - beginner
 env:
   NEXUS_ROLE: "learner"
   NEXUS_AI_ENABLED: "true"

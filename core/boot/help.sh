@@ -15,10 +15,14 @@ cat << 'KEYBINDS'
 ║  KEYBINDS                                                    ║
 ║──────────────────────────────────────────────────────────────║
 ║  Navigation                                                  ║
-║    Alt-1..5       Focus pane (tree/menu/editor/term/chat)    ║
-║    Alt-h/j/k/l   Directional pane navigation                ║
-║    Alt-[  Alt-]   Previous / next terminal tab               ║
-║    Alt-=          New terminal tab                            ║
+║    Alt-1..9       Jump to Window Slot 1-9                    ║
+║    Alt-0          Jump to Window Slot 10                     ║
+║    Alt-[  Alt-]   Prev / Next Tab (role-specific)           ║
+║    Alt-=          New Tab in focused pane                   ║
+║    Alt-w          Close current Tab                         ║
+║    Alt-h/j/k/l    Focus pane (left/down/up/right)           ║
+║    Shift-H / L    Previous / Next Editor Tab (Buffer)        ║
+║    [b / ]b        Previous / Next Editor Tab (Buffer)        ║
 ║                                                              ║
 ║  Tools                                                       ║
 ║    Alt-x          Escape current tool → menu                 ║
@@ -39,24 +43,20 @@ KEYBINDS
 cat << 'COMMANDS'
 ║  COMMANDS (via Ctrl-\)                                       ║
 ║──────────────────────────────────────────────────────────────║
+║  Sovereignty                                                 ║
+║    :gap           Launch autonomous GAP mission              ║
+║    :keychain      Manage secure API keys                     ║
+║    :guard         Edit safety registry                        ║
+║                                                              ║
 ║  Session                                                     ║
 ║    :q             Quit Nexus (kills all processes)            ║
 ║    :wq            Save all buffers and quit                   ║
+║    :wqa           Save all windows and quit                   ║
 ║    :q!            Force quit (no save check)                  ║
 ║                                                              ║
 ║  Search                                                      ║
 ║    :find          Find files in project                       ║
 ║    :grep <text>   Live grep across project                    ║
-║                                                              ║
-║  Tasks                                                       ║
-║    :build         Run build task from .nexus.yaml             ║
-║    :test          Run test task                               ║
-║    :lint          Run lint task                               ║
-║                                                              ║
-║  Tools                                                       ║
-║    :git           Open lazygit                                ║
-║    :ai            Send editor context to AI chat              ║
-║    :ai-error      Send terminal errors to AI chat             ║
 ║                                                              ║
 ║  System                                                      ║
 ║    :theme         Switch theme (cyber/dark/light)             ║
@@ -69,14 +69,11 @@ COMMANDS
 cat << 'MENU'
 ║  MENU (in the menu pane)                                     ║
 ║──────────────────────────────────────────────────────────────║
+║    Sovereignty    Autonomous missions, Guard, & Keychain      ║
 ║    Tools          Installed TUI tools (auto-discovered)       ║
 ║    Compositions   Switch layout (vscodelike, etc.)            ║
 ║    Settings       Edit config files                           ║
-║    Find/Grep      Project search                              ║
-║    Git            Lazygit                                     ║
-║    Themes         Switch theme                                ║
 ║    Workspaces     Registered project directories               ║
-║    Lists          Custom YAML menu definitions                ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 MENU

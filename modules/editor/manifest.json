@@ -1,0 +1,7 @@
+{
+    "name": "editor",
+    "description": "Unified Polymorphic Editor & Renderer",
+    "category": "core",
+    "version": "1.0.0",
+    "dependencies": ["nxs-tab", "glow", "bat"]
+}

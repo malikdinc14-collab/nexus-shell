@@ -24,11 +24,16 @@ map("i", "jk", "<Esc>")
 map("v", "J", ":m '>+1<CR>gv=gv")
 map("v", "K", ":m '<-2<CR>gv=gv")
 
--- Center cursor on navigation
+-- Better navigation
 map("n", "<C-d>", "<C-d>zz")
 map("n", "<C-u>", "<C-u>zz")
 map("n", "n", "nzzzv")
 map("n", "N", "Nzzzv")
+
+-- Buffer switching
+map("n", "[b", ":bprevious<CR>", { desc = "Prev Buffer" })
+map("n", "]b", ":bnext<CR>", { desc = "Next Buffer" })
+map("n", "<leader>bb", "<cmd>Telescope buffers<cr>", { desc = "Switch Buffer" })
 
 -- === Nexus Integration ===
 

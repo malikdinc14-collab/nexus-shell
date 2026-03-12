@@ -1,0 +1,6 @@
+{
+    "name": "Pi Agent",
+    "description": "Local autonomous coding partner with GAP integration.",
+    "command": "$NEXUS_CORE/ai/nxs-pi-gap.sh",
+    "category": "AI"
+}

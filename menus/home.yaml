@@ -13,6 +13,10 @@ items:
     type: "PLANE"
     payload: "settings"
 
+  - label: "🛡️ Sovereignty"
+    type: "PLANE"
+    payload: "sovereignty"
+
   - separator: true
 
   - label: "🔍 Find File (Alt-f)"

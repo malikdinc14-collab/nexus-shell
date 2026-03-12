@@ -1,0 +1,25 @@
+# Nexus Safety Configuration
+# Commands in this list require human confirmation in non-autonomous sessions.
+
+dangerous_patterns:
+  - "^rm\\b"
+  - "^git\\s+rm\\b"
+  - "^git\\s+clean\\b"
+  - "^git\\s+reset\\b"
+  - "^mv\\b"
+  - "^chmod\\b"
+  - "^chown\\b"
+  - "^dd\\b"
+  - "^mkfs\\b"
+  - ">" # Redirection can be destructive
+  - "\\|" # Piping to destructive targets
+  - "curl.*\\|\\s*bash" # Pipe-to-shell patterns
+  - "wget.*\\|\\s*bash"
+  - "\\~\\/\\.zshrc" # Sensitive config protection
+  - "\\/etc\\/hosts"
+
+default_action: ask
+permissions_storage: ".nexus/permissions.json"
+
+# Modes that are EXEMPT (reserved for future use)
+exempt_modes: []

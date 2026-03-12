@@ -10,6 +10,7 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 ## 🎯 Phase 4: Composable Orchestration (The Multi-Root Engine) ✅
 - [x] **Multi-Folder Workspaces**: Ability to load multiple root directories into a single unified workspace.
 - [x] **Project Profiles**: Hot-swappable environment definitions (Theme + Keybinds + Composition).
+- [x] **Modular Keybind Profiles**: Live-swappable keyboard layouts (Vim, VSCode, Minimal).
 - [x] **Modular HUD Architecture**: Decoupled status rendering. Each workspace/profile can now provision its own specialized HUD telemetry.
 - [x] **Ascent (Domain Workspace)**: First specialized environment for learning, featuring standalone progress tracking.
 
@@ -37,7 +38,7 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 - [/] **The GAP Engine**: Port the Gated Agent Protocol logic natively into Nexus Shell.
 - [ ] **Locality Control Plane**: A GUI/TUI for managing backend delegation (Local MLX vs Remote M4 vs Cloud) directly from the Nexus `Alt-X` menu.
 - [ ] **Telegram Mesh Integration**: Bridge Nexus Shell with the `zeroclaw` Telegram agent.
-- [ ] **GAP Spec Manager**: A visual TUI for creating, editing, and auditing GAP alignment artifacts across feature branches.
+- [x] **GAP Spec Manager**: A visual TUI for creating, editing, and auditing GAP alignment artifacts across feature branches.
 - [ ] **Worktree Swarms**: Automated provisioning of ephemeral Git worktrees for parallel, concurrent feature development.
 
 ---

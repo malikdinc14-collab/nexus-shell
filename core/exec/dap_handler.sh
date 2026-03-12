@@ -11,15 +11,21 @@ DEBUG_PANE_ID="9"
 
 case "$ACTION" in
     start)
-        tmux display-message "Starting Headless DAP..."
+        local target_file="$COMMAND"
+        if [[ -z "$target_file" ]]; then
+            echo "[!] Error: No target file specified for :debug start"
+            exit 1
+        fi
+
+        tmux display-message "Starting Headless DAP for $(basename "$target_file")..."
+        
         # 1. Provision the Debug Console window if it doesn't exist
         if ! tmux has-session -t "$SESSION_ID:DAP" 2>/dev/null; then
             tmux new-window -d -t "$SESSION_ID:$DEBUG_PANE_ID" -n "DAP" -c "$(pwd)"
         fi
         
-        # 2. Logic to detect language and start appropriate DAP server
-        # (This will be expanded with language-specific loaders)
-        tmux send-keys -t "$SESSION_ID:DAP" "echo '[*] Waiting for Debug Adapter...'" Enter
+        # 2. Launch the language-specific server in the DAP pane
+        tmux send-keys -t "$SESSION_ID:DAP" "${NEXUS_HOME}/core/exec/dap_languages.sh '$target_file'" Enter
         ;;
 
     stop)

@@ -29,7 +29,19 @@ load_profile() {
     # 3. Set environment variables
     eval "$(yq -r '.env // empty | to_entries | .[] | "export " + .key + "=\"" + .value + "\""' "$profile_file")"
     
-    # 4. Launch specialized HUD Provider if it exists
+    # 4. Extract Tool Stacks and Sync to State Engine
+    # Stacks are defined as: tools: { chat: [pi, opencode], editor: [nvim, micro] }
+    local STATE_ENGINE="${NEXUS_CORE}/state/state_engine.sh"
+    if [[ -x "$STATE_ENGINE" ]]; then
+        # Export the full tools JSON to the state engine
+        local tools_json=$(yq -c '.tools // empty' "$profile_file")
+        if [[ -n "$tools_json" && "$tools_json" != "null" ]]; then
+            "$STATE_ENGINE" set ui.stacks "$tools_json"
+        fi
+        "$STATE_ENGINE" set active_profile "$profile_name"
+    fi
+
+    # 5. Launch specialized HUD Provider if it exists
     local hud_provider=$(yq -r '.hud_provider // empty' "$profile_file")
     if [[ -n "$hud_provider" ]]; then
         # Kill any existing providers first (clean swap)

@@ -89,17 +89,21 @@ def build(config, target_pane, project_root, wrapper):
         if cmd:
             tmux(["send-keys", "-t", new_pane, f"{wrapper} {cmd}", "Enter"])
         
-        # Set Pane Title if ID is present
-        if pane_cfg.get("id"):
-            tmux(["select-pane", "-t", new_pane, "-T", str(pane_cfg["id"])])
+        # Set Role and Title
+        role = pane_cfg.get("id")
+        if role:
+            tmux(["set-option", "-p", "-t", new_pane, "@nexus_role", str(role)])
+            tmux(["select-pane", "-t", new_pane, "-T", str(role)])
             
     # The last pane is whatever is left of the original target_pane
     cmd = build(panes[-1], remaining_pane, project_root, wrapper)
     if cmd:
         tmux(["send-keys", "-t", remaining_pane, f"{wrapper} {cmd}", "Enter"])
         
-    if panes[-1].get("id"):
-        tmux(["select-pane", "-t", remaining_pane, "-T", str(panes[-1]["id"])])
+    role = panes[-1].get("id")
+    if role:
+        tmux(["set-option", "-p", "-t", remaining_pane, "@nexus_role", str(role)])
+        tmux(["select-pane", "-t", remaining_pane, "-T", str(role)])
     
     return None
 

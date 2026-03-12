@@ -113,11 +113,27 @@ def render_tools():
     """Discover installed tool modules from the modules/ directory."""
     items = []
     modules_dir = NEXUS_HOME / "modules"
+    config_file = NEXUS_HOME / "config" / "modules.conf"
+    
     if not modules_dir.exists():
         return [fmt("No modules found", "DISABLED", "NONE")]
 
+    # Load enabled modules if config exists
+    enabled_modules = None
+    if config_file.exists():
+        try:
+            enabled_modules = config_file.read_text().strip().split()
+        except Exception:
+            pass
+
     for d in sorted(modules_dir.iterdir()):
         if d.is_dir() and d.name != "menu" and not d.name.startswith("."):
+            # If config exists, only show tools in the list (except for core types)
+            if enabled_modules is not None and d.name not in enabled_modules:
+                # Always allow certain "core" modules even if not in list
+                if d.name not in ["editor", "pi"]:
+                    continue
+
             manifest = d / "manifest.json"
             if manifest.exists():
                 try:

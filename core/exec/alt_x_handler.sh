@@ -47,7 +47,14 @@ elif [[ "$CMD" == *"/bin/zsh"* || "$CMD" == *"zsh"* || "$CMD" == *"/bin/bash"* |
     fi
     
 else
-    # STATE 1: A Tool or Script is running -> Drop to Menu
-    # (Destroys the running tool and replaces the pane with the menu)
-    tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_HOME/core/boot/pane_wrapper.sh $NEXUS_HOME/modules/menu/bin/nexus-menu"
+    # STATE 1: A Tool or Script is running -> Open the Universal Stack Manager
+    # This provides the polymorphic stack selection (Tools, Models, etc.)
+    STACK_MGR="$NEXUS_CORE/exec/stack_manager.sh"
+    if [[ -x "$STACK_MGR" ]]; then
+        # Run it directly in the pane
+        tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_CORE/boot/pane_wrapper.sh $STACK_MGR $ROLE"
+    else
+        # Fallback to menu if manager missing
+        tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_CORE/boot/pane_wrapper.sh $NEXUS_HOME/modules/menu/bin/nexus-menu"
+    fi
 fi

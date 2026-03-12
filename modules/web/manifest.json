@@ -1,0 +1,5 @@
+{
+    "name": "Web View",
+    "description": "Terminal-based web browser using Carbonyl.",
+    "command": "$NEXUS_HOME/core/exec/nxs-web"
+}

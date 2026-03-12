@@ -2,6 +2,40 @@
     "commands": [
         {
             "names": [
+                "build",
+                ":b"
+            ],
+            "action": "$NEXUS_CORE/exec/stack_manager.sh build",
+            "description": "Show project build actions",
+            "category": "System"
+        },
+        {
+            "names": [
+                "actions"
+            ],
+            "action": "$NEXUS_CORE/exec/stack_manager.sh actions",
+            "description": "Show project-specific actions",
+            "category": "System"
+        },
+        {
+            "names": [
+                "beacon"
+            ],
+            "action": "$NEXUS_CORE/services/beacon_overlay.sh &",
+            "description": "Start the Sovereign Beacon HUD pulse",
+            "category": "System"
+        },
+        {
+            "names": [
+                "profiles",
+                ":p"
+            ],
+            "action": "$NEXUS_CORE/env/list_profiles.sh",
+            "description": "List available profiles",
+            "category": "System"
+        },
+        {
+            "names": [
                 "q",
                 ":q"
             ],
@@ -23,7 +57,7 @@
                 "wq",
                 ":wq"
             ],
-            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py 2>/dev/null; $NEXUS_BOOT/guard.sh exit_session",
+            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py 2>/dev/null; sleep 0.2; $NEXUS_BOOT/guard.sh exit_session",
             "description": "Save layout and quit station",
             "category": "Exit",
             "preflight": "save_all"
@@ -300,6 +334,45 @@
             "description": "Run a named task from .nexus.yaml",
             "category": "Tasks",
             "args": true
+        },
+        {
+            "names": [
+                "gap",
+                ":gap"
+            ],
+            "action": "$NEXUS_CORE/services/gap_bridge.sh run",
+            "description": "Launch autonomous GAP mission",
+            "category": "Sovereignty"
+        },
+        {
+            "names": [
+                "keychain",
+                ":keychain",
+                "vault",
+                ":vault"
+            ],
+            "action": "tmux send-keys -t menu '$NEXUS_HOME/modules/menu/bin/nexus-menu keychain' Enter",
+            "description": "Open Keychain Manager",
+            "category": "Sovereignty"
+        },
+        {
+            "names": [
+                "web",
+                ":web"
+            ],
+            "action": "$NEXUS_CORE/exec/nxs-web",
+            "description": "Open a terminal-based web view (Carbonyl)",
+            "category": "View",
+            "args": true
+        },
+        {
+            "names": [
+                "guard",
+                ":guard"
+            ],
+            "action": "nvim $NEXUS_HOME/config/safety.yaml",
+            "description": "Edit Nexus Guard safety registry",
+            "category": "Sovereignty"
         }
     ]
 }

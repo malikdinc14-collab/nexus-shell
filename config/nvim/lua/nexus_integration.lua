@@ -62,6 +62,25 @@ M.status = function()
     return "[NXS:" .. (os.getenv("NEXUS_PROJECT") or "?") .. "]"
 end
 
+-- === Universal Stack Switcher ===
+-- Trigger the shell-side stack_manager.sh in a tmux popup
+local function open_nexus_stack(category)
+    category = category or "models"
+    local stack_mgr = os.getenv("NEXUS_CORE") .. "/exec/stack_manager.sh"
+    local cmd = string.format("tmux display-popup -E -w 80%% -h 40%% '%s %s'", stack_mgr, category)
+    os.execute(cmd)
+end
+
+vim.api.nvim_create_user_command("NexusStack", function(opts)
+    open_nexus_stack(opts.args ~= "" and opts.args or nil)
+end, { nargs = "?" })
+
+-- Quick binds
+vim.keymap.set("n", "<leader>nm", ":NexusStack models<CR>", { desc = "Nexus: Switch Model" })
+vim.keymap.set("n", "<leader>ns", ":NexusStack tools<CR>", { desc = "Nexus: Switch Tools" })
+vim.keymap.set("n", "<leader>nd", ":NexusStack docs<CR>", { desc = "Nexus: Browse Docs" })
+vim.keymap.set("n", "<leader>nc", ":NexusStack config<CR>", { desc = "Nexus: Edit Config" })
+
 -- Initial sync
 sync_file_path()
 

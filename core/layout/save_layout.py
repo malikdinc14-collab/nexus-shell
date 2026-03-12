@@ -16,6 +16,13 @@ import json
 import os
 from pathlib import Path
 
+# Add core/state to sys.path to import local engine
+sys.path.append(str(Path(__file__).parent.parent / "state"))
+try:
+    from state_engine import NexusStateEngine
+except ImportError:
+    NexusStateEngine = None
+
 
 def get_leaf_process(pid):
     """Recursively find the deepest child process."""
@@ -31,7 +38,7 @@ def get_leaf_process(pid):
         pass
     return pid
 
-def get_pane_command(pane_pid):
+def get_pane_command(pane_pid, title=None, index=None):
     """Detect the foreground process by finding the leaf descendant."""
     try:
         leaf_pid = get_leaf_process(pane_pid)
@@ -42,20 +49,42 @@ def get_pane_command(pane_pid):
             ).decode().strip()
 
             if cmd:
-                # If the leaf is fzf or nexus-menu, they are still in the menu
-                if "fzf" in cmd or "nexus-menu" in cmd or "px-engine" in cmd:
+                # 1. Menu/System Triage
+                if any(x in cmd for x in ["fzf", "nexus-menu", "px-engine"]):
                     return "$PARALLAX_CMD"
+                
+                # 2. Editor Triage
                 if "nvim" in cmd or "vim" in cmd:
                     return "$EDITOR_CMD"
-                if "yazi" in cmd or "ranger" in cmd or "lf" in cmd:
+                
+                # 3. File Browser Triage
+                if any(x in cmd for x in ["yazi", "ranger", "lf"]):
                     return "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
-                if "opencode" in cmd or "aider" in cmd or "gptme" in cmd:
+                
+                # 4. AI Chat Triage (The "Pi" fix)
+                chat_tools = ["opencode", "aider", "gptme", "pi", "claude", "chatgpt"]
+                if any(x in cmd.lower() for x in chat_tools):
+                    # Intelligent Extraction:
+                    # If it's 'node /path/to/pi', we want 'pi'
+                    # If it's 'pi --args', we want 'pi'
+                    for tool in chat_tools:
+                        if tool in cmd.lower():
+                            return tool
                     return "$NEXUS_CHAT"
+                
+                # 5. Shell Triage
                 if "zsh" in cmd or "bash" in cmd:
                     return "/bin/zsh -i"
                 
-                base_cmd = cmd.split()[0].split("/")[-1]
+                # 6. Fallback to base command
+                full_cmd_parts = cmd.split()
+                base_cmd = full_cmd_parts[0].split("/")[-1]
+                
                 if base_cmd in ["node", "python", "python3", "bash", "sh"]:
+                    # If it's an interpreter, try to get the script name
+                    if len(full_cmd_parts) > 1:
+                        script_name = full_cmd_parts[1].split("/")[-1].split(".")[0]
+                        return script_name
                     return cmd
                 
                 return base_cmd
@@ -89,7 +118,7 @@ def save_window_state(session_id, window_idx, branch_name):
     try:
         pane_lines = subprocess.check_output(
             ["tmux", "list-panes", "-t", f"{session_id}:{window_idx}",
-             "-F", "#{pane_index}|#{pane_title}|#{pane_pid}"],
+             "-F", "#{pane_index}|#{pane_title}|#{pane_pid}|#{@nexus_role}"],
             stderr=subprocess.DEVNULL
         ).decode().strip().split("\n")
     except Exception as e:
@@ -97,15 +126,40 @@ def save_window_state(session_id, window_idx, branch_name):
         return
 
     panes = []
+    # Initialize State Engine for sync
+    project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
+    engine = NexusStateEngine(project_root) if NexusStateEngine else None
+
     for line in pane_lines:
         parts = line.split("|")
-        if len(parts) >= 3:
-            idx, title, pid = parts[0], parts[1], parts[2]
-            cmd = get_pane_command(pid)
+        if len(parts) >= 4:
+            idx, title, pid, role = parts[0], parts[1], parts[2], parts[3]
+            actual_cmd = get_pane_command(pid, title)
+            
+            # --- NEW ROLE-BASED LOGIC ---
+            # If the pane has a known Nexus role, we save a logical variable
+            # instead of the literal command. This ensures the State Engine
+            # remains the source of truth for "What is currently active".
+            
+            saved_cmd = actual_cmd
+            
+            if role == "chat":
+                saved_cmd = "$NEXUS_CHAT"
+                if engine and not actual_cmd.startswith("$"):
+                    engine.update_slot("chat", actual_cmd)
+            elif role == "editor":
+                saved_cmd = "$EDITOR_CMD"
+                if engine and not actual_cmd.startswith("$") and "nvim" in actual_cmd:
+                    engine.update_slot("editor", "nvim")
+            elif role == "files":
+                saved_cmd = "$NEXUS_FILES"
+                if engine and not actual_cmd.startswith("$"):
+                    engine.update_slot("files", actual_cmd)
+
             panes.append({
                 "index": int(idx),
                 "title": title if title else f"pane_{idx}",
-                "command": cmd,
+                "command": saved_cmd,
             })
 
     # Sort by index to preserve order
@@ -118,20 +172,15 @@ def save_window_state(session_id, window_idx, branch_name):
         "panes": [{"title": p["title"], "command": p["command"]} for p in panes],
     }
 
-    # 4. Write to project-local .nexus/branches/<branch>/window_<idx>.json
-    project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
-    
-    # Clean branch name just in case
-    safe_branch = branch_name.replace("/", "_")
-    save_dir = Path(project_root) / ".nexus" / "branches" / safe_branch
-    save_dir.mkdir(parents=True, exist_ok=True)
-    
-    save_file = save_dir / f"window_{window_idx}.json"
+    # 4. Push to State Engine (Centralized)
+    if engine:
+        # Instead of multiple files, we now store the active layout in the State Engine
+        # under session.windows[idx]
+        engine.set(f"session.windows.{window_idx}", state)
+        # Also store the branch context
+        engine.set("project.active_branch", branch_name)
 
-    with open(save_file, "w") as f:
-        json.dump(state, f, indent=4)
-
-    return save_file
+    return True
 
 def main():
     save_all = "--all" in sys.argv

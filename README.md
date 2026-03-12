@@ -11,8 +11,18 @@ Nexus Shell transforms your terminal into a powerhouse IDE. It uses a "Bring You
 *   **Multi-Window Project Slots:** Open up to 10 independent layout slots in the exact same directory and jump between them instantly using `Alt-1` through `Alt-9`.
 *   **Indestructible Panes:** Applications run in isolated, respawnable wrappers. If a tool crashes or you exit it, the pane immediately returns to the Nexus Tools menu—your layout never breaks.
 *   **Zero-Config Module Auto-Discovery:** Install a tool via Homebrew/apt, drop a 5-line JSON manifest into `modules/`, and it instantly appears in the UI. No compiling, no restarting.
-*   **Layout Snapshots:** Arrange your panes exactly how you like them, then type `:wq` to instantly serialize the live tmux geometry and running processes into a reusable `.nexus.yaml` composition or branch-specific state.
-*   **Deep Nvim Integration:** Built-in RPC allows Nexus bounds to talk directly to your Neovim instance (e.g., global file searches open instantly in your running editor pane).
+*   **Spatial Persistence:** Ordered restoration of window geometry across project restarts—Nexus remembers exactly how you left your workstation.
+*   **Terminal Viewport:** (New) Built-in terminal-based Chromium browser (Carbonyl) for rendering interactive notebooks, Markdown previews, and documentation.
+*   **Deep Nvim Integration:** Built-in RPC allows Nexus bounds to talk directly to your Neovim instance.
+
+---
+
+## 🛡️ Sovereign Infrastructure (New)
+
+*   **Nexus Guard:** A safety airlock for the host. Intercepts destructive commands (rm, git reset) with real-time HUD alerts and project-level whitelisting.
+*   **Secure Keychain:** Zero-plaintext secret management. API keys are stored in the macOS Keychain and injected into the environment on boot. No more `.env` files.
+*   **GAP Autonomous Bridge:** Direct bridge to the Gated Agent Protocol. Launch autonomous missions in isolated Orbstack VMs with real-time Neovim following.
+*   **Spatial Persistence:** Ordered restoration of 10+ window slots. Nexus remembers your entire multi-view cockpit across reboots.
 
 ---
 
@@ -102,6 +112,7 @@ Press `Ctrl+\` to open the prompt, then type:
 | `:run` | Execute a task defined in `.nexus.yaml` |
 | `:build` | Shortcut for `:run build` |
 | `:test` | Shortcut for `:run test` |
+| `:web` | Open a terminal-based web view (Carbonyl/Grip) |
 | `:help` | Show the comprehensive help popup |
 
 ---

@@ -24,9 +24,17 @@ else
 fi
 
 # 2. Delegation
-# We wrap the call in a submodule execution if it's a python script
-if [[ "$GAP_CMD" == *"python3"* ]]; then
-    eval "$GAP_CMD $@"
-else
-    $GAP_CMD "$@"
-fi
+case "$1" in
+    run|execute)
+        shift
+        "${NEXUS_HOME}/core/exec/gap_runner.sh" "$@"
+        ;;
+    *)
+        # Wrap the call in a submodule execution if it's a python script
+        if [[ "$GAP_CMD" == *"python3"* ]]; then
+            eval "$GAP_CMD $@"
+        else
+            $GAP_CMD "$@"
+        fi
+        ;;
+esac

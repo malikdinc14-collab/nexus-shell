@@ -1,0 +1,50 @@
+#!/bin/bash
+# modules/editor/bin/nxs-editor
+# Unified Orchestrator for the Nexus Editor Module.
+
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
+NEXUS_TAB="$NEXUS_HOME/core/exec/nxs-tab.sh"
+RENDERER="$NEXUS_HOME/modules/editor/lib/polymorphic_render.sh"
+
+ACTION="${1}"
+FILE="${2}"
+
+# 1. Identify Editor Pane
+# We use the exported PX_NEXUS_EDITOR_PANE or fallback to title search.
+EDITOR_PANE=$(tmux list-panes -F "#{pane_id} #{pane_title}" | grep -E "editor|render|Edit|Preview" | head -1 | awk '{print $1}')
+[[ -z "$EDITOR_PANE" ]] && EDITOR_PANE="%1"
+
+# 2. Get the Nvim pipe for this project
+SESSION_NAME=$(tmux display-message -p '#S')
+PROJECT_NAME=${SESSION_NAME#nexus_}
+NEXUS_STATE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}"
+NVIM_PIPE="$NEXUS_STATE/pipes/nvim_${PROJECT_NAME}.pipe"
+
+case "$ACTION" in
+    open-edit)
+        # Open in the 'Edit' tab
+        # We use nxs-tab.sh to find or create the 'Edit' tab in the editor pane.
+        tmux select-pane -t "$EDITOR_PANE"
+        "$NEXUS_TAB" "Edit" "new" "nvim --listen '$NVIM_PIPE' '$FILE'"
+        ;;
+    
+    open-render)
+        # Open in the 'Preview' tab
+        tmux select-pane -t "$EDITOR_PANE"
+        "$NEXUS_TAB" "Preview" "new" "$RENDERER '$FILE'"
+        ;;
+
+    toggle)
+        # Toggle between Edit and Preview tabs
+        tmux select-pane -t "$EDITOR_PANE"
+        # Determine current tab name
+        # nxs-tab.sh uses pane-border-format to show tabs, 
+        # but we can just use the nxs-tab 'next' logic.
+        "$NEXUS_TAB" "" "next"
+        ;;
+
+    *)
+        echo "Usage: nxs-editor {open-edit|open-render|toggle} [file]"
+        exit 1
+        ;;
+esac

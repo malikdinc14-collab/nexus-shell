@@ -64,6 +64,11 @@ echo "[*] Loading Workspace Configuration..."
 # Use Python helper to merge settings.yaml and .nexus.yaml
 eval "$(python3 "$NEXUS_CORE/api/config_helper.py")"
 
+# --- Secure Keychain Integration ---
+if [[ -f "$NEXUS_CORE/env/keychain_loader.sh" ]]; then
+    source "$NEXUS_CORE/env/keychain_loader.sh"
+fi
+
 # Apply Overrides from Flags (CLI Priority)
 # By default, we always try to restore the slot's saved state first.
 COMPOSITION="${NEXUS_COMPOSITION:-__saved_session__}"
@@ -90,14 +95,33 @@ echo "    Layout: $COMPOSITION"
 echo "    Session: $SESSION_ID"
 
 # 4.5 Load Legacy tools.conf (Backwards Compatibility)
+# Priority: 1. Workspace Flags 2. .nexus.yaml 3. tools.conf 4. Internal Defaults
 TOOLS_CONF="$NEXUS_CONFIG_DIR/tools.conf"
-[[ ! -f "$TOOLS_CONF" ]] && TOOLS_CONF="$(dirname "$NEXUS_CONFIG_DIR")/tools.conf"
+# Dev mode fallback: if not in .config, check NEXUS_HOME/config/tools.conf
+if [[ ! -f "$TOOLS_CONF" ]]; then
+    TOOLS_CONF="$NEXUS_HOME/config/tools.conf"
+fi
+
 if [[ -f "$TOOLS_CONF" ]]; then
+    # We source it AFTER config_helper.py to ensure user manually edited configs win
     source "$TOOLS_CONF"
 fi
 
-# Tool Defaults (Configuration Hierarchy)
-# Priority: 1. Flags (N/A yet) 2. .nexus.yaml 3. tools.conf 4. Global defaults
+# Apply Tool Defaults (Configuration Hierarchy)
+# 1. State Engine 2. Workspace Flags 3. .nexus.yaml 4. tools.conf 5. Internal Defaults
+
+# Query State Engine for overrides
+STATE_ENGINE="$NEXUS_CORE/state/state_engine.sh"
+if [[ -x "$STATE_ENGINE" ]]; then
+    SC_CHAT=$("$STATE_ENGINE" get ui.slots.chat.tool)
+    SC_FILES=$("$STATE_ENGINE" get ui.slots.files.tool)
+    SC_EDITOR=$("$STATE_ENGINE" get ui.slots.editor.tool)
+    
+    [[ -n "$SC_CHAT" && "$SC_CHAT" != "{}" ]] && NEXUS_CHAT="$SC_CHAT"
+    [[ -n "$SC_FILES" && "$SC_FILES" != "{}" ]] && NEXUS_FILES="$SC_FILES"
+    [[ -n "$SC_EDITOR" && "$SC_EDITOR" != "{}" ]] && NEXUS_EDITOR="$SC_EDITOR"
+fi
+
 export NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
 export NEXUS_FILES="${NEXUS_FILES:-yazi}"
 export NEXUS_CHAT="${NEXUS_CHAT:-opencode}"
@@ -107,14 +131,6 @@ ROUTER_BIN="$NEXUS_CORE/exec/router.sh"
 # Build isolated state directory
 export PX_STATE_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME/parallax"
 mkdir -p "$PX_STATE_DIR"
-
-# Build absolute command strings for the Architect
-NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe"
-mkdir -p "$(dirname "$NVIM_PIPE")"
-export EDITOR_CMD="$NEXUS_EDITOR"
-[[ "$NEXUS_EDITOR" == *"nvim"* ]] && export EDITOR_CMD="$NEXUS_EDITOR --listen $NVIM_PIPE"
-export PARALLAX_CMD="PX_STATE_DIR=$PX_STATE_DIR $MENU_BIN"
-export HAS_CHAT=true HAS_FILES=true
 
 # 5. Mandatory State Reset & Initialization
 # DISCOVERY: Do not kill-server. We want multi-window support.
@@ -157,15 +173,72 @@ else
     # Create the root session and window 0
     tmux -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace_0" -c "$PROJECT_ROOT" -x "$(tput cols)" -y "$(tput lines)" "/bin/zsh"
     
+    # --- MULTI-WINDOW RESTORE ---
+    # If restoring a saved session, detect all window indices in the State Engine
+    if [[ "$COMPOSITION" == "__saved_session__" || "$COMPOSITION" == "last" ]]; then
+        SAVED_WINDOWS=$(python3 -c "
+import json, os
+state_file = '$NEXUS_STATE_ROOT/$PROJECT_NAME/state.json'
+if os.path.exists(state_file):
+    try:
+        with open(state_file) as f:
+            data = json.load(f)
+            indices = [k.split('.')[-1] for k in data.keys() if k.startswith('session.windows.')]
+            print(' '.join(sorted(indices, key=int)))
+    except: pass
+")
+        if [[ -n "$SAVED_WINDOWS" ]]; then
+            echo "    [*] Detected multi-window state: $SAVED_WINDOWS"
+            for W_IDX in $SAVED_WINDOWS; do
+                if [[ "$W_IDX" != "0" ]]; then
+                    echo "    [*] Recreating window slot $W_IDX..."
+                    tmux new-window -d -t "$SESSION_ID:$W_IDX" -n "workspace_$W_IDX" -c "$PROJECT_ROOT" "/bin/zsh"
+                fi
+            done
+        fi
+    fi
+
     # Generate the first client session
     CLIENT_SESSION="${SESSION_ID}_client_$$"
     tmux new-session -d -t "$SESSION_ID" -s "$CLIENT_SESSION"
 fi
 
+# --- Window-Specific Tool Configuration ---
+export WINDOW_IDX="$WINDOW_IDX"
+export NEXUS_WINDOW_SUFFIX="_w$WINDOW_IDX"
+export NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}${NEXUS_WINDOW_SUFFIX}.pipe"
+mkdir -p "$(dirname "$NVIM_PIPE")"
+export EDITOR_CMD="$NEXUS_EDITOR"
+[[ "$NEXUS_EDITOR" == *"nvim"* ]] && export EDITOR_CMD="$NEXUS_EDITOR --listen $NVIM_PIPE"
+export PARALLAX_CMD="PX_STATE_DIR=$PX_STATE_DIR $MENU_BIN"
+export HAS_CHAT=true HAS_FILES=true
+
 CLIENT_SESSION="${CLIENT_SESSION}"
-# PHASE 4: Core Orchestration (HUD)
+# --- Environment Propagation for Subprocesses ---
+export NEXUS_WINDOW_SUFFIX
+export NVIM_PIPE
+
+# --- Graceful Termination & Cleanup ---
+# We track subprocesses to kill them on exit
+cleanup() {
+    echo -e "\n\033[1;33m[*] Nexus Shutdown in progress...\033[0m"
+    # Kill background bridges/services
+    pkill -P $$ 2>/dev/null || true
+    # Remove window-specific pipes
+    rm -f "$NVIM_PIPE" 2>/dev/null
+    echo "[*] Cleanup complete."
+}
+trap cleanup EXIT SIGINT SIGTERM
+# PHASE 4: Core Orchestration (HUD & Services)
 if [[ -f "$NEXUS_HOME/core/services/hud_service.sh" ]]; then
     "$NEXUS_HOME/core/services/hud_service.sh" start
+fi
+
+# Agent Follower Bridge (Ghosting)
+if [[ "$NEXUS_FOLLOW_MODE" == "true" ]]; then
+    echo "[*] Starting Agent Follower Bridge..."
+    "$NEXUS_HOME/core/services/follower_bridge.sh" &
+    export NEXUS_BRIDGE_PID=$!
 fi
 
 if ! tmux has-session -t "$SESSION_ID:HUD" 2>/dev/null; then
@@ -187,6 +260,7 @@ tmux set-environment -g NEXUS_HOME "$NEXUS_HOME"
 tmux set-environment -g NEXUS_CORE "$NEXUS_CORE"
 tmux set-environment -g NEXUS_BOOT "$NEXUS_CORE/boot"
 tmux set-environment -g NEXUS_SCRIPTS "$NEXUS_CORE/boot"
+tmux set-environment -g PROJECT_ROOT "$PROJECT_ROOT"
 
 # Propagate Environment to Session (Local)
 tmux set-environment -t "$SESSION_ID" NEXUS_STATION_ACTIVE 1
@@ -198,8 +272,22 @@ tmux set-environment -t "$SESSION_ID" NEXUS_FILES "$NEXUS_FILES"
 tmux set-environment -t "$SESSION_ID" NEXUS_CHAT "$NEXUS_CHAT"
 
 # 9. Build the Layout (Synchronous & Staggered)
-echo "[*] Building Station Architecture in Slot $WINDOW_IDX..."
-"$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:$WINDOW_IDX" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
+if [[ "$COMPOSITION" == "__saved_session__" && "$STATION_EXISTS" == "no" ]]; then
+    # Full Session Restore: Build all windows
+    CURRENT_WINDOWS=$(tmux list-windows -t "$SESSION_ID" -F '#{window_index}')
+    for W_I in $CURRENT_WINDOWS; do
+        echo "[*] Building Station Architecture in Slot $W_I..."
+        # We must re-export window-specific variables for the layout engine
+        export WINDOW_IDX="$W_I"
+        export NEXUS_WINDOW_SUFFIX="_w$W_I"
+        export NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}${NEXUS_WINDOW_SUFFIX}.pipe"
+        "$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:$W_I" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
+    done
+else
+    # Standard Case: Build only the targeted window
+    echo "[*] Building Station Architecture in Slot $WINDOW_IDX..."
+    "$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:$WINDOW_IDX" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
+fi
 
 # Restore active theme from persistent state
 if [[ -x "$NEXUS_SCRIPTS/theme.sh" ]]; then

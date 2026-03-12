@@ -1,0 +1,10 @@
+name: agent-stream
+description: "High-fidelity agent observability mode with Neovim follower."
+tools:
+  chat: agent0
+  files: yazi
+  editor: nvim
+composition: agent-stream
+env:
+  NEXUS_AGENT_STREAM: "true"
+  NEXUS_FOLLOW_MODE: "true"

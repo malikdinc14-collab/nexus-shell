@@ -29,6 +29,7 @@ while true; do
             "thinking") status_color=$BLUE; icon="🧠" ;;
             "executing") status_color=$ORANGE; icon="⚙️" ;;
             "blocked") status_color=$RED; icon="🚨" ;;
+            "safety_blocked") status_color=$RED; icon="🛡️  BLOCK" ;;
             *) status_color=$GREEN; icon="👁️" ;;
         esac
 
@@ -45,7 +46,15 @@ while true; do
                 custom_info="| ${CYAN}BPM:${NC} ${bpm} | ${CYAN}MIDI:${NC} ch${midi_ch} "
             fi
             
-            printf "${status_color}${icon} ${agent_status}${NC} | ${CYAN}Workspace:${NC} ${workspace} ${custom_info}| ${CYAN}Profile:${NC} ${profile} | ${CYAN}Node:${NC} ${locality}\n"
+            # Check for GAP Mission
+            mission_id=$(jq -r '.mission.id // empty' "$TELEMETRY_FILE" 2>/dev/null)
+            mission_status=$(jq -r '.mission.status // empty' "$TELEMETRY_FILE" 2>/dev/null)
+            mission_info=""
+            if [[ -n "$mission_id" && "$mission_id" != "null" ]]; then
+                mission_info="| ${ORANGE}MISSION:${NC} ${mission_id} [${mission_status}] "
+            fi
+
+            printf "${status_color}${icon} ${agent_status}${NC} | ${CYAN}Workspace:${NC} ${workspace} ${custom_info}${mission_info}| ${CYAN}Profile:${NC} ${profile} | ${CYAN}Node:${NC} ${locality}\n"
         fi
     fi
     sleep 0.5

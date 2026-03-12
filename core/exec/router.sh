@@ -64,7 +64,7 @@ case "$TYPE" in
                             tmux send-keys "$DATA" Enter
                         fi
                     else
-                        eval "$DATA"
+                        "${NEXUS_HOME}/core/exec/guard.sh" "$DATA"
                         echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
                         read -r
                     fi
@@ -72,12 +72,13 @@ case "$TYPE" in
             esac
         elif [[ -n "$TMUX" ]]; then
             if [[ -n "$TERM_PANE" ]]; then
+                # Wrapping tmux send-keys is harder, but for local term execution:
                 tmux send-keys -t "$TERM_PANE" "$DATA" Enter
             else
                 tmux send-keys "$DATA" Enter
             fi
         else
-            eval "$DATA"
+            "${NEXUS_HOME}/core/exec/guard.sh" "$DATA"
             echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
             read -r
         fi
@@ -105,6 +106,12 @@ case "$TYPE" in
         ;;
 
     MODEL|AGENT)
+        # GAP Sovereignty Check
+        if [[ -f "${NEXUS_HOME}/core/services/gap_bridge.sh" ]]; then
+            # Check if this command is allowed (Advisory mode for now)
+            ${NEXUS_HOME}/core/services/gap_bridge.sh check-exec "$DATA" || echo -e "\033[0;31m[GAP WARNING] Command not in ACL\033[0m"
+        fi
+
         # Open the AI Agent connection 
         echo -e "\033[1;34m🤖 Connecting to $DATA...\033[0m"
         if command -v px-agent &>/dev/null; then
