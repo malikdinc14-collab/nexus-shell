@@ -7,17 +7,21 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 - [x] **Engine Layer**: Theme engine, task registry, and dynamic RPC-driven searching (fd/ripgrep).
 - [x] **Domain Configurations**: 34+ module manifests and 15+ specialized compositions.
 
-## 🎯 Phase 4: Core Orchestration (The Workspace Engine)
-- [ ] **Multi-Folder Workspaces**: Ability to load multiple root directories into a single unified workspace, with aggregate search and LSP indexing.
-- [ ] **Project Profiles**: Hot-swappable IDE configurations (Theme + Keybinds + Daemon Set) for different roles (e.g., SRE, Frontend, Nucleus Core).
-- [ ] **The "Antigravity" Bar**: A non-intrusive status bar (the HUD) showing real-time agent status, workspace context, and system load.
-- [ ] **Workspace: Ascent (Adaptive School)**: Specialized layout for personal learning, featuring learner-level tracking panes and progress visualization.
+## 🎯 Phase 4: Core Orchestration (The Workspace Engine) ✅
+- [x] **Multi-Folder Workspaces**: Ability to load multiple root directories into a single unified workspace, with aggregate search and LSP indexing.
+- [x] **Project Profiles**: Hot-swappable IDE configurations (Theme + Keybinds + Daemon Set) for different roles (e.g., Focus, Swarm, Ascent).
+- [x] **The Status HUD (Cockpit)**: Persistent 1-line strip showing real-time agent status, branch context, and learner level.
+- [x] **Workspace: Ascent (Adaptive School)**: Specialized layout for personal learning, featuring learner-level tracking panes and progress visualization.
 
-## 🛠️ Phase 5: IDE Intelligence (The Desktop Killer)
-- [ ] **Global Jump-to-Definition**: Cross-pane LSP intelligence that allows clicking/hitting keys on a stack trace to instantly navigate the editor in a different pane.
-- [ ] **The Merge Conflict Matrix**: Auto-detect conflicts and auto-spawn a dedicated 3-way split review layout.
-- [ ] **Headless DAP (Debug Adapter Protocol)**: Decoupled debug REPLs orchestrated by Nexus, keeping the editor buffer clean while execution lives in specialized panes.
-- [ ] **Aggregate Search**: Unified `fd` and `ripgrep` across all folders in a multi-root workspace.
+## 🛠️ Phase 5: IDE Intelligence (The Desktop Killer) 🛠️
+- [x] **Global Jump-to-Definition**: Cross-pane LSP intelligence for instant editor navigation from stack traces.
+- [x] **The Merge Conflict Matrix**: Auto-detect conflicts and auto-spawn a dedicated 3-way split review layout.
+- [x] **Headless DAP (Debug Adapter Protocol)**: Decoupled debug REPLs for Python and Node.js.
+- [x] **Aggregate Search**: Unified `fd` and `ripgrep` across all workspace roots.
+- [ ] **Diagnostics Hub**: Background piping of LSP errors/linting into the Status HUD.
+- [ ] **Symbolic Navigation**: Workspace-wide fuzzy symbol search (`Alt-s`).
+- [ ] **Local History**: Local "Time Machine" for per-file shadow backups and undo-history.
+- [ ] **Interactive Command Palette**: Unified `Alt-p` entry point for commands, manifests, and buffers.
 
 ## 🚀 Phase 6: AI Sovereignty (SystemPrompt OS Fusion)
 - [x] **Daemon Manager**: Invisible background orchestration for LSPs, DAPs, and AI backends.
