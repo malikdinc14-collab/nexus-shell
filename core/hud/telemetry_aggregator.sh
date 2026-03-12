@@ -33,5 +33,13 @@ while true; do
     if [[ $(hostname) == *"m4"* ]]; then locality="m4-remote"; fi
     update_telemetry ".env.locality" "$locality"
 
+    # 4. Detect Git Branch
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git_branch=$(git rev-parse --abbrev-ref HEAD)
+    else
+        git_branch="none"
+    fi
+    update_telemetry ".env.git_branch" "$git_branch"
+
     sleep 1
 done

@@ -1,0 +1,1 @@
+{"name": "Conflict Matrix", "panes": [{"id": "local", "cmd": "nvim -R {file}.LOCAL", "size": "33%"}, {"id": "merged", "cmd": "nvim {file}", "size": "34%", "focus": true}, {"id": "remote", "cmd": "nvim -R {file}.REMOTE", "size": "33%"}]}

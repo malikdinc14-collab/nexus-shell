@@ -142,6 +142,16 @@ if [[ "$STATION_EXISTS" == "yes" ]]; then
     
     if [[ $WINDOW_IDX -eq -1 ]]; then
          echo "[!] CRITICAL: Window limit ($MAX_WINDOWS) reached for this project." >&2
+         exit 112
+    fi
+else
+    # Create new session
+    tmux new-session -d -s "$SESSION_ID" -x "$(tput cols)" -y "$(tput lines)"
+    WINDOW_IDX=1
+fi
+
+CLIENT_SESSION="${SESSION_ID}"
+
 # PHASE 4: Core Orchestration (HUD)
 if [[ -f "$NEXUS_HOME/core/services/hud_service.sh" ]]; then
     "$NEXUS_HOME/core/services/hud_service.sh" start
