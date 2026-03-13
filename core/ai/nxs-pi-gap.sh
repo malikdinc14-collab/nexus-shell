@@ -69,6 +69,11 @@ EXTRA_FLAGS=(
     --prompt-template "$EXTERNAL_REPOS/hve-core/.github/prompts"
 )
 
+# 3.1 Inject Profile Overrides
+[[ -n "$PI_PROVIDER" ]] && EXTRA_FLAGS+=(--provider "$PI_PROVIDER")
+[[ -n "$PI_MODEL" ]] && EXTRA_FLAGS+=(--model "$PI_MODEL")
+[[ -n "$PI_THINKING" ]] && EXTRA_FLAGS+=(--thinking "$PI_THINKING")
+
 # 4. Inject into Pi Environment
 # We use the --system-prompt flag to start Pi with this context
 export PI_SYSTEM_MESSAGE="$BRIEFING$FILE_CONTEXT\n\nIMPORTANT: You are acting as a GAP-aligned agent. You MUST respect the current LEDGER status and only perform actions within the approved scope.\n\nSUPERPOWERS ENABLED:\n- Use 'skill' tool to access Jesse's Superpowers framework ($EXTERNAL_REPOS/superpowers).\n- Use HVE methodologies (Research-Plan-Implement) from Microsoft's hve-core.\n- Reasoning Optimized: OptiLLM ($EXTERNAL_REPOS/optillm) logic is active.\n- Evolutionary Discovery: OpenEvolve ($EXTERNAL_REPOS/openevolve) is available.\n- Specialist Division: 140+ specialized agents from msitarzewski/agency-agents ($EXTERNAL_REPOS/agency-agents) are available for delegation."

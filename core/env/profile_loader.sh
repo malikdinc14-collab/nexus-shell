@@ -41,13 +41,25 @@ load_profile() {
         "$STATE_ENGINE" set active_profile "$profile_name"
     fi
 
-    # 5. Launch specialized HUD Provider if it exists
+    # 5. Launcher specialized HUD Provider if it exists
     local hud_provider=$(yq -r '.hud_provider // empty' "$profile_file")
     if [[ -n "$hud_provider" ]]; then
         # Kill any existing providers first (clean swap)
         pkill -f "hud/.*_provider.sh" 2>/dev/null || true
         # Start the new provider in background
         "${NEXUS_HOME}/${hud_provider}" &
+    fi
+
+    # 6. AI Sovereignty: Isolate State and Bootstrap Models
+    # Each profile gets its own Pi state directory to prevent session/brain bleed.
+    export PI_CODING_AGENT_DIR="${NEXUS_HOME}/.nexus/ai/${profile_name}"
+    mkdir -p "$PI_CODING_AGENT_DIR"
+
+    # If the profile defines 'ai_models', we generate the models.json for that profile.
+    local ai_models=$(yq -c '.ai_models // empty' "$profile_file")
+    if [[ -n "$ai_models" && "$ai_models" != "null" ]]; then
+        echo "[*] Bootstrapping AI Models: ${profile_name}"
+        echo "$ai_models" > "$PI_CODING_AGENT_DIR/models.json"
     fi
 
     export NEXUS_PROFILE="$profile_name"

@@ -1,0 +1,26 @@
+theme: dracula
+composition: ascent
+hud_provider: core/hud/ascent_provider.sh
+tools:
+  chat:
+    - pi
+    - opencode
+  editor:
+    - nvim
+  models:
+    - ollama
+    - gpt-4o
+    - claude-3-5-sonnet
+ai_models:
+  providers:
+    ollama:
+      baseUrl: "http://localhost:11434/v1"
+      api: "openai-completions"
+      apiKey: "ollama"
+      models:
+        - id: "qwen2.5-coder:7b"
+        - id: "llama3.1:8b"
+env:
+  PI_PROVIDER: "ollama"
+  PI_MODEL: "qwen2.5-coder:7b"
+  NEXUS_ROLE: "sovereign"
