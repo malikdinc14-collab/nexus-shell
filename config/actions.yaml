@@ -1,0 +1,23 @@
+# config/actions.yaml
+# Global Action Registry for Nexus Shell
+# Decouples the UI from specific shell commands.
+
+actions:
+  # Window Management
+  nxs-restore: "nxs-restore"
+  hard-reboot: "tmux kill-server"
+  
+  # Navigation
+  focus_files: "tmux select-pane -t tree || tmux select-pane -t files"
+  focus_editor: "tmux select-pane -t editor"
+  focus_chat: "tmux select-pane -t chat"
+  focus_terminal: "tmux select-pane -t terminal"
+  quick_find: "$NEXUS_HOME/core/search/quick_find.sh"
+
+  # Shelf
+  stow_pane: "nxs-shelf stow"
+  recall_pane: "nxs-shelf recall"
+
+  # Agents
+  switch_model: "nxs-agent-switch-model"
+  set_role: "nxs-agent-set-role"

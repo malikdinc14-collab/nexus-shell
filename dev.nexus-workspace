@@ -1,0 +1,9 @@
+{
+  "name": "Dev Workspace",
+  "workspace_id": "nexus-dev",
+  "primary_root": "nexus-shell",
+  "roots": {
+    "nexus-shell": "/Users/Shared/Projects/nexus-shell",
+    "GAP": "/Users/Shared/Projects/Gated Agent Protocol"
+  }
+}

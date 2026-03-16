@@ -1,0 +1,5 @@
+# pillars/shelf/_pillar.yaml
+name: "Nexus Shelf"
+icon: "📥"
+icon_script: "⚡"
+layout: "list"

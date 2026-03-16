@@ -1,0 +1,6 @@
+# pillars/vision/_pillar.yaml
+name: "Mission Vision"
+icon: "👁️"
+icon_note: "👁️"
+layout: "list"
+recursive: true

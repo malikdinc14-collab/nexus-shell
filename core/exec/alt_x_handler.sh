@@ -32,29 +32,35 @@ else
 fi
 
 # 2. Determine State and Route
-if [[ "$CMD" == *"nexus-menu"* || "$CMD" == *"fzf"* || "$CMD" == *"px-engine"* ]]; then
-    # STATE 2: Menu is running -> Drop to an empty Terminal
-    # We use pane_wrapper so it's indestructible
+LOG_FILE="/tmp/nexus_alt_x.log"
+echo "[$(date +%T)] LEAF_PID: $LEAF_PID | CMD: $CMD" >> "$LOG_FILE"
+
+# List of commands that count as "Active Tool"
+# This list can be expanded or we can use a negative match for shells
+IS_SHELL=false
+if [[ "$CMD" == *"/bin/zsh"* || "$CMD" == *"zsh"* || "$CMD" == *"/bin/bash"* || -z "$CMD" ]]; then
+    IS_SHELL=true
+fi
+
+IS_MENU=false
+if [[ "$CMD" == *"nexus-menu"* || "$CMD" == *"nxm.py"* || "$CMD" == *"fzf"* || "$CMD" == *"px-engine"* ]]; then
+    IS_MENU=true
+fi
+
+if [[ "$IS_MENU" == "true" ]]; then
+    # STATE: Menu -> Terminal
+    echo "[$(date +%T)] Menu detected -> Switching to Terminal" >> "$LOG_FILE"
     tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_HOME/core/boot/pane_wrapper.sh /bin/zsh -i"
     
-elif [[ "$CMD" == *"/bin/zsh"* || "$CMD" == *"zsh"* || "$CMD" == *"/bin/bash"* || -z "$CMD" ]]; then
-    # STATE 3: Just a shell is running -> Kill the pane
-    PANE_COUNT=$(tmux list-panes | wc -l)
-    if [[ "$PANE_COUNT" -gt 1 ]]; then
-        tmux kill-pane -t "$PANE_ID"
-    else
-        tmux display-message "Cannot close the last pane."
-    fi
-    
+elif [[ "$IS_SHELL" == "true" ]]; then
+    # STATE: Terminal (Idle) -> Menu
+    echo "[$(date +%T)] Terminal detected -> Switching to Menu" >> "$LOG_FILE"
+    MENU_BIN="$NEXUS_HOME/modules/menu/bin/nexus-menu"
+    tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_HOME/core/boot/pane_wrapper.sh $MENU_BIN --context modules"
+
 else
-    # STATE 1: A Tool or Script is running -> Open the Universal Stack Manager
-    # This provides the polymorphic stack selection (Tools, Models, etc.)
-    STACK_MGR="$NEXUS_CORE/exec/stack_manager.sh"
-    if [[ -x "$STACK_MGR" ]]; then
-        # Run it directly in the pane
-        tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_CORE/boot/pane_wrapper.sh $STACK_MGR $ROLE"
-    else
-        # Fallback to menu if manager missing
-        tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_CORE/boot/pane_wrapper.sh $NEXUS_HOME/modules/menu/bin/nexus-menu"
-    fi
+    # STATE: Active Tool -> Menu
+    echo "[$(date +%T)] Tool detected ($CMD) -> Switching to Menu" >> "$LOG_FILE"
+    MENU_BIN="$NEXUS_HOME/modules/menu/bin/nexus-menu"
+    tmux respawn-pane -k -t "$PANE_ID" -e "SESSION_ID=$SESSION_ID" -e "PROJECT_ROOT=$PROJECT_ROOT" -e "NEXUS_HOME=$NEXUS_HOME" "$NEXUS_HOME/core/boot/pane_wrapper.sh $MENU_BIN --context system"
 fi

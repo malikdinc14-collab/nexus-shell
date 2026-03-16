@@ -1,0 +1,5 @@
+# pillars/launch/_pillar.yaml
+name: "Production Launch"
+icon: "🚀"
+icon_script: "🚀"
+layout: "list"

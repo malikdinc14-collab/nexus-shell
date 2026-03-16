@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# bin/nxs-view
+# --- Nexus Smart Dispatcher ---
+# Routes files to their best terminal renderer.
+
+FILE="$1"
+
+if [[ -z "$FILE" ]]; then
+    echo "Usage: nxs-view <file>"
+    exit 1
+fi
+
+if [[ ! -e "$FILE" ]]; then
+    echo "Error: File not found: $FILE"
+    exit 1
+fi
+
+# 1. Directory handling
+if [[ -d "$FILE" ]]; then
+    # Use the explorer role if it's a directory
+    EXPLORER=$(python3 "$NEXUS_HOME/core/api/module_registry.py" explorer)
+    exec eval "$EXPLORER \"$FILE\""
+fi
+
+# 2. Extension-based dispatching
+EXT="${FILE##*.}"
+EXT=$(echo "$EXT" | tr '[:upper:]' '[:lower:]')
+
+case "$EXT" in
+    md|markdown)
+        if command -v glow &>/dev/null; then
+            exec glow "$FILE"
+        fi
+        ;;
+    json)
+        if command -v fx &>/dev/null; then
+            exec fx "$FILE"
+        elif command -v jq &>/dev/null; then
+            exec jq . "$FILE" | less -R
+        fi
+        ;;
+    pdf)
+        if command -v termpdf.py &>/dev/null; then
+            exec termpdf.py "$FILE"
+        fi
+        ;;
+    log|txt)
+        # Check if it's a growing log
+        if [[ "$FILE" == *".log" ]]; then
+             exec tail -f "$FILE"
+        fi
+        ;;
+esac
+
+# 3. Fallback to generic high-quality viewer
+if command -v bat &>/dev/null; then
+    exec bat "$FILE"
+else
+    exec less -R "$FILE"
+fi

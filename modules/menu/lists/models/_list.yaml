@@ -1,0 +1,5 @@
+# pillars/models/_pillar.yaml
+name: "Neural Models"
+icon: "🧠"
+icon_script: "🧠"
+layout: "list"

@@ -1,0 +1,20 @@
+graph TD
+    User([Sovereign User]) -- Alt-v / Alt-s --> Layout[Quantum Geometry]
+    User -- Alt-f --> Focus[Instant Focus]
+    User -- Enter / Alt-E --> NexusMenu{Parallax Menu}
+    
+    NexusMenu --> Notes[📝 Notes Pillar]
+    NexusMenu --> Actions[🏗️ Actions Pillar]
+    NexusMenu --> Vision[👁️ Vision Pillar]
+    NexusMenu --> Places[📍 Places Pillar]
+    
+    Notes --> MD[.nexus/notes/*.md]
+    Actions --> SH[.nexus/actions/*.sh]
+    Vision --> MMD[.nexus/vision/*.mmd]
+    Places --> YAML[.nexus/places.yaml]
+    
+    Layout -. Capture .-> Momentum[Momentum Engine]
+    Momentum -. Restore .-> Layout
+    
+    Style User fill:#00ffff,stroke:#333,stroke-width:2px;
+    Style NexusMenu fill:#ff00ff,stroke:#333,stroke-width:2px;

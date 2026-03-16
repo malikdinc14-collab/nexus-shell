@@ -1,31 +1,26 @@
 #!/usr/bin/env python3
 """
-save_layout.py — Captures the current tmux session state using tmux's
-native layout serialization format. No parsing, no coordinate math.
-
-Saves:
-  1. The raw #{window_layout} string (replayed verbatim via select-layout)
-  2. An ordered list of pane titles + their running commands
-
-Output: .nexus/session_state.json
+save_layout.py (Momentum Edition) — "Freezes the Moment"
+Captures the hierarchical structure, proportional geometry, and process state
+of a tmux session to allow adaptive restoration.
 """
 
 import sys
 import subprocess
 import json
 import os
+import re
 from pathlib import Path
 
-# Add core/state to sys.path to import local engine
+# Add core/state to sys.path
 sys.path.append(str(Path(__file__).parent.parent / "state"))
 try:
     from state_engine import NexusStateEngine
 except ImportError:
     NexusStateEngine = None
 
-
 def get_leaf_process(pid):
-    """Recursively find the deepest child process."""
+    """Recursively find the deepest child process to identify the running tool."""
     try:
         children = subprocess.check_output(
             ["pgrep", "-P", str(pid)],
@@ -38,216 +33,211 @@ def get_leaf_process(pid):
         pass
     return pid
 
-def get_pane_command(pane_pid, title=None, index=None):
-    """Detect the foreground process by finding the leaf descendant."""
+def get_pane_command(pid):
+    """Detect the foreground process in a pane."""
     try:
-        leaf_pid = get_leaf_process(pane_pid)
-        if str(leaf_pid) != str(pane_pid):
-            cmd = subprocess.check_output(
-                ["ps", "-p", str(leaf_pid), "-o", "command="],
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
+        leaf_pid = get_leaf_process(pid)
+        cmd = subprocess.check_output(
+            ["ps", "-p", str(leaf_pid), "-o", "command="],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
 
-            if cmd:
-                # 1. Menu/System Triage
-                if any(x in cmd for x in ["fzf", "nexus-menu", "px-engine"]):
-                    return "$PARALLAX_CMD"
-                
-                # 2. Editor Triage
-                if "nvim" in cmd or "vim" in cmd:
-                    return "$EDITOR_CMD"
-                
-                # 3. File Browser Triage
-                if any(x in cmd for x in ["yazi", "ranger", "lf"]):
-                    return "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
-                
-                # 4. AI Chat Triage (The "Pi" fix)
-                chat_tools = ["opencode", "aider", "gptme", "pi", "claude", "chatgpt"]
-                if any(x in cmd.lower() for x in chat_tools):
-                    # Intelligent Extraction:
-                    # If it's 'node /path/to/pi', we want 'pi'
-                    # If it's 'pi --args', we want 'pi'
-                    for tool in chat_tools:
-                        if tool in cmd.lower():
-                            return tool
-                    return "$NEXUS_CHAT"
-                
-                # 5. Shell Triage
-                if "zsh" in cmd or "bash" in cmd:
-                    return "/bin/zsh -i"
-                
-                # 6. Fallback to base command
-                full_cmd_parts = cmd.split()
-                base_cmd = full_cmd_parts[0].split("/")[-1]
-                
-                if base_cmd in ["node", "python", "python3", "bash", "sh"]:
-                    # If it's an interpreter, try to get the script name
-                    if len(full_cmd_parts) > 1:
-                        script_name = full_cmd_parts[1].split("/")[-1].split(".")[0]
-                        return script_name
-                    return cmd
-                
-                return base_cmd
+        if not cmd:
+            return "/bin/zsh -i"
+
+        # Triage known tools to save logical variables
+        # This keeps the IDE "Stateful" across different setups
+        if any(x in cmd for x in ["fzf", "nexus-menu", "px-engine"]):
+            return "$PARALLAX_CMD"
+        if "nvim" in cmd or "vim" in cmd:
+            return "$EDITOR_CMD"
+        if any(x in cmd for x in ["yazi", "ranger", "lf"]):
+            return "$NEXUS_FILES"
+        
+        # If it's a generic shell, just return zsh
+
+        # Fallback: Capture the full command line to preserve arguments/state
+        if cmd.strip().split()[0].split("/")[-1] in ["zsh", "bash", "sh"]:
+            return "/bin/zsh -i"
+            
+        return cmd.replace("\n", " ").strip()
     except Exception:
-        pass
-    return "/bin/zsh -i"
+        return "/bin/zsh -i"
 
-
-def save_window_state(session_id, window_idx, branch_name):
-    # 1. Capture the raw layout string for this specific window
+def capture_moment(session_id, window_idx):
+    """Freezes the current window state: structure + process map."""
     try:
-        layout_string = subprocess.check_output(
-            ["tmux", "list-windows", "-t", session_id, "-F", "#{window_index}|#{window_layout}"],
+        # 1. Get total window dimensions (for proportional math)
+        win_info = subprocess.check_output(
+            ["tmux", "list-windows", "-t", session_id, "-F", "#{window_index}|#{window_width}|#{window_height}|#{window_layout}"],
             stderr=subprocess.DEVNULL
         ).decode().strip().split("\n")
-        
-        # Find the specific window layout
-        target_layout = None
-        for line in layout_string:
+
+        target_line = None
+        for line in win_info:
             if line.startswith(f"{window_idx}|"):
-                target_layout = line.split("|", 1)[1]
+                target_line = line
                 break
         
-        if not target_layout:
-             return
-    except Exception as e:
-        print(f"Error getting layout for window {window_idx}: {e}", file=sys.stderr)
-        return
+        if not target_line: return None
+        
+        _, win_w, win_h, layout_str = target_line.split("|")
+        win_w, win_h = int(win_w), int(win_h)
 
-    # 2. Capture pane order, titles, and running processes for this window
-    try:
-        pane_lines = subprocess.check_output(
-            ["tmux", "list-panes", "-t", f"{session_id}:{window_idx}",
-             "-F", "#{pane_index}|#{pane_title}|#{pane_pid}|#{@nexus_role}"],
+        # 2. Get detailed pane metadata in order
+        pane_info = subprocess.check_output(
+            ["tmux", "list-panes", "-t", f"{session_id}:{window_idx}", 
+             "-F", "#{pane_index}|#{pane_title}|#{pane_pid}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{@nexus_role}|#{pane_current_path}"],
             stderr=subprocess.DEVNULL
         ).decode().strip().split("\n")
-    except Exception as e:
-        print(f"Error listing panes for window {window_idx}: {e}", file=sys.stderr)
-        return
 
-    panes = []
-    # Initialize State Engine for sync
-    project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
-    engine = NexusStateEngine(project_root) if NexusStateEngine else None
-
-    for line in pane_lines:
-        parts = line.split("|")
-        if len(parts) >= 4:
-            idx, title, pid, role = parts[0], parts[1], parts[2], parts[3]
-            actual_cmd = get_pane_command(pid, title)
+        panes = []
+        win_root = None
+        for i, line in enumerate(pane_info):
+            if not line.strip(): continue
+            parts = line.split("|")
+            if len(parts) < 9: continue
+            idx, title, pid, w, h, l, t, role, cwd = parts
             
-            # --- NEW ROLE-BASED LOGIC ---
-            # If the pane has a known Nexus role, we save a logical variable
-            # instead of the literal command. This ensures the State Engine
-            # remains the source of truth for "What is currently active".
-            
-            saved_cmd = actual_cmd
-            
-            if role == "chat":
-                saved_cmd = "$NEXUS_CHAT"
-                if engine and not actual_cmd.startswith("$"):
-                    engine.update_slot("chat", actual_cmd)
-            elif role == "editor":
-                saved_cmd = "$EDITOR_CMD"
-                if engine and not actual_cmd.startswith("$") and "nvim" in actual_cmd:
-                    engine.update_slot("editor", "nvim")
-            elif role == "files":
-                saved_cmd = "$NEXUS_FILES"
-                if engine and not actual_cmd.startswith("$"):
-                    engine.update_slot("files", actual_cmd)
+            # Use the first pane's CWD as the window's root Context
+            if i == 0: win_root = cwd
 
             panes.append({
                 "index": int(idx),
-                "title": title if title else f"pane_{idx}",
-                "command": saved_cmd,
+                "title": title,
+                "role": role,
+                "command": get_pane_command(pid),
+                "cwd": cwd,
+                "geom": {
+                    "w_pct": round(int(w) / win_w, 4),
+                    "h_pct": round(int(h) / win_h, 4),
+                    "l_pct": round(int(l) / win_w, 4),
+                    "t_pct": round(int(t) / win_h, 4)
+                }
             })
 
-    # Sort by index to preserve order
-    panes.sort(key=lambda p: p["index"])
+        # 3. Create a 'Moment' object
+        moment = {
+            "window_idx": window_idx,
+            "project_root": win_root or os.getcwd(),
+            "timestamp": subprocess.check_output(["date", "+%s"]).decode().strip(),
+            "dimensions": {"w": win_w, "h": win_h},
+            "layout_string": layout_str,
+            "panes": panes
+        }
+        
+        return moment
 
-    # 3. Build the state object
-    state = {
-        "layout_string": target_layout,
-        "pane_count": len(panes),
-        "panes": [{"title": p["title"], "command": p["command"]} for p in panes],
+    except Exception as e:
+        print(f"Moment Capture Error: {e}", file=sys.stderr)
+        return None
+
+def export_composition(moment, name, project_root):
+    """Saves a captured moment as a named composition blueprint."""
+    comp_dir = Path(project_root) / ".nexus" / "compositions"
+    comp_dir.mkdir(parents=True, exist_ok=True)
+    
+    comp_path = comp_dir / f"{name}.json"
+    
+    # Transform 'Moment' back to 'Composition' format
+    composition = {
+        "name": name,
+        "description": f"Exported from live session on {moment['timestamp']}",
+        "layout": {
+            "type": "momentum_snapshot", # Custom type for momentum-based restores
+            "panes": moment["panes"]
+        }
     }
-
-    # 4. Push to State Engine (Centralized)
-    if engine:
-        # Instead of multiple files, we now store the active layout in the State Engine
-        # under session.windows[idx]
-        engine.set(f"session.windows.{window_idx}", state)
-        # Also store the branch context
-        engine.set("project.active_branch", branch_name)
-
-    return True
+    
+    with open(comp_path, "w") as f:
+        json.dump(composition, f, indent=4)
+    
+    return comp_path
 
 def main():
-    save_all = "--all" in sys.argv
+    project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
     
-    # 1. Resolve session ID
-    session_id = None
+    # Resolve session
     try:
         session_id = subprocess.check_output(
-            ["tmux", "display-message", "-p", "#{session_name}"],
+            ["tmux", "display-message", "-p", "#{session_id}"],
             stderr=subprocess.DEVNULL
         ).decode().strip()
-    except Exception:
-        pass
-
-    if not session_id:
-        print("Error: No tmux session found.", file=sys.stderr)
+    except:
         sys.exit(1)
 
-    # 2. Detect Git Branch Context
-    branch = ""
-    if "--branch" in sys.argv:
+    # Momentum Flags
+    save_all = "--window" not in sys.argv and "--export" not in sys.argv
+    export_name = None
+    
+    if "--export" in sys.argv:
         try:
-            branch_idx = sys.argv.index("--branch")
-            branch = sys.argv[branch_idx + 1]
+            idx = sys.argv.index("--export")
+            export_name = sys.argv[idx + 1]
         except IndexError:
             pass
 
-    if not branch:
+    # Invariant Verification (Axiom P-01)
+    if "--root" in sys.argv:
         try:
-            project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
-            branch = subprocess.check_output(
-                ["git", "-C", project_root, "branch", "--show-current"],
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
-        except Exception:
-            branch = ""
-        
-    if not branch:
-        branch = "main"
+            root_idx = sys.argv.index("--root")
+            project_root = sys.argv[root_idx + 1]
+            os.environ["PROJECT_ROOT"] = project_root
+        except IndexError:
+            pass
 
-    # 3. Dispatch saves
+    if not project_root or not os.path.exists(project_root):
+        print(f"FATAL: Invariant violated. PROJECT_ROOT invalid: {project_root}", file=sys.stderr)
+        sys.exit(101)
+
+    engine = NexusStateEngine(project_root) if NexusStateEngine else None
+    
+    windows_to_save = []
     if save_all:
-        try:
-            windows = subprocess.check_output(
-                ["tmux", "list-windows", "-t", session_id, "-F", "#{window_index}"],
-                stderr=subprocess.DEVNULL
-            ).decode().strip().split("\n")
-            
-            for w in windows:
-                if w.strip():
-                    save_window_state(session_id, w.strip(), branch)
-                    
-            subprocess.run(["tmux", "display-message", f"Saved {len(windows)} windows to branch: {branch}"], stderr=subprocess.DEVNULL)
-        except Exception as e:
-             pass
+        windows_to_save = subprocess.check_output(
+            ["tmux", "list-windows", "-t", session_id, "-F", "#{window_index}"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip().split("\n")
+    elif export_name:
+        current_win = subprocess.check_output(
+            ["tmux", "display-message", "-p", "#{window_index}"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+        windows_to_save = [current_win]
     else:
         try:
-            current_window = subprocess.check_output(
+            win_arg_idx = sys.argv.index("--window")
+            windows_to_save = [sys.argv[win_arg_idx + 1]]
+        except:
+            current_win = subprocess.check_output(
                 ["tmux", "display-message", "-p", "#{window_index}"],
                 stderr=subprocess.DEVNULL
             ).decode().strip()
-            
-            save_file = save_window_state(session_id, current_window, branch)
-            if save_file:
-                 subprocess.run(["tmux", "display-message", f"Saved window {current_window} → branches/{branch}"], stderr=subprocess.DEVNULL)
-        except Exception:
-             pass
+            windows_to_save = [current_win]
+
+    captured_count = 0
+    for w_idx in windows_to_save:
+        if not w_idx.strip(): continue
+        moment = capture_moment(session_id, w_idx.strip())
+        if not moment: continue
+
+        # Normal State Engine Save
+        if engine:
+            engine.set(f"session.windows.{w_idx}", moment)
+            for pane in moment.get("panes", []):
+                role = pane.get("role")
+                cmd = pane.get("command")
+                if role and role != "null" and cmd:
+                    engine.set(f"ui.slots.{role}.tool", cmd)
+            captured_count += 1
+
+        # Export if requested
+        if export_name:
+            path = export_composition(moment, export_name, project_root)
+            subprocess.run(["tmux", "display-message", f"Exported layout to {path.name}"], stderr=subprocess.DEVNULL)
+
+    if captured_count > 0 and not export_name:
+        subprocess.run(["tmux", "display-message", f"Momentum: Frozen {captured_count} window(s) in State Engine"], stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     main()

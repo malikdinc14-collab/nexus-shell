@@ -12,29 +12,65 @@ def log(msg):
         print(f"[DEBUG] {msg}", file=sys.stderr)
 
 def tmux(args):
-    cmd = ["tmux"] + args
-    log(f"TMUX: {' '.join(cmd)}")
+    # Try to find absolute path for tmux to be safe
+    tmux_path = "/usr/local/bin/tmux"
+    if not os.path.exists(tmux_path):
+        tmux_path = "/opt/homebrew/bin/tmux"
+    if not os.path.exists(tmux_path):
+        tmux_path = "tmux" # Fallback to PATH
+        
+    cmd = [tmux_path] + args
+    log(f"TMUX_EXEC: {' '.join(cmd)}")
     try:
         result = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode().strip()
-        log(f"  -> OK: {result[:100] if result else '(empty)'}")
+        log(f"  -> OK: {result[:100]}")
         return result
     except subprocess.CalledProcessError as e:
-        log(f"  -> ERROR: {e.output.decode()}")
+        error_msg = e.output.decode()
+        log(f"  -> TMUX_ERROR: {error_msg}")
+        # Print to stdout so it gets captured by the layout log
+        print(f"[!] TMUX FAILED: {' '.join(cmd)}\n    ERROR: {error_msg}", file=sys.stdout)
+        return ""
+    except Exception as e:
+        log(f"  -> CRITICAL_ERROR: {str(e)}")
         return ""
 
 def expand_vars(cmd, project_root):
     """Expand environment variables in command string"""
-    replacements = {
-        "$PROJECT_ROOT": project_root,
-        "$NEXUS_CORE": os.environ.get("NEXUS_CORE", ""),
-        "$NEXUS_HOME": os.environ.get("NEXUS_HOME", ""),
-        "$PARALLAX_CMD": os.environ.get("PARALLAX_CMD", ""),
-        "$EDITOR_CMD": os.environ.get("EDITOR_CMD", "nvim"),
-        "$NEXUS_FILES": os.environ.get("NEXUS_FILES", "yazi"),
-        "$NEXUS_CHAT": os.environ.get("NEXUS_CHAT", "zsh"),
+    import re
+    
+    # Use os.environ as base
+    env = os.environ.copy()
+    env["PROJECT_ROOT"] = project_root
+    
+    # Default fallbacks
+    defaults = {
+        "EDITOR_CMD": "nvim",
+        "NEXUS_FILES": "yazi",
+        "NEXUS_CHAT": "zsh",
+        "PARALLAX_CMD": "true",
+        "VIRTUAL_ROOT": project_root
     }
-    for var, val in replacements.items():
-        cmd = cmd.replace(var, val)
+    
+    for k, v in defaults.items():
+        if k not in env:
+            env[k] = v
+
+    # Expand $VAR and ${VAR}
+    def replace_var(match):
+        var_name = match.group(1) or match.group(2)
+        return env.get(var_name, f"${{{var_name}}}")
+
+    # Pattern for $VAR or ${VAR}
+    pattern = re.compile(r'\$(?:(\w+)|\{(\w+)\})')
+    
+    # Do expansion 3 times to handle nested vars (e.g. $NEXUS_CORE/$BOOT)
+    for _ in range(3):
+        new_cmd = pattern.sub(replace_var, cmd)
+        if new_cmd == cmd:
+            break
+        cmd = new_cmd
+        
     return cmd
 
 def build(config, target_pane, project_root, wrapper):

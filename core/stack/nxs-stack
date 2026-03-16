@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""
+nxs-stack - Nexus Stack Controller
+Manages the "Reservoir" of panes and performs join-pane/break-pane swaps.
+"""
+
+import sys
+import os
+import json
+import subprocess
+from pathlib import Path
+
+# Paths
+USER = os.getlogin()
+USER_TMP = Path(f"/tmp/nexus_{USER}")
+STACK_STATE = USER_TMP / "stacks.json"
+
+# Resolve Session ID
+SESSION_ID = os.environ.get("SESSION_ID")
+if not SESSION_ID:
+    try:
+        SESSION_ID = subprocess.check_output(["tmux", "display-message", "-p", "#S"]).decode().strip()
+    except:
+        SESSION_ID = None
+
+RESERVOIR = "NEXUS_RESERVOIR"
+
+def log(msg):
+    with open("/tmp/nexus_stack.log", "a") as f:
+        f.write(f"{msg}\n")
+
+def run_tmux(args):
+    cmd = ["tmux"] + args
+    try:
+        return subprocess.check_output(cmd).decode().strip()
+    except Exception as e:
+        log(f"TMUX Error: {e}")
+        return None
+
+def load_state():
+    if not STACK_STATE.exists():
+        return {}
+    try:
+        return json.loads(STACK_STATE.read_text())
+    except:
+        return {}
+
+def save_state(state):
+    STACK_STATE.parent.mkdir(parents=True, exist_ok=True)
+    STACK_STATE.write_text(json.dumps(state, indent=2))
+
+def resolve_intent(intent):
+    """Resolve a logical intent (e.g., intent:default) to a command."""
+    intent_name = intent.replace("intent:", "")
+    manifest_path = os.environ.get("WORKSPACE_MANIFEST")
+    
+    # Defaults
+    defaults = {
+        "default": os.environ.get("NEXUS_TERMINAL", "/bin/zsh"),
+        "menu": os.environ.get("NEXUS_MENU", f"{os.environ.get('NEXUS_HOME')}/modules/menu/bin/nexus-menu"),
+        "chat": os.environ.get("NEXUS_CHAT", "claude"),
+        "explorer": os.environ.get("NEXUS_FILES", "yazi")
+    }
+
+    if manifest_path and os.path.exists(manifest_path):
+        try:
+            with open(manifest_path) as f:
+                data = json.load(f)
+                personas = data.get("personas", {})
+                if intent_name in personas:
+                    log(f"Intent '{intent_name}' resolved from manifest: {personas[intent_name]}")
+                    return personas[intent_name]
+        except Exception as e:
+            log(f"Error reading manifest: {e}")
+
+    resolved = defaults.get(intent_name, defaults["default"])
+    log(f"Intent '{intent_name}' resolved to fallback: {resolved}")
+    return resolved
+
+def get_pane_info(pane_id):
+    """Get metadata for a pane."""
+    out = run_tmux(["display-message", "-p", "-t", pane_id, "#{pane_id}|#{@nexus_role}|#{@nexus_tab_name}"])
+    if not out: return None
+    parts = out.split("|")
+    return {
+        "id": parts[0],
+        "role": parts[1] if len(parts) > 1 else "",
+        "name": parts[2] if len(parts) > 2 else "Shell"
+    }
+
+def push(role, cmd, name=None):
+    """Create a new pane and swap it into the active slot."""
+    if cmd.startswith("intent:"):
+        cmd = resolve_intent(cmd)
+    
+    state = load_state()
+    
+    # 0. Local Context Discovery
+    focused_id = run_tmux(["display-message", "-p", "#{pane_id}"])
+    focused_role = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_role}"])
+    
+    if not role or role == "local":
+        # DEFAULT: If no role is set on the pane, the PANE_ID IS THE ROLE (Unique Slot)
+        role = focused_role if focused_role and focused_role != "null" else focused_id
+        log(f"Resolved 'local' to unique slot: {role}")
+
+    if role not in state:
+        state[role] = {"active_index": -1, "tabs": []}
+
+    # 1. Create the new pane in the Reservoir
+    new_pane_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}.0", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), cmd])
+    
+    tab_name = name or (Path(cmd.split()[-1]).name if "/" in cmd else "Shell")
+    
+    run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_role", role])
+    run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_tab_name", tab_name])
+
+    # 2. Identify the target pane to swap with
+    visible_pane = None
+    if role == focused_role or role == focused_id:
+        visible_pane = focused_id
+    else:
+        panes_out = run_tmux(["list-panes", "-a", "-F", "#{pane_id} #{@nexus_role}"])
+        for line in panes_out.split("\n"):
+            parts = line.split()
+            if len(parts) < 2: continue
+            pid, prole = parts[0], parts[1]
+            if prole == role:
+                win_info = run_tmux(["display-message", "-p", "-t", pid, "#{window_name}"])
+                if win_info != RESERVOIR:
+                    visible_pane = pid
+                    break
+
+    if not visible_pane:
+        # Fallback 1: Look for any pane with target role
+        if not visible_pane:
+            log(f"Target role '{role}' not visible. Checking reservoir mapping...")
+            # If it's already in the stack, we just push to reservoir and wait for switch
+            pass 
+
+    if not visible_pane and role != focused_id:
+         # Fallback 2: Choice popup
+         subprocess.run(["/Users/Shared/Projects/nexus-shell/core/stack/nxs-stack-popup", role, cmd])
+         return
+
+    if visible_pane:
+        # Perform the swap: Break the current one to Reservoir, Join the new one
+        run_tmux(["break-pane", "-d", "-s", visible_pane, "-t", f"{SESSION_ID}:{RESERVOIR}"])
+        run_tmux(["join-pane", "-s", new_pane_id, "-t", visible_pane])
+        # Re-focus the slot
+        run_tmux(["select-pane", "-t", visible_pane])
+    
+    # Update State
+    state[role]["tabs"].append({"id": new_pane_id, "name": tab_name})
+    state[role]["active_index"] = len(state[role]["tabs"]) - 1
+    save_state(state)
+    log(f"Pushed {tab_name} to {role}")
+
+def switch_to(role, index):
+    state = load_state()
+    
+    # 0. Local Context Discovery
+    focused_id = run_tmux(["display-message", "-p", "#{pane_id}"])
+    focused_role = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_role}"])
+
+    if role == "local":
+        role = focused_role if focused_role and focused_role != "null" else focused_id
+
+    if role not in state or index >= len(state[role]["tabs"]):
+        return
+
+    tabs = state[role]["tabs"]
+    new_pane_id = tabs[index]["id"]
+    
+    # 1. Identify the currently visible pane for this role
+    visible_pane = None
+    if role == focused_role or role == focused_id:
+        visible_pane = focused_id
+    else:
+        panes_out = run_tmux(["list-panes", "-a", "-F", "#{pane_id} #{@nexus_role}"])
+        for line in panes_out.split("\n"):
+            parts = line.split()
+            if len(parts) < 2: continue
+            pid, prole = parts[0], parts[1]
+            if prole == role:
+                win_info = run_tmux(["display-message", "-p", "-t", pid, "#{window_name}"])
+                if win_info != RESERVOIR:
+                    visible_pane = pid
+                    break
+
+    if visible_pane and visible_pane != new_pane_id:
+        # Perform the swap
+        run_tmux(["break-pane", "-d", "-s", visible_pane, "-t", f"{SESSION_ID}:{RESERVOIR}"])
+        run_tmux(["join-pane", "-s", new_pane_id, "-t", visible_pane])
+        run_tmux(["select-pane", "-t", visible_pane])
+        state[role]["active_index"] = index
+        save_state(state)
+        log(f"Switched {role} to tab {index}")
+
+def rotate(role, direction):
+    state = load_state()
+    
+    # NEW: Identify tool-specific interception (Neovim)
+    pid = run_tmux(["display-message", "-p", "#{pane_id}"])
+    
+    # Check if this pane is an "editor" role
+    focused_role = run_tmux(["display-message", "-p", "-t", pid, "#{@nexus_role}"])
+    current_cmd = run_tmux(["display-message", "-p", "-t", pid, "#{pane_current_command}"])
+    
+    # Get the NVIM_PIPE from environment if available
+    nvim_pipe = os.environ.get("NVIM_PIPE")
+    
+    # TRIGGER: Either role is editor OR the command is nvim
+    is_editor = (focused_role == "editor" or (current_cmd and "nvim" in current_cmd))
+    
+    if is_editor and nvim_pipe and os.path.exists(nvim_pipe):
+        log(f"Neovim interception triggered for {pid} Role={focused_role}")
+        cmd_str = ":tabnext<CR>" if direction > 0 else ":tabprev<CR>"
+        try:
+            # Explicitly call nvim from the environment or path
+            subprocess.run(["nvim", "--server", nvim_pipe, "--remote-send", cmd_str], check=False)
+            return # Intercepted
+        except Exception as e:
+            log(f"Neovim RPC Error: {e}")
+
+    if not role or role == "local":
+        # Resolve to current pane
+        role = run_tmux(["display-message", "-p", "-t", pid, "#{@nexus_role}"])
+        if not role or role == "null": role = pid
+
+    if role not in state or not state[role]["tabs"]: return
+    
+    current = state[role]["active_index"]
+    count = len(state[role]["tabs"])
+    new_idx = (current + direction) % count
+    switch_to(role, new_idx)
+
+def close_tab(role):
+    state = load_state()
+    # 0. Local Context Discovery
+    focused_id = run_tmux(["display-message", "-p", "#{pane_id}"])
+    focused_role = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_role}"])
+
+    if role == "local":
+        role = focused_role if focused_role and focused_role != "null" else focused_id
+
+    if role not in state or not state[role]["tabs"]: 
+        run_tmux(["kill-pane", "-t", focused_id])
+        return
+    
+    tabs = state[role]["tabs"]
+    current_idx = state[role]["active_index"]
+    
+    if len(tabs) <= 1:
+        run_tmux(["kill-pane", "-t", focused_id])
+        del state[role]
+    else:
+        # Switch to another tab first
+        pane_to_kill = tabs[current_idx]["id"]
+        rotate(role, 1)
+        run_tmux(["kill-pane", "-t", pane_to_kill])
+        # Clean state
+        state = load_state()
+        state[role]["tabs"] = [t for t in state[role]["tabs"] if t["id"] != pane_to_kill]
+        state[role]["active_index"] = 0
+    
+    save_state(state)
+
+def list_tabs(role):
+    state = load_state()
+    if role == "local":
+        pid = run_tmux(["display-message", "-p", "#{pane_id}"])
+        role = run_tmux(["display-message", "-p", "-t", pid, "#{@nexus_role}"])
+        if not role or role == "null": role = pid
+    
+    if role in state:
+        print(json.dumps(state[role]))
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        sys.exit(1)
+    
+    action = sys.argv[1]
+    if action == "push" and len(sys.argv) >= 4:
+        push(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
+    elif action == "next" and len(sys.argv) >= 3:
+        rotate(sys.argv[2], 1)
+    elif action == "prev" and len(sys.argv) >= 3:
+        rotate(sys.argv[2], -1)
+    elif action == "close" and len(sys.argv) >= 3:
+        close_tab(sys.argv[2])
+    elif action == "list" and len(sys.argv) >= 3:
+        list_tabs(sys.argv[2])

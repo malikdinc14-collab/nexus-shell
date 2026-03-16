@@ -1,0 +1,39 @@
+# config/pillars.yaml
+# Global Discovery Registry for Nexus Pillars
+
+pillars:
+  notes:
+    icon: "📝"
+    type: "NOTE"
+    ext: "*.md"
+    recursive: false
+
+  scripts:
+    icon: "🏗️"
+    type: "ACTION"
+    ext: "*.sh"
+    recursive: false
+
+  build:
+    icon: "🔨"
+    type: "ACTION"
+    ext: "*.sh"
+    recursive: false
+
+  launch:
+    icon: "🚀"
+    type: "ACTION"
+    ext: "*.sh"
+    recursive: false
+
+  vision:
+    icon: "👁️"
+    type: "VISION"
+    ext: "*.mmd"
+    recursive: true
+
+  agents:
+    icon: "🤖"
+    type: "ACTION"
+    ext: ["*.yaml", "*.md"]
+    recursive: false

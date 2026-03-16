@@ -1,0 +1,5 @@
+# pillars/sessions/_pillar.yaml
+name: "Tmux Sessions"
+icon: "📟"
+icon_script: "⚡"
+layout: "list"

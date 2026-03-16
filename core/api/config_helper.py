@@ -42,18 +42,26 @@ def main():
             except Exception as e:
                 print(f"# Error loading config {path}: {e}", file=sys.stderr)
 
+
     # Output for Shell Evaluation
-    print(f"export NEXUS_COMPOSITION='{config.get('composition', 'vscodelike')}'")
+    # Output for Shell Evaluation
+    def safe_export(key, val):
+        safe_val = str(val).strip().replace("\n", " ")
+        print(f"export {key}='{safe_val}'")
+
+    safe_export("NEXUS_COMPOSITION", config.get('composition', 'vscodelike'))
     tools = config.get('tools', {})
-    print(f"export NEXUS_EDITOR='{tools.get('editor', 'nvim')}'")
-    print(f"export NEXUS_FILES='{tools.get('files', 'yazi')}'")
-    print(f"export NEXUS_CHAT='{tools.get('chat', 'opencode')}'")
+    safe_export("NEXUS_EDITOR", tools.get('editor', 'nvim'))
+    safe_export("NEXUS_FILES", tools.get('files', 'yazi'))
+    safe_export("NEXUS_CHAT", tools.get('chat', 'opencode'))
+    safe_export("NEXUS_MENU", tools.get('menu', '$NEXUS_HOME/modules/menu/bin/nexus-menu'))
+    safe_export("NEXUS_TERMINAL", tools.get('terminal', '/bin/zsh -i'))
     
     # Parallax Specifics
     parallax = config.get('parallax', {})
-    print(f"export PX_ENABLED='{str(parallax.get('enabled', True)).lower()}'")
+    safe_export("PX_ENABLED", str(parallax.get('enabled', True)).lower())
     pillars = set(parallax.get('pillars', []))
-    print(f"export PX_PILLARS='{','.join(pillars)}'")
+    safe_export("PX_PILLARS", ','.join(pillars))
 
 if __name__ == "__main__":
     main()

@@ -16,7 +16,9 @@ trigger_matrix() {
         echo -e "\033[1;31m[!] GIT CONFLICTS DETECTED\033[0m"
         echo "Entering Merge Conflict Matrix..."
         # Update Telemetry for HUD
-        local temp_file=$(mktemp)
+        local tmp_dir="/tmp/nexus_$(whoami)"
+        mkdir -p "$tmp_dir/tmp"
+        local temp_file=$(mktemp "$tmp_dir/tmp/conflict_status.XXXXXX")
         jq '.agent.status = "blocked" | .agent.mission = "Resolve Conflicts"' /tmp/nexus_telemetry.json > "$temp_file" && mv "$temp_file" /tmp/nexus_telemetry.json
         
         # Load the specialized composition

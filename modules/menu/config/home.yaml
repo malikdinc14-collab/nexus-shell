@@ -1,0 +1,76 @@
+# modules/menu/config/home.yaml
+# Declarative Home Menu Configuration
+
+name: "Nexus Hub"
+layout: "list" # Visual Hint: grid | list
+icon: "🏠"
+
+items:
+  - label: "📝 Notes"
+    type: "PLANE"
+    payload: "notes"
+    icon: "📝"
+    description: "Intelligence & Knowledge"
+
+  - label: "🏗️ Scripts"
+    type: "PLANE"
+    payload: "scripts"
+    icon: "🏗️"
+    description: "Automation Hub"
+    layout: "list"
+
+  - label: "🤖 Agents"
+    type: "PLANE"
+    payload: "agents"
+    icon: "🤖"
+    description: "AI Workforce"
+
+  - label: "🧠 Models"
+    type: "PLANE"
+    payload: "models"
+    icon: "🧠"
+    description: "Local Inference"
+
+  - label: "📥 Shelf"
+    type: "PLANE"
+    payload: "shelf"
+    icon: "📥"
+    description: "Stowed Panes"
+
+  - label: "🔨 Build"
+    type: "PLANE"
+    payload: "build"
+    icon: "🔨"
+
+  - label: "🚀 Launch"
+    type: "PLANE"
+    payload: "launch"
+    icon: "🚀"
+
+  - separator: true
+
+  - label: "⚙️ Control Center"
+    type: "PLANE"
+    payload: "settings"
+    icon: "⚙️"
+    description: "System Governance"
+
+  - separator: true
+
+  - label: "🌍 Global Registry"
+    type: "PLANE"
+    payload: "global:"
+    icon: "🌍"
+    description: "Distro Intelligence"
+
+  - label: "👤 My Profile"
+    type: "PLANE"
+    payload: "profile:"
+    icon: "👤"
+    description: "User Personal"
+
+  - label: "💻 Project Workspace"
+    type: "PLANE"
+    payload: "workspace:"
+    icon: "💻"
+    description: "Local Context"

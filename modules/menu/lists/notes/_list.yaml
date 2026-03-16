@@ -1,0 +1,5 @@
+# pillars/notes/_pillar.yaml
+name: "Personal Notes"
+icon: "📝"
+icon_note: "📄"
+layout: "list"

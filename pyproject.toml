@@ -1,0 +1,21 @@
+[project]
+name = "nexus-shell"
+version = "2.1.0"
+description = "A modular, high-performance terminal IDE framework built on TMUX"
+authors = [
+    { name = "Samir Al-Sayad", email = "samir@example.com" }
+]
+dependencies = [
+    "pyyaml",
+    "requests",
+    "litellm",
+    "textual",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I"]
+ignore = []

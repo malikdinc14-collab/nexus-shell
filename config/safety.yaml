@@ -23,3 +23,20 @@ permissions_storage: ".nexus/permissions.json"
 
 # Modes that are EXEMPT (reserved for future use)
 exempt_modes: []
+
+# Privacy & Context Exclusions
+# These paths/patterns are NEVER broadcasted to agents via the Event Bus.
+privacy_exclusions:
+  - "\\.env$"
+  - "\\.env\\..*$"
+  - "\\.key$"
+  - "\\.pem$"
+  - "node_modules/"
+  - "\\.git/"
+  - "credentials"
+  - "vsh_history"
+  - "\\.zsh_history"
+  - "\\.ssh/"
+  - "\\.aws/"
+  - "\\.kube/"
+  - "secrets"

@@ -1,22 +1,21 @@
-#!/bin/bash
 # core/services/follower_bridge.sh
-# Background listener that tells Neovim to "ghost" Agent Zero.
+# Event-driven listener that tells Neovim to "ghost" Agent Zero.
 
-LOG_FILE="/tmp/agent0_sandbox_stream.log"
 NVIM_PIPE="/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}${NEXUS_WINDOW_SUFFIX}.pipe"
 
-echo "[*] Ghosting Bridge Active. Monitoring $LOG_FILE..."
+echo "[*] Ghosting Bridge Active. Subscribing to AI_EVENT..."
 
-tail -f "$LOG_FILE" | while read -r line; do
-    if [[ "$line" == *"[SIGNAL:OPEN]"* ]]; then
-        RAW_PATH=$(echo "$line" | sed 's/.*>> //')
-        
+# Subscribe to AI_EVENT on the bus
+nxs-event subscribe AI_EVENT | while read -r event; do
+    # Extract action and path from the event data
+    ACTION=$(echo "$event" | jq -r '.data.action // empty')
+    RAW_PATH=$(echo "$event" | jq -r '.data.path // empty')
+    
+    if [[ "$ACTION" == "ghost_open" && -n "$RAW_PATH" ]]; then
         # --- Remote-to-Local Path Translation ---
         # Agent Zero usually uses /a0/ as its internal project root.
-        # We translate this back to the local PROJECT_ROOT.
         LOCAL_PATH="$RAW_PATH"
         if [[ "$RAW_PATH" == /a0/* ]]; then
-            # Strip /a0/ and prepend project root
             REL_PATH="${RAW_PATH#/a0/}"
             LOCAL_PATH="$PROJECT_ROOT/$REL_PATH"
         fi

@@ -76,7 +76,7 @@ fi
 
 # Common bindings
 cat << EOF
-bind-key -n $KEY_SWAP run-shell "$NEXUS_HOME/lib/swap.sh"
+bind-key -n $KEY_SWAP run-shell "$NEXUS_HOME/core/lib/swap.sh"
 bind-key -n $KEY_COMMAND command-prompt -p ":" "run-shell '$NEXUS_HOME/core/boot/dispatch.sh %%'"
 EOF
 

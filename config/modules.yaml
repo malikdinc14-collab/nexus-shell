@@ -1,0 +1,9 @@
+# Default System Roles & Providers
+# Hierarchy: Project (.nexus/modules.yaml) -> User (~/.nexus/modules.yaml) -> Global (config/modules.yaml)
+
+roles:
+  editor: "nvim"
+  explorer: "yazi"
+  chat: "zsh -i"
+  viewer: "nxs-view"
+  terminal: "zsh -i"

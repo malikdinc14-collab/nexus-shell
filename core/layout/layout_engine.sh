@@ -2,6 +2,7 @@
 # layout_engine.sh - Staggered Synchronous Architect
 # V4: Pane-ID Tracking (Index Independent)
 
+
 nxs_assert() {
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
@@ -24,7 +25,51 @@ build_vscodelike() {
     
     # 1. TREE (Left)
     echo "    [*] Carving Sidebars..."
-    tmux split-window -h -b -l 30 -t "$CENTER_PANE" -c "$PROJECT_ROOT" "$WRAPPER $NEXUS_FILES '$PROJECT_ROOT'"
+    
+    # Multi-Root Hub: Launch Yazi with multiple tabs if workspace manifest exists
+    local -a EXPLORER_ARGS
+    EXPLORER_ARGS+=( "$PROJECT_ROOT" ) 
+    local ROOTS_ENV=""
+    local CWD_ARG="-c \"$PROJECT_ROOT\""
+    
+    # Check for manifest globally or locally
+    local MANIFEST="${WORKSPACE_MANIFEST:-$NEXUS_WORKSPACE_MANIFEST}"
+
+    if [[ -f "$MANIFEST" ]]; then
+        source "$NEXUS_HOME/core/lib/workspace_manager.sh"
+        # get_workspace_roots returns newline-separated paths
+        local RAW_ROOTS=$(get_workspace_roots "$MANIFEST")
+        
+        # Build arguments list robustly using a while loop and null-safe reading
+        EXPLORER_ARGS=()
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && EXPLORER_ARGS+=( "$line" )
+        done <<< "$RAW_ROOTS"
+        
+        # Build PIPE-separated roots for the lua plugin (handles spaces)
+        local ROOTS_LIST=$(printf "%s|" "${EXPLORER_ARGS[@]}")
+        ROOTS_ENV="-e NEXUS_WORKSPACE_ROOTS='${ROOTS_LIST%|}'"
+        
+        # CRITICAL: Start in neutral zone to prevent auto-opening a duplicate tab for PROJECT_ROOT
+        CWD_ARG="-c /tmp" 
+    fi
+
+    # Build the final command string with properly escaped arguments
+    local ARGS_STRING=""
+    for arg in "${EXPLORER_ARGS[@]}"; do
+        # Use printf %q to safely escape the path for the shell inside tmux
+        local escaped_arg=$(printf "%q" "$arg")
+        ARGS_STRING="$ARGS_STRING $escaped_arg"
+    done
+
+    # Explicitly pass YAZI_CONFIG_HOME to the split-window environment
+    local ENV_ARGS="$ROOTS_ENV -e YAZI_CONFIG_HOME='$YAZI_CONFIG_HOME' -e NEXUS_HOME='$NEXUS_HOME'"
+
+    local CMD="tmux split-window $ENV_ARGS $CWD_ARG -h -b -l 30 -t \"$CENTER_PANE\" \"$WRAPPER $NEXUS_FILES $ARGS_STRING\""
+    eval "$CMD"
+    
+    local TREE_PANE=$(tmux display-message -p '#{pane_id}')
+    tmux set-option -p -t "$TREE_PANE" @nexus_role "files"
     nxs_assert "Tree Split"
     $STAGGER
     
@@ -42,6 +87,8 @@ build_vscodelike() {
     # 4. PARALLAX (Top of Center)
     echo "    [*] Carving Center-Shell..."
     tmux split-window -v -b -l 8 -t "$CENTER_PANE" -c "$PROJECT_ROOT" "$WRAPPER $PARALLAX_CMD"
+    local MENU_PANE=$(tmux display-message -p '#{pane_id}')
+    tmux set-option -p -t "$MENU_PANE" @nexus_role "menu"
     nxs_assert "Parallax Split"
     $STAGGER
     
@@ -58,6 +105,7 @@ build_vscodelike() {
     # Final Step: Launch Editor in the remaining Center space
     echo "    [*] Solidifying Editor Core..."
     tmux send-keys -t "$CENTER_PANE" "$WRAPPER $EDITOR_CMD" Enter
+    tmux set-option -p -t "$CENTER_PANE" @nexus_role "editor"
     nxs_assert "Editor Initiation"
     
     # Set titles and focus
@@ -77,7 +125,7 @@ export BRIDGE="$NEXUS_CORE/bridge"
 WINDOW_ID="$1"
 LAYOUT="$2"
 SESSION_ID="$3"
-PROJECT_ROOT="$4"
+export PROJECT_ROOT="$4"
 
 echo "    [*] Seeking Composition: $LAYOUT"
 
@@ -91,7 +139,8 @@ if [[ "$LAYOUT" == "__saved_session__" ]]; then
     
     if [[ -n "$SAVED_LAYOUT" && "$SAVED_LAYOUT" != "{}" && "$SAVED_LAYOUT" != "null" ]]; then
         echo "    [*] Restoring layout for window $WINDOW_IDX from State Engine..."
-        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "$SAVED_LAYOUT" "$PROJECT_ROOT"
+        export STATE_JSON="$SAVED_LAYOUT"
+        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "" "$PROJECT_ROOT"
         exit $?
     fi
 
@@ -102,7 +151,8 @@ if [[ "$LAYOUT" == "__saved_session__" ]]; then
     
     if [[ -f "$STATE_FILE" ]]; then
         echo "    [*] Restoring legacy layout for window $WINDOW_IDX from $STATE_FILE..."
-        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "$STATE_FILE" "$PROJECT_ROOT"
+        export STATE_JSON=$(cat "$STATE_FILE")
+        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "" "$PROJECT_ROOT"
         exit $?
     else
         echo "    [!] No saved state found, loading default composition."
@@ -110,31 +160,72 @@ if [[ "$LAYOUT" == "__saved_session__" ]]; then
     fi
 fi
 
+
 # 1. Check for JSON Composition
 # Support absolute paths (e.g. from .nexus/compositions/saved.json)
 if [[ "$LAYOUT" == /* && -f "$LAYOUT" ]]; then
     COMP_JSON="$LAYOUT"
 else
-    COMP_JSON="$NEXUS_HOME/compositions/$LAYOUT.json"
+    COMP_JSON="$NEXUS_HOME/core/compositions/$LAYOUT.json"
+    # Also check project-local compositions
+    if [[ ! -f "$COMP_JSON" ]]; then
+        COMP_JSON="$PROJECT_ROOT/.nexus/compositions/$LAYOUT.json"
+    fi
 fi
 
 if [[ -f "$COMP_JSON" ]]; then
     echo "    [*] Applying Data-Driven Composition..."
-    # Get the starting pane ID for this window
-    START_PANE=$(tmux display-message -t "$WINDOW_ID" -p '#{pane_id}')
     
-    # Ensure all required environment variables are exported for the Python processor
-    # These may have been set by launcher.sh but need to be explicitly exported
-    export WRAPPER="${WRAPPER:-$NEXUS_CORE/boot/pane_wrapper.sh}"
-    export PARALLAX_CMD="${PARALLAX_CMD:-echo 'Parallax not configured'}"
-    export EDITOR_CMD="${EDITOR_CMD:-nvim}"
-    export NEXUS_FILES="${NEXUS_FILES:-yazi}"
-    export NEXUS_CHAT="${NEXUS_CHAT:-zsh}"
+    # NEW: Detect Momentum Snapshot type to use restore_layout logic
+    # Resolve Python Binary
+    # Resolve Python Binary reliably
+    if [[ -x "$NEXUS_HOME/.venv/bin/python3" ]]; then
+        Python_BIN="$NEXUS_HOME/.venv/bin/python3"
+    elif command -v python3 &>/dev/null; then
+        Python_BIN="python3"
+    else
+        Python_BIN="python"
+    fi
+    export Python_BIN
+
+IS_MOMENTUM=$("$Python_BIN" -c "
+import json, os
+try:
+    with open('$COMP_JSON') as f:
+        data = json.load(f)
+        print('true' if data.get('momentum', False) else 'false')
+except: print('false')
+")
+    
+    if [[ "$IS_MOMENTUM" == "true" ]]; then
+        echo "    [*] Composition identifies as Momentum Snapshot. Handing off to restore_layout..."
+        export STATE_JSON=$("$Python_BIN" -c "import json; print(json.dumps(json.load(open('$COMP_JSON'))['layout']))")
+        "$SCRIPT_DIR/restore_layout.sh" "$WINDOW_ID" "" "$PROJECT_ROOT"
+        exit $?
+    fi
+
+    # Standard Composition processing
+    START_PANE=$(tmux display-message -t "$WINDOW_ID" -p '#{pane_id}')
     
     echo "    [*] Processor target: $START_PANE, Root: $PROJECT_ROOT"
     
+    # Explicitly export all required components for the processor
+    export NEXUS_HOME="$NEXUS_HOME"
+    export NEXUS_CORE="$NEXUS_CORE"
+    export WRAPPER="$WRAPPER"
+    export PROJECT_ROOT="$PROJECT_ROOT"
+    export VIRTUAL_ROOT="${VIRTUAL_ROOT:-$PROJECT_ROOT}"
+    
+    # Resolve tool commands if not set
+    export PARALLAX_CMD="${PARALLAX_CMD:-true}"
+    export EDITOR_CMD="${EDITOR_CMD:-nvim}"
+    export NEXUS_FILES="${NEXUS_FILES:-yazi}"
+    export NEXUS_CHAT="${NEXUS_CHAT:-zsh}"
+
     # Execute the Python Processor
-    python3 "$SCRIPT_DIR/processor.py" "$COMP_JSON" "$START_PANE" "$PROJECT_ROOT"
+    LAYOUT_LOG="/tmp/nexus_layout.log"
+    echo "[$(date +%T)] Starting Processor: $COMP_JSON" > "$LAYOUT_LOG"
+    "$Python_BIN" "$SCRIPT_DIR/processor.py" "$COMP_JSON" "$START_PANE" "$PROJECT_ROOT" >> "$LAYOUT_LOG" 2>&1
     
     # Final Focus and State Save
     tmux set-window-option -t "$WINDOW_ID" @nexus_last_composition "$LAYOUT"

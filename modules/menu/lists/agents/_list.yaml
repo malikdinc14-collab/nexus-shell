@@ -1,0 +1,6 @@
+# pillars/agents/_pillar.yaml
+name: "AI Workforce"
+icon: "🤖"
+icon_script: "🤖"
+icon_note: "🤖"
+layout: "list"

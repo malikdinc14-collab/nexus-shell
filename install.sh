@@ -285,17 +285,16 @@ mkdir -p "$CONFIG_DIR"
 
 # Copy Nexus 2.0 structure
 cp -r "$NEXUS_HOME/core" "$CONFIG_DIR/"
-cp -r "$NEXUS_HOME/lib" "$CONFIG_DIR/"
-cp -r "$NEXUS_HOME/compositions" "$CONFIG_DIR/"
 cp -r "$NEXUS_HOME/config" "$CONFIG_DIR/"
-cp -r "$NEXUS_HOME/themes" "$CONFIG_DIR/"
-cp -r "$NEXUS_HOME/specs" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/docs" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/modules" "$CONFIG_DIR/"
+cp -r "$NEXUS_HOME/examples" "$CONFIG_DIR/"
 
 # Install Nexus actions to Parallax
 if [[ -d "$HOME/.parallax/content/actions" ]]; then
     echo "    Installing Nexus actions to Parallax..."
     mkdir -p "$HOME/.parallax/content/actions/nexus"
-    cp -rf "$NEXUS_HOME/actions/"* "$HOME/.parallax/content/actions/nexus/" 2>/dev/null || true
+    cp -rf "$NEXUS_HOME/core/actions/"* "$HOME/.parallax/content/actions/nexus/" 2>/dev/null || true
 fi
 
 # Copy example configs and integration files
@@ -316,7 +315,7 @@ echo ""
 echo "[4/6] Creating state directory..."
 NEXUS_STATE="/tmp/nexus_$USER_NAME"
 mkdir -p "$NEXUS_STATE/pipes"
-cp "$NEXUS_HOME/themes/nexus-cyber.json" "$NEXUS_STATE/theme.json" 2>/dev/null || true
+cp "$NEXUS_HOME/core/themes/nexus-cyber.json" "$NEXUS_STATE/theme.json" 2>/dev/null || true
 echo "    State directory: $NEXUS_STATE"
 
 # === Step 5: Add shell hooks ===

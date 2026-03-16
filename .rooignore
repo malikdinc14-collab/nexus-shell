@@ -1,0 +1,27 @@
+# Absolute Musts
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+.git/
+tools/
+external/
+nexus_env/
+services/
+
+# Build & Distribution
+build/
+dist/
+*.egg-info/
+
+# Model Data & Large JSONs (Indexing these is useless)
+data/*.json
+!data/presets.json
+*.bin
+*.gguf
+*.onnx
+
+# Documentation Bloat
+site/
+_build/

@@ -1,0 +1,5 @@
+# core/lists/system/_list.yaml
+name: "System Control"
+icon: "⚙️"
+layout: "list"
+icon_script: "🛠️"

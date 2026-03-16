@@ -6,6 +6,7 @@
 # 1. Zero-Entropy Path Resolution
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export NEXUS_SCRIPTS="$SCRIPT_DIR"
+export ZDOTDIR="$NEXUS_HOME/config/zsh"
 
 # 2. Process Containment: Cleanup children on exit
 trap 'pkill -P $$ 2>/dev/null; exit 0' SIGTERM SIGHUP SIGINT

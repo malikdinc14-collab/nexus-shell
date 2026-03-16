@@ -1,0 +1,26 @@
+# Nexus User Stacks
+# =================
+# Define your preferred tool collections for each logical role.
+# These will appear in the Alt-X -> Alt-E drill-down.
+
+stacks:
+  chat:
+    - pi
+    - opencode
+    - aider
+    - gptme
+    - claude
+  editor:
+    - nvim
+    - micro
+    - vim
+  files:
+    - yazi
+    - ranger
+    - lf
+  terminal:
+    - /bin/zsh
+    - /bin/bash
+  menu:
+    - $NEXUS_HOME/modules/menu/bin/nexus-menu
+    - library

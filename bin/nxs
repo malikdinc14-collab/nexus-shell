@@ -1,1 +1,63 @@
-../core/boot/launcher.sh
+#!/bin/bash
+# Nexus Shell Unified CLI Dispatcher
+# V1: Professional Subcommand Routing
+
+NEXUS_BIN="$(cd "$(dirname "$0")" && pwd)"
+export NEXUS_HOME="$(cd "$NEXUS_BIN/.." && pwd)"
+export NEXUS_CORE="$NEXUS_HOME/core"
+
+show_help() {
+    echo -e "\033[1;36m🌌 Nexus Shell CLI\033[0m"
+    echo "Usage: nxs [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  boot [args]    Launch a new station (default)"
+    echo "  stop           Kill all active Nexus stations and background daemons"
+    echo "  list           List available layouts (compositions) and profiles"
+    echo "  doctor         Check system health and dependencies"
+    echo "  status         Show active sessions and station info"
+    echo "  version        Show version information"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help     Show this help message"
+}
+
+case "$1" in
+    boot|"")
+        shift
+        [[ "$1" == "boot" ]] && shift
+        exec "$NEXUS_CORE/boot/launcher.sh" "$@"
+        ;;
+    stop)
+        shift
+        exec "$NEXUS_CORE/boot/stop.sh" "$@"
+        ;;
+    list)
+        shift
+        # Re-use logic from launcher.sh --list
+        exec "$NEXUS_CORE/boot/launcher.sh" --list
+        ;;
+    doctor)
+        shift
+        if [[ -f "$NEXUS_CORE/boot/doctor.sh" ]]; then
+            exec "$NEXUS_CORE/boot/doctor.sh" "$@"
+        else
+            echo "[!] Error: Doctor script not found at $NEXUS_CORE/boot/doctor.sh"
+            exit 1
+        fi
+        ;;
+    status)
+        shift
+        tmux list-sessions | grep "^nexus_" || echo "No active Nexus stations."
+        ;;
+    version)
+        echo "Nexus Shell v2.1.0 (Sovereign Pro)"
+        ;;
+    -h|--help|help)
+        show_help
+        ;;
+    *)
+        # Fallback to boot if first arg looks like a project/flag
+        exec "$NEXUS_CORE/boot/launcher.sh" "$@"
+        ;;
+esac

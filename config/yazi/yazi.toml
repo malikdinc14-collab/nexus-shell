@@ -2,11 +2,29 @@
 # VSCode-style file navigator
 
 [mgr]
-ratio = [2, 1, 0]
+# Sovereign Navigation: Hide parent by default for VSCode-like feel
+ratio = [0, 1, 0]
 show_hidden = true
 sort_by = "natural"
 sort_dir_first = true
 linemode = "size"
+
+[status]
+# Explicitly strip 'mode' and 'tag' to maintain Modeless Sovereignty
+left = [
+  { name = "pos", collect = "count" },
+]
+right = [
+  { name = "size", collect = "size" },
+  { name = "mtime", collect = "mtime" },
+]
+
+[header]
+# Ensure no mode-related strings leak into the header
+left = [
+  { name = "title", collect = "title" },
+]
+right = []
 
 [opener]
 edit = [

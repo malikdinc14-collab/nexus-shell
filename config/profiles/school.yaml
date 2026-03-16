@@ -1,0 +1,25 @@
+# School Profile
+# Specialized environment for AI-assisted research and learning.
+
+# Metadata
+name: School
+icon: 🎓
+description: AI-assisted research and pedagogy environment.
+
+# Environment Variables
+env:
+  NEXUS_PROJECT: school
+  # Force the school composition
+  NEXUS_COMPOSITION: school
+  # Set specific editor paths if needed
+  SCHOOL_HOME: /Users/Shared/Projects/school
+
+# Pillar Discovery (Cascading)
+# The menu will discover items in this order: global -> profile (school) -> project (.nexus)
+pillars:
+  - name: Theory
+    path: notes/theory
+  - name: Vision
+    path: .nexus/vision
+  - name: Labs
+    path: scripts/labs

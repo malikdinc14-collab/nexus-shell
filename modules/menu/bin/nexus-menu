@@ -1,76 +1,22 @@
 #!/usr/bin/env zsh
-# bin/nexus-menu
-# The "Dumb Dashboard" Interface for Nexus
-# Renders the FZF menu and handles execution in-pane.
-# Tools run IN this pane — when they exit, the menu comes back.
+# modules/menu/bin/nexus-menu
+# The Nexus Dashboard — Textual-powered Sovereign Menu (NXP).
 
-# Find the real directory (resolve symlinks)
 BIN_DIR="${0:A:h}"
-ENGINE="${BIN_DIR}/px-engine"
-ROUTER="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}/core/exec/router.sh"
+NXM_BIN="${BIN_DIR}/nxm.py"
 
-# Start at the home context by default
-CURRENT_CTX="${1:-home}"
+# Standardize environment
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}"
+export PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 
-while true; do
-    # Render items via the YAML engine, pipe to FZF
-    selection=$( "$ENGINE" --context "$CURRENT_CTX" | fzf \
-        --ansi --layout=reverse --border \
-        --prompt="[$CURRENT_CTX] > " \
-        --header="Nexus Menu" \
-        --bind "esc:abort" )
-    fzf_exit=$?
+# Resolve Python Binary
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && Python_BIN="$NEXUS_HOME/.venv/bin/python3" \
+|| Python_BIN="${Python_BIN:-python3}"
 
-    # User pressed Escape or Ctrl-C
-    if [[ $fzf_exit -ne 0 ]]; then
-        # If we're not at home, go back to home
-        if [[ "$CURRENT_CTX" != "home" ]]; then
-            CURRENT_CTX="home"
-        fi
-        continue
-    fi
-
-    # Parse the tab-delimited selection: LABEL<TAB>TYPE<TAB>PAYLOAD
-    e_type=$(echo "$selection" | awk -F'\t' '{print $2}' | xargs)
-    payload=$(echo "$selection" | awk -F'\t' '{print $3}' | xargs)
-
-    case "$e_type" in
-        PLANE|FOLDER)
-            # Navigate into a sub-menu
-            CURRENT_CTX="$payload"
-            continue
-            ;;
-        SEPARATOR|DISABLED|NONE)
-            # Non-interactive items, ignore
-            continue
-            ;;
-        ACTION)
-            # Run the tool/command IN THIS PANE with full TTY attachment
-            clear
-            # Execute with explicit TTY to fix terminal UI apps like nvim
-            eval "$payload" < /dev/tty > /dev/tty
-            # Tool exited — loop back to the same context
-            continue
-            ;;
-        PLACE)
-            # cd in this shell, then continue the menu
-            cd "$payload" 2>/dev/null || true
-            continue
-            ;;
-        NOTE|DOC)
-            # View in this pane with glow or less, then return to menu
-            clear
-            if command -v glow &>/dev/null; then
-                glow "$payload" -p
-            else
-                less "$payload"
-            fi
-            continue
-            ;;
-        *)
-            # Unknown type — route externally (fallback)
-            echo "${e_type}|${payload}" | "$ROUTER"
-            continue
-            ;;
-    esac
-done
+# Launch NXM
+if [[ -f "$NXM_BIN" ]]; then
+    "$Python_BIN" "$NXM_BIN" "$@"
+else
+    echo "CRITICAL: Nexus Menu Binary (nxm.py) not found at $NXM_BIN"
+    exit 1
+fi

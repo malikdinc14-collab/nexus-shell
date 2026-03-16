@@ -1,0 +1,38 @@
+# Nexus Shell Agent Config Schema
+# Place at: .nexus/agents/default.yaml
+#
+# All model traffic routes through the LiteLLM proxy (localhost:8080/v1).
+# Change `model` to switch between cloud or local — no other plumbing needed.
+
+# Backend process to spawn in the @agent pane
+# Options: claude-code | pi | opencode
+backend: claude-code
+
+# LiteLLM proxy endpoint (your unified model gateway)
+api_base: http://localhost:8080/v1
+
+# Model to use — must match a model_name in LiteLLM/litellm_config.yaml
+# Cloud:  anthropic/claude-sonnet-4 | google/gemini-2.5-flash | deepseek/deepseek-chat
+# Local:  Qwen3-4B (or any locally served model)
+model: anthropic/claude-sonnet-4
+
+# System prompt / role from agency-agents/ (optional)
+# Path relative to the agency-agents repo or absolute
+# role: /Users/Shared/Projects/external_repos/agency-agents/engineering/senior-engineer.md
+role: null
+
+# Context plugin (optional)
+# superpowers: loads .claude-plugin skills and hooks from the superpowers repo
+# context-mode: loads .claude/CLAUDE.md and MCP config
+# Options: superpowers | context-mode | null
+context: null
+
+# RAG backend (optional)
+# openviking: indexes the project and injects retrieved context at spawn
+# Options: openviking | null
+rag: null
+
+# Extra flags passed directly to the backend process
+flags: []
+# claude-code examples: ["--dangerously-skip-permissions"]
+# pi examples:          ["--stream"]

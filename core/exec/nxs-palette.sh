@@ -44,7 +44,7 @@ for cmd in registry['commands']:
 "
 
     # 3. Compositions
-    ls "$NEXUS_HOME/compositions"/*.json 2>/dev/null | while read f; do
+    ls "$NEXUS_HOME/core/compositions"/*.json 2>/dev/null | while read f; do
         name=$(basename "$f" .json)
         echo "COMP: $name | Launch layout"
     done
@@ -56,7 +56,7 @@ for cmd in registry['commands']:
     done
 
     # 5. Themes
-    ls "$NEXUS_HOME/config/themes"/*.yaml 2>/dev/null | while read f; do
+    ls "$NEXUS_HOME/core/themes"/*.json 2>/dev/null | while read f; do
         name=$(basename "$f" .yaml)
         echo "THEME: $name | Apply color theme"
     done

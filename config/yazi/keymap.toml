@@ -2,17 +2,25 @@
 
 [mgr]
 keymap = [
-    # Navigation (vim-style)
+    # Navigation (Sovereign Anchored)
     { on = ["k"], run = "arrow -1", desc = "Move up" },
     { on = ["j"], run = "arrow 1", desc = "Move down" },
-    { on = ["h"], run = "leave", desc = "Go to parent" },
-    { on = ["l"], run = "enter", desc = "Enter directory" },
+    { on = ["h"], run = "plugin nexus-sidebar --args leave", desc = "Go to parent (Anchored)" },
+    { on = ["l"], run = "plugin nexus-sidebar --args enter", desc = "Enter directory" },
     
-    # Navigation (arrow keys)
+    # Navigation (arrow keys - Anchored)
     { on = ["<Up>"], run = "arrow -1", desc = "Move up" },
     { on = ["<Down>"], run = "arrow 1", desc = "Move down" },
-    { on = ["<Left>"], run = "leave", desc = "Go to parent" },
-    { on = ["<Right>"], run = "enter", desc = "Enter directory" },
+    { on = ["<Left>"], run = "plugin nexus-sidebar --args leave", desc = "Go to parent" },
+    { on = ["<Right>"], run = "plugin nexus-sidebar --args enter", desc = "Enter directory" },
+
+    # Tabs (Project Switching)
+    { on = ["1"], run = "tab_switch 0", desc = "Switch to Tab 1" },
+    { on = ["2"], run = "tab_switch 1", desc = "Switch to Tab 2" },
+    { on = ["3"], run = "tab_switch 2", desc = "Switch to Tab 3" },
+    { on = ["4"], run = "tab_switch 3", desc = "Switch to Tab 4" },
+    { on = ["["], run = "tab_switch --relative -1", desc = "Previous Project Tab" },
+    { on = ["]"], run = "tab_switch --relative 1", desc = "Next Project Tab" },
     
     { on = ["g", "g"], run = "arrow -99999999", desc = "Go to top" },
     { on = ["G"], run = "arrow 99999999", desc = "Go to bottom" },

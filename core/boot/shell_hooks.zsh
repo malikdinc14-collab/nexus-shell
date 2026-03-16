@@ -13,8 +13,8 @@ mkdir -p "$NEXUS_STATE"
 # === edit/view Commands ===
 # These work inside Nexus sessions to open files in the editor/render pane
 
-alias edit="$NEXUS_HOME/lib/open.sh edit"
-alias view="$NEXUS_HOME/lib/open.sh view"
+alias edit="$NEXUS_HOME/core/lib/open.sh edit"
+alias view="$NEXUS_HOME/core/lib/open.sh view"
 
 # === Parallax Integration ===
 # Only auto-link inside Nexus sessions or if explicitly forced

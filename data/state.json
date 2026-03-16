@@ -1,0 +1,38 @@
+{
+  "slots": [
+    {
+      "slot_id": "slot-8083",
+      "name": "lazy-mock-agent-a",
+      "port": 8083,
+      "model_id": "mock-agent-a",
+      "backend": "mock",
+      "status": "exhausted",
+      "created_at": "2026-03-15T13:26:23.031958",
+      "requests_count": 1,
+      "input_tokens": 10,
+      "output_tokens": 13,
+      "cost_usd": 0.00023,
+      "memory_mb": null,
+      "uptime_seconds": 352,
+      "group_id": "stress-test",
+      "metadata": {},
+      "config": {
+        "model_id": "mock-agent-a",
+        "backend": "mock",
+        "model_path": null,
+        "port": 8083,
+        "name": "lazy-mock-agent-a",
+        "draft_model": null,
+        "kv_bits": null,
+        "max_tokens": null,
+        "temperature": 0.7,
+        "memory_limit": null,
+        "context_length": null,
+        "gpu_memory_fraction": null,
+        "max_cost_usd": 0.0001,
+        "metadata": {}
+      }
+    }
+  ],
+  "updated_at": "2026-03-15T13:32:15.471272"
+}
