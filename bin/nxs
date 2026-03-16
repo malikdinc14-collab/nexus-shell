@@ -20,12 +20,18 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  -h, --help     Show this help message"
+    echo "  -d, --debug    Enable debug mode (centralized logging window)"
 }
 
 case "$1" in
     boot|"")
         shift
         [[ "$1" == "boot" ]] && shift
+        exec "$NEXUS_CORE/boot/launcher.sh" "$@"
+        ;;
+    --debug|-d)
+        export NEXUS_DEBUG=1
+        shift
         exec "$NEXUS_CORE/boot/launcher.sh" "$@"
         ;;
     stop)

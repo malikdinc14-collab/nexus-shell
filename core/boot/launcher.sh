@@ -138,6 +138,10 @@ while [[ $# -gt 0 ]]; do
             echo -e "\n\033[1;36m[*] Available Profiles:\033[0m"
             ls "$NEXUS_HOME/config/profiles"/*.yaml | xargs -n 1 basename | sed 's/\.yaml//' | awk '{print "  - " $1}'
             exit 0 ;;
+        --debug|-d)
+            export NEXUS_DEBUG=1
+            set -x
+            shift ;;
         *) shift ;; 
     esac
 done
@@ -357,6 +361,12 @@ fi
 
 if ! tmux has-session -t "$SESSION_ID:HUD" 2>/dev/null; then
     tmux new-window -d -t "$SESSION_ID:10" -n "HUD" -c "$PROJECT_ROOT" "$NEXUS_HOME/core/hud/renderer.sh"
+fi
+
+if [[ "$NEXUS_DEBUG" == "1" ]]; then
+    if ! tmux has-session -t "$SESSION_ID:DEBUG" 2>/dev/null; then
+        tmux new-window -d -t "$SESSION_ID:11" -n "DEBUG" -c "$PROJECT_ROOT" "$NEXUS_HOME/core/boot/debug_tail.sh"
+    fi
 fi
 
 rm -rf "/tmp/nexus_$(whoami)/$PROJECT_NAME/pipes"
