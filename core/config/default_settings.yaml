@@ -9,6 +9,8 @@ tools:
   editor: nvim
   files: yazi
   chat: opencode
+stack:
+  role_routing: true
 parallax:
   enabled: true
   pillars:

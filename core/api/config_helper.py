@@ -57,6 +57,10 @@ def main():
     safe_export("NEXUS_MENU", tools.get('menu', '$NEXUS_HOME/modules/menu/bin/nexus-menu'))
     safe_export("NEXUS_TERMINAL", tools.get('terminal', '/bin/zsh -i'))
     
+    # Stack Settings
+    stack = config.get('stack', {})
+    safe_export("NEXUS_ROLE_ROUTING", str(stack.get('role_routing', True)).lower())
+    
     # Parallax Specifics
     parallax = config.get('parallax', {})
     safe_export("PX_ENABLED", str(parallax.get('enabled', True)).lower())

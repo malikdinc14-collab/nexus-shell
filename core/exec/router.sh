@@ -29,18 +29,19 @@ get_pane_by_title() {
 EDITOR_PANE=$(get_pane_by_title "editor")
 TERM_PANE=$(get_pane_by_title "terminal")
 
+# Determine Execution Context
+# If NXS_STRICT_LOCAL is set, we never jump.
+STRICT_LOCAL="${NXS_STRICT_LOCAL:-false}"
+
 case "$TYPE" in
     PLACE)
         # Directory Navigation
-        if [[ -n "$TMUX" ]]; then
-            if [[ -n "$TERM_PANE" ]]; then
-                tmux send-keys -t "$TERM_PANE" "cd \"$DATA\" && clear" Enter
-            else
-                tmux send-keys "cd \"$DATA\" && clear" Enter
-            fi
+        if [[ "$STRICT_LOCAL" == "false" && -n "$TERM_PANE" ]]; then
+            tmux send-keys -t "$TERM_PANE" "cd \"$DATA\" && clear" Enter
         else
             cd "$DATA" || exit
-            zsh
+            clear
+            exec zsh -i
         fi
         ;;
 
@@ -56,69 +57,37 @@ case "$TYPE" in
                 ":focus")     "${NEXUS_HOME}/core/commands/focus.sh" ;;
                 ":debug")     "${NEXUS_HOME}/core/exec/dap_handler.sh" "$COMMAND_ARGS" ;;
                 *)
-                    # If it's a colon command but not recognized, treat as regular action
-                    if [[ -n "$TMUX" ]]; then
-                        if [[ -n "$TERM_PANE" ]]; then
-                            tmux send-keys -t "$TERM_PANE" "$DATA" Enter
-                        else
-                            tmux send-keys "$DATA" Enter
-                        fi
-                    else
-                        "${NEXUS_HOME}/core/exec/guard.sh" "$DATA"
-                        echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
-                        read -r
-                    fi
+                    # execute locally
+                    eval "$DATA"
                     ;;
             esac
-        elif [[ -n "$TMUX" ]]; then
-            if [[ -n "$TERM_PANE" ]]; then
-                # Wrapping tmux send-keys is harder, but for local term execution:
-                tmux send-keys -t "$TERM_PANE" "$DATA" Enter
-            else
-                tmux send-keys "$DATA" Enter
-            fi
+        elif [[ "$STRICT_LOCAL" == "false" && -n "$TERM_PANE" ]]; then
+            tmux send-keys -t "$TERM_PANE" "$DATA" Enter
         else
-            "${NEXUS_HOME}/core/exec/guard.sh" "$DATA"
-            echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
-            read -r
+            # Execute in current pane
+            eval "$DATA"
         fi
         ;;
 
     NOTE|DOC)
         # Open in Editor or Viewer
-        if [[ -n "$TMUX" ]]; then
-            if [[ -n "$EDITOR_PANE" ]]; then
-                # Send escape to ensure we are in normal mode, then open the file
-                tmux send-keys -t "$EDITOR_PANE" Escape Escape ":e $DATA" Enter
-            else
-                # Popup window for the note if no editor exists
-                tmux display-popup -w 80% -h 80% -E "glow \"$DATA\" -p || less \"$DATA\""
-            fi
+        if [[ "$STRICT_LOCAL" == "false" && -n "$EDITOR_PANE" ]]; then
+            # Send escape to ensure we are in normal mode, then open the file
+            tmux send-keys -t "$EDITOR_PANE" Escape Escape ":e $DATA" Enter
         else
-            if command -v glow &>/dev/null; then
-                glow "$DATA" -p
-            else
-                cat "$DATA"
-            fi
-            echo -e "\n\033[1;30m>>> Press Enter to return to menu\033[0m"
-            read -r
+            # execute in current pane
+            ${NEXUS_EDITOR:-nvim} "$DATA"
         fi
         ;;
 
     MODEL|AGENT)
-        # GAP Sovereignty Check
-        if [[ -f "${NEXUS_HOME}/core/services/gap_bridge.sh" ]]; then
-            # Check if this command is allowed (Advisory mode for now)
-            ${NEXUS_HOME}/core/services/gap_bridge.sh check-exec "$DATA" || echo -e "\033[0;31m[GAP WARNING] Command not in ACL\033[0m"
-        fi
-
         # Open the AI Agent connection 
         echo -e "\033[1;34m🤖 Connecting to $DATA...\033[0m"
         if command -v px-agent &>/dev/null; then
             px-agent chat "$DATA"
         else
-            echo "px-agent not found in path."
-            sleep 2
+            # fallback to direct bin
+            "$NEXUS_HOME/modules/agents/bin/px-agent" chat "$DATA"
         fi
         ;;
 
@@ -126,7 +95,7 @@ case "$TYPE" in
         # Switch into a project workspace
         echo "Starting Workspace: $DATA"
         cd "$DATA" || exit
-        zsh
+        exec zsh -i
         ;;
         
     RAW)

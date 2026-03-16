@@ -11,6 +11,7 @@ NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
 LOG_FILE="/tmp/nexus_menu.log"
+export NXS_STRICT_LOCAL=true
 
 # Resolve Python Binary
 [[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && Python_BIN="$NEXUS_HOME/.venv/bin/python3" \
@@ -97,15 +98,15 @@ STACK_BIN="$NEXUS_HOME/core/stack/nxs-stack"
 # Helper: Check if an identity is already in the local stack
 check_stack() {
     local identity="$1"
-    local role="${NXS_TARGET_PANE:-local}"
-    "$STACK_BIN" list "$role" | jq -e ".tabs | to_entries | .[] | select(.value.name == \"$identity\") | .key" > /dev/null
+    # Always use "local" - resolves to current focused pane at call time
+    "$STACK_BIN" list "local" | jq -e ".tabs | to_entries | .[] | select(.value.name == \"$identity\") | .key" > /dev/null
 }
 
 # Helper: Get index of identity in local stack
 get_stack_idx() {
     local identity="$1"
-    local role="${NXS_TARGET_PANE:-local}"
-    "$STACK_BIN" list "$role" | jq -r ".tabs | to_entries | .[] | select(.value.name == \"$identity\") | .key"
+    # Always use "local" - resolves to current focused pane at call time
+    "$STACK_BIN" list "local" | jq -r ".tabs | to_entries | .[] | select(.value.name == \"$identity\") | .key"
 }
 
 # 2. Handle Verbs
@@ -134,7 +135,7 @@ case "$VERB" in
                  nvim --server "$NVIM_PIPE" --remote-send ":tabedit $PAYLOAD<CR>" 2>/dev/null
             fi
             
-            "$STACK_BIN" switch "${NXS_TARGET_PANE:-local}" "$IDX"
+            "$STACK_BIN" switch "local" "$IDX"
             exit 0
         fi
 
@@ -177,7 +178,7 @@ case "$VERB" in
             if check_stack "$IDENTITY" && [[ "$INTENT" == "swap" || "$NXS_CALLER" == "menu" ]]; then
                 IDX=$(get_stack_idx "$IDENTITY")
                 log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
-                "$STACK_BIN" switch "${NXS_TARGET_PANE:-local}" "$IDX"
+                "$STACK_BIN" switch "local" "$IDX"
                 exit 0
             fi
             
@@ -197,7 +198,8 @@ case "$VERB" in
         CMD=$(get_global_action "$PAYLOAD")
         if [[ -n "$CMD" ]]; then
              log "Resolved global action: $PAYLOAD -> $CMD"
-             "$NEXUS_HOME/core/stack/nxs-stack" push "terminal" "$CMD"
+             # Execute in LOCAL stack, not the 'terminal' role
+             "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$CMD" "$PAYLOAD"
              exit 0
         fi
 
@@ -205,28 +207,30 @@ case "$VERB" in
         CMD=$(get_action "run" "$ITEM_TYPE")
         
         # Determine Target Slot (Role)
-        # If intent is 'swap', we target the LOCAL slot (Active Pane)
-        if [[ "$INTENT" == "swap" ]]; then
-            TARGET_ROLE="local"
-        else
-            TARGET_ROLE="${NXS_DISPATCH_ROLE:-terminal}"
-        fi
+        # Always target the LOCAL slot (Active Pane) for menu-originated actions
+        TARGET_ROLE="local"
 
         if [[ -n "$CMD" ]]; then
             log "Execution: Intent=$INTENT | Role=$TARGET_ROLE | Cmd=$CMD"
             
             case "$INTENT" in
                 replace)
-                    "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}"
+                    "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}" "$IDENTITY"
                     ;;
                 push|*)
-                    "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}"
+                    "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}" "$IDENTITY"
                     ;;
             esac
         else
             log "Routing: Intent=$INTENT | Role=$TARGET_ROLE | Payload=$PAYLOAD"
-            ROUTER_CMD="echo '$ITEM_TYPE|$PAYLOAD' | ${NEXUS_HOME}/core/exec/router.sh"
-            "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$ROUTER_CMD"
+            # Modernization: If it's an ACTION and we have no mapping, execute directly instead of using router.sh
+            if [[ "$ITEM_TYPE" == "ACTION" ]]; then
+                 "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$PAYLOAD" "$IDENTITY"
+            else
+                 # Fallback for structured types (PLACE, NOTE etc)
+                 ROUTER_CMD="echo '$ITEM_TYPE|$PAYLOAD' | ${NEXUS_HOME}/core/exec/router.sh"
+                 "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$ROUTER_CMD"
+            fi
         fi
         ;;
     context)

@@ -485,6 +485,7 @@ tmux set-environment -g WORKSPACE_MANIFEST "$WORKSPACE_MANIFEST"
 tmux set-environment -g YAZI_CONFIG_HOME "$YAZI_CONFIG_HOME"
 tmux set-environment -g NVIM_PIPE "$NVIM_PIPE"
 tmux set-environment -g PROJECT_ROOT "$PROJECT_ROOT"
+tmux set-environment -g NEXUS_ROLE_ROUTING "$NEXUS_ROLE_ROUTING"
 
 # ANTI-GHOSTING: Force status bar sanity
 tmux set-option -g status on
