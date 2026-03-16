@@ -84,7 +84,7 @@ def load_metadata(layers: list[Path]) -> dict:
             try:
                 data = yaml.safe_load(m_file.read_text()) or {}
                 meta.update(data)
-            except:
+            except (yaml.YAMLError, OSError):
                 pass
         
         # Load Shadow (exclusion list)
@@ -95,7 +95,7 @@ def load_metadata(layers: list[Path]) -> dict:
                     name = line.strip()
                     if name:
                         meta["_hide"].add(name)
-            except:
+            except OSError:
                 pass
     return meta
 
@@ -110,7 +110,13 @@ def render_home() -> list:
         home_files.append(USER_CONFIG / "profiles" / ACTIVE_PROFILE / "home.yaml")
     home_files.append(PROJECT_ROOT / ".nexus" / "home.yaml")
 
-    with open("/tmp/nexus_menu_debug.log", "a") as f:
+    _menu_debug_log = "/tmp/nexus_menu_debug.log"
+    try:
+        if os.path.exists(_menu_debug_log) and os.path.getsize(_menu_debug_log) > 100_000:
+            os.rename(_menu_debug_log, _menu_debug_log + ".old")
+    except OSError:
+        pass
+    with open(_menu_debug_log, "a") as f:
         f.write(f"\n[Engine] Home Search: {len(home_files)} locations\n")
         f.write(f"[Engine] Project Root: {PROJECT_ROOT}\n")
 
@@ -126,7 +132,7 @@ def render_home() -> list:
             f.write("[Engine] ERROR: No home.yaml found anywhere!\n")
         return [fmt("Error: No home.yaml found", "ERROR", "NONE")]
 
-    with open("/tmp/nexus_menu_debug.log", "a") as f:
+    with open(_menu_debug_log, "a") as f:
         f.write(f"[Engine] Loading: {winning_hf}\n")
 
     try:
@@ -242,7 +248,7 @@ def get_items(context: str) -> list:
                                     for line in output.split("\n"):
                                         seen[f"{f.name}_{line}"] = line
                             continue # Skip adding the script itself
-                        except:
+                        except (subprocess.CalledProcessError, OSError):
                             pass
                     icon = meta.get("icon_script", "🏗️")
                 
@@ -260,7 +266,7 @@ def get_items(context: str) -> list:
                 "icon": meta.get("icon", "📦")
             }
             items[0] = json.dumps(first)
-        except:
+        except (json.JSONDecodeError, KeyError, IndexError):
             pass
 
     return items or [fmt(f"Empty: {context}", "DISABLED", "NONE")]

@@ -101,6 +101,10 @@ if [[ "$DOWNLOAD_TOOLS" =~ ^[Yy]$ ]]; then
     cp -r "$NEXUS_HOME/config/nvim" "$TOOL_CONFIGS/"
     cp -r "$NEXUS_HOME/config/yazi" "$TOOL_CONFIGS/"
     echo "    Tool configs installed to $TOOL_CONFIGS"
+
+    # Install Python dependencies for the menu module
+    echo "    Installing Python dependencies (textual, pyyaml)..."
+    pip install --quiet textual pyyaml 2>/dev/null || pip3 install --quiet textual pyyaml 2>/dev/null || echo "    WARNING: Could not install Python dependencies. Menu module may not work."
     
     # Detect default chat tool
     DETECTED_CHAT=""
@@ -131,21 +135,33 @@ if [[ "$DOWNLOAD_TOOLS" =~ ^[Yy]$ ]]; then
             if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
                 echo "$NEXUS_BIN/$tool_name"
             # 2. Check existing config value (if it's a valid path)
-            elif [[ -x "$conf_val" ]]; then
+            elif [[ -n "$conf_val" && -x "$conf_val" ]]; then
                 echo "$conf_val"
             # 3. Fallback to system command via 'command -v'
             else
-                local sys_path=$(command -v "$tool_name" 2>/dev/null || echo "$tool_name")
+                local sys_path=$(command -v "$tool_name" 2>/dev/null || echo "")
                 echo "$sys_path"
             fi
         }
 
         VAL_EDITOR=$(get_best_tool_path "nvim" "NEXUS_EDITOR")
+        [[ -z "$VAL_EDITOR" ]] && VAL_EDITOR="nvim"
+        
         VAL_FILES=$(get_best_tool_path "yazi" "NEXUS_FILES")
+        [[ -z "$VAL_FILES" ]] && VAL_FILES="yazi"
+        
         VAL_RENDER=$(get_best_tool_path "glow" "NEXUS_RENDER")
+        [[ -z "$VAL_RENDER" ]] && VAL_RENDER="glow"
+        
         VAL_GUM=$(get_best_tool_path "gum" "NEXUS_GUM")
+        [[ -z "$VAL_GUM" ]] && VAL_GUM="gum"
+        
         VAL_GIT=$(get_best_tool_path "lazygit" "NEXUS_GIT")
+        [[ -z "$VAL_GIT" ]] && VAL_GIT="lazygit"
+        
+        # Make chat strictly optional. If aider isn't found and no chat is configured, return empty
         VAL_CHAT=$(get_best_tool_path "aider" "NEXUS_CHAT")
+        
         VAL_PX_UI=$(get_conf_val "NEXUS_PX_UI")
         [[ -z "$VAL_PX_UI" ]] && VAL_PX_UI="tmux"
 
@@ -162,24 +178,24 @@ NEXUS_PX_UI="$VAL_PX_UI"
 NEXUS_ISOLATED="true"
 EOF
     else
-        # Helper: Use isolated if exists, else system command
+        # Helper: Use isolated if exists, else system command, else empty string
         use_isolated_or_sys() {
             local tool_name="$1"
             if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
                 echo "$NEXUS_BIN/$tool_name"
             else
-                command -v "$tool_name" 2>/dev/null || echo "$tool_name"
+                command -v "$tool_name" 2>/dev/null || echo ""
             fi
         }
 
         # Write tools config
         cat > "$CONFIG_DIR/tools.conf" << EOF
 # Nexus-Shell Tool Configuration (validated paths)
-NEXUS_EDITOR="$(use_isolated_or_sys nvim)"
-NEXUS_FILES="$(use_isolated_or_sys yazi)"
-NEXUS_RENDER="$(use_isolated_or_sys nvim)" # Fallback render for nvim
-NEXUS_GUM="$(use_isolated_or_sys gum)"
-NEXUS_GIT="$(use_isolated_or_sys lazygit)"
+NEXUS_EDITOR="$(use_isolated_or_sys nvim || echo nvim)"
+NEXUS_FILES="$(use_isolated_or_sys yazi || echo yazi)"
+NEXUS_RENDER="$(use_isolated_or_sys nvim || echo nvim)" # Fallback render for nvim
+NEXUS_GUM="$(use_isolated_or_sys gum || echo gum)"
+NEXUS_GIT="$(use_isolated_or_sys lazygit || echo lazygit)"
 NEXUS_CHAT="$(use_isolated_or_sys aider)"
 NEXUS_PX_UI="tmux"
 NEXUS_ISOLATED="true"

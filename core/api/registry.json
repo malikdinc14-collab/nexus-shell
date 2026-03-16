@@ -159,12 +159,12 @@
                 "p",
                 ":p",
                 "px",
-                "parallax",
+                "menu",
                 ":px",
-                ":parallax"
+                ":menu"
             ],
-            "action": "tmux select-pane -t ${PX_NEXUS_PARALLAX_PANE:-1} 2>/dev/null || tmux select-pane -t parallax 2>/dev/null",
-            "description": "Focus Parallax Dashboard",
+            "action": "tmux select-pane -t ${PX_NEXUS_MENU_PANE:-1} 2>/dev/null || tmux select-pane -t menu 2>/dev/null",
+            "description": "Focus Menu Dashboard",
             "category": "Navigation"
         },
         {

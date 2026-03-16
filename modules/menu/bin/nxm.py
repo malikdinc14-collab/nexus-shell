@@ -25,8 +25,14 @@ sys.path.insert(0, str(MODULES_DIR))
 
 from lib.core import menu_engine
 
-# STARTUP TRACE
-with open("/tmp/nexus_nxm_trace.log", "a") as f:
+# STARTUP TRACE (with rotation)
+_trace_log = "/tmp/nexus_nxm_trace.log"
+try:
+    if os.path.exists(_trace_log) and os.path.getsize(_trace_log) > 100_000:
+        os.rename(_trace_log, _trace_log + ".old")
+except OSError:
+    pass
+with open(_trace_log, "a") as f:
     f.write(f"NXM Start: {__file__} | CWD: {os.getcwd()}\n")
 
 class NexusListItem(ListItem):
@@ -279,7 +285,7 @@ class NexusMenuApp(App):
                 if "_root" in first_data:
                     self.current_layout = first_data["_root"].get("layout", "list")
                     self.current_title = first_data["_root"].get("name", "Nexus")
-            except:
+            except (json.JSONDecodeError, KeyError, IndexError):
                 pass
 
         # Apply Layout Visibility using CSS classes
@@ -319,7 +325,7 @@ class NexusMenuApp(App):
                     self.all_items.append(tile)
                     grid_view.mount(tile)
                     
-            except Exception as e:
+            except (json.JSONDecodeError, KeyError) as e:
                 # Fallback for legacy TSV
                 parts = item_json.split("\t")
                 if len(parts) >= 3:
@@ -343,19 +349,19 @@ class NexusMenuApp(App):
                 if tiles:
                     tiles[0].focus()
                     self.update_status(f"Grid: {len(tiles)} items")
-            except:
+            except Exception:
                 pass
             
         # Update Header
         try:
             self.query_one("#header", Label).update(f" {self.current_title} ")
-        except:
+        except Exception:
             pass
 
     def update_status(self, msg: str) -> None:
         try:
             self.query_one("#status-bar", Label).update(msg)
-        except:
+        except Exception:
             pass
 
     def action_cursor_down(self) -> None:
@@ -445,7 +451,7 @@ class NexusMenuApp(App):
         if search_bar.has_focus:
             search_bar.remove_class("-visible")
             search_bar.value = ""
-            self.on_input_changed(events.InputChanged(search_bar, ""))
+            self.refresh_items()  # Re-render full list instead of deprecated event construction
             if self.current_layout == "list":
                 self.query_one("#menu-list").focus()
             else:

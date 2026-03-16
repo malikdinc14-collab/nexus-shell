@@ -98,7 +98,7 @@ case "$VERB" in
         if [[ "$REAL_TYPE" == "renderer" ]]; then
             log "Intelligent Routing: Rerouting $PAYLOAD to Local Stack (Renderer)"
             # Push to the LOCAL stack (In-Place)
-            /Users/Shared/Projects/nexus-shell/core/stack/nxs-stack push "local" "/Users/Shared/Projects/nexus-shell/core/view/nxs-view '$PAYLOAD'" "View: $(basename "$PAYLOAD")"
+            "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$NEXUS_HOME/core/view/nxs-view '$PAYLOAD'" "View: $(basename "$PAYLOAD")"
             exit 0
         fi
 

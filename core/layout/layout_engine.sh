@@ -84,12 +84,12 @@ build_vscodelike() {
     nxs_assert "UI Split"
     $STAGGER
     
-    # 4. PARALLAX (Top of Center)
+    # 4. MENU (Top of Center)
     echo "    [*] Carving Center-Shell..."
-    tmux split-window -v -b -l 8 -t "$CENTER_PANE" -c "$PROJECT_ROOT" "$WRAPPER $PARALLAX_CMD"
+    tmux split-window -v -b -l 8 -t "$CENTER_PANE" -c "$PROJECT_ROOT" "$WRAPPER $NEXUS_MENU"
     local MENU_PANE=$(tmux display-message -p '#{pane_id}')
     tmux set-option -p -t "$MENU_PANE" @nexus_role "menu"
-    nxs_assert "Parallax Split"
+    nxs_assert "Menu Split"
     $STAGGER
     
     # 5. TERMINAL (Bottom of Center)
@@ -218,6 +218,7 @@ except: print('false')
     
     # Resolve tool commands if not set
     export PARALLAX_CMD="${PARALLAX_CMD:-true}"
+    export NEXUS_MENU="${NEXUS_MENU:-true}"
     export EDITOR_CMD="${EDITOR_CMD:-nvim}"
     export NEXUS_FILES="${NEXUS_FILES:-yazi}"
     export NEXUS_CHAT="${NEXUS_CHAT:-zsh}"
