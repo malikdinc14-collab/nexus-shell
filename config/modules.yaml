@@ -7,3 +7,4 @@ roles:
   chat: "zsh -i"
   viewer: "nxs-view"
   terminal: "zsh -i"
+  search: "nxs-grepai"

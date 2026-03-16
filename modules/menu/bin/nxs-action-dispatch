@@ -91,6 +91,23 @@ PYEOF
     done
 }
 
+# Resolve Stack-Aware Binary
+STACK_BIN="$NEXUS_HOME/core/stack/nxs-stack"
+
+# Helper: Check if an identity is already in the local stack
+check_stack() {
+    local identity="$1"
+    local role="${NXS_TARGET_PANE:-local}"
+    "$STACK_BIN" list "$role" | jq -e ".tabs | to_entries | .[] | select(.value.name == \"$identity\") | .key" > /dev/null
+}
+
+# Helper: Get index of identity in local stack
+get_stack_idx() {
+    local identity="$1"
+    local role="${NXS_TARGET_PANE:-local}"
+    "$STACK_BIN" list "$role" | jq -r ".tabs | to_entries | .[] | select(.value.name == \"$identity\") | .key"
+}
+
 # 2. Handle Verbs
 case "$VERB" in
     edit)
@@ -102,52 +119,114 @@ case "$VERB" in
             exit 0
         fi
 
-        # 1. Editor Routing (Check for remote nvim server)
+        # 1. Resolve Identity for Editor
+        IDENTITY="editor"
+        INTENT="${NXS_INTENT:-swap}"
+
+        # SMART RESOLVE: If an editor is already in the stack, we switch to it
+        if check_stack "$IDENTITY" && [[ "$INTENT" == "swap" || "$NXS_CALLER" == "menu" ]]; then
+            IDX=$(get_stack_idx "$IDENTITY")
+            log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
+            
+            # If it's a file, we still want to open it in that editor
+            if [[ -S "$NVIM_PIPE" && -f "$PAYLOAD" ]]; then
+                 log "Sending remote command to existing editor: $PAYLOAD"
+                 nvim --server "$NVIM_PIPE" --remote-send ":tabedit $PAYLOAD<CR>" 2>/dev/null
+            fi
+            
+            "$STACK_BIN" switch "${NXS_TARGET_PANE:-local}" "$IDX"
+            exit 0
+        fi
+
+        # 2. Editor Routing (Check for remote nvim server if not switched)
         if [[ -S "$NVIM_PIPE" ]]; then
             log "Remote nvim detected. Sending tabedit..."
             if [[ -f "$PAYLOAD" ]]; then
                 nvim --server "$NVIM_PIPE" --remote-send ":tabedit $PAYLOAD<CR>" 2>> "$LOG_FILE"
                 
-                # Identify if editor is in another pane and focus it, or if it's in the local stack
+                # Identify if editor is in another pane and focus it
                 EDITOR_PANE=$(tmux list-panes -a -F "#{pane_id} #{@nexus_role}" | grep "editor" | head -n1 | awk '{print $1}')
                 if [[ -n "$EDITOR_PANE" ]]; then
                     tmux select-pane -t "$EDITOR_PANE"
-                else
-                    log "Editor not in global role slot, checking local stack..."
+                    exit 0
                 fi
-                exit 0
             fi
         fi
-
-        # 2. Fallback: Push to Stack
+        # 3. Fallback: Push to Stack
         CMD=$(get_action "edit" "$ITEM_TYPE")
         if [[ -n "$CMD" ]]; then
             eval "${CMD//\$PAYLOAD/$PAYLOAD}" 2>> "$LOG_FILE"
         else
-            log "Pushing default nvim to local stack"
-            "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$NEXUS_EDITOR '$PAYLOAD'" "Edit: $(basename "$PAYLOAD")"
+            log "Pushing fresh editor instance to local stack"
+            "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$NEXUS_EDITOR '$PAYLOAD'" "$IDENTITY"
         fi
         ;;
     run)
+        # Determine Execution Intent
+        # Default to 'swap' for system context (In-Place), 'push' for others
+        INTENT="${NXS_INTENT:-swap}"
+        
+        # Parse payload for identity
+        # Format: identity:Label:Command
+        if [[ "$PAYLOAD" == identity:* ]]; then
+            IDENTITY=$(echo "$PAYLOAD" | cut -d: -f2)
+            CMD=$(echo "$PAYLOAD" | cut -d: -f3-)
+            
+            # SMART RESOLVE: If identity exists in local stack
+            # We prioritize switching over launching if intent is 'swap' or caller is 'menu'
+            if check_stack "$IDENTITY" && [[ "$INTENT" == "swap" || "$NXS_CALLER" == "menu" ]]; then
+                IDX=$(get_stack_idx "$IDENTITY")
+                log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
+                "$STACK_BIN" switch "${NXS_TARGET_PANE:-local}" "$IDX"
+                exit 0
+            fi
+            
+            # Update CMD for downstream
+            PAYLOAD="$CMD"
+        else
+            IDENTITY=$(get_action "identity" "$ITEM_TYPE")
+        fi
+
+        # INTELLIGENCE: If we are calling from the Menu, 'swap' means 'replace the menu'
+        if [[ "$NXS_CALLER" == "menu" && "$INTENT" == "swap" ]]; then
+            log "Caller is menu: Upgrading 'swap' to 'replace' for in-pane experience"
+            INTENT="replace"
+        fi
+
         # Check global actions first
         CMD=$(get_global_action "$PAYLOAD")
         if [[ -n "$CMD" ]]; then
              log "Resolved global action: $PAYLOAD -> $CMD"
-             TARGET_ROLE="${NXS_DISPATCH_ROLE:-terminal}"
-             "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$CMD"
+             "$NEXUS_HOME/core/stack/nxs-stack" push "terminal" "$CMD"
              exit 0
         fi
 
         # Resolve by type/verb
         CMD=$(get_action "run" "$ITEM_TYPE")
-        TARGET_ROLE="${NXS_DISPATCH_ROLE:-local}" # System Switcher Role
+        
+        # Determine Target Slot (Role)
+        # If intent is 'swap', we target the LOCAL slot (Active Pane)
+        if [[ "$INTENT" == "swap" ]]; then
+            TARGET_ROLE="local"
+        else
+            TARGET_ROLE="${NXS_DISPATCH_ROLE:-terminal}"
+        fi
 
         if [[ -n "$CMD" ]]; then
-            log "Pushing registry cmd to $TARGET_ROLE stack: $CMD"
-            "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}"
+            log "Execution: Intent=$INTENT | Role=$TARGET_ROLE | Cmd=$CMD"
+            
+            case "$INTENT" in
+                replace)
+                    "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}"
+                    ;;
+                push|*)
+                    "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}"
+                    ;;
+            esac
         else
-            log "Pushing default router to $TARGET_ROLE stack for $ITEM_TYPE"
-            "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "echo '$ITEM_TYPE|$PAYLOAD' | ${NEXUS_HOME}/core/exec/router.sh"
+            log "Routing: Intent=$INTENT | Role=$TARGET_ROLE | Payload=$PAYLOAD"
+            ROUTER_CMD="echo '$ITEM_TYPE|$PAYLOAD' | ${NEXUS_HOME}/core/exec/router.sh"
+            "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$ROUTER_CMD"
         fi
         ;;
     context)

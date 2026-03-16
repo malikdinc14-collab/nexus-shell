@@ -218,7 +218,9 @@ class NexusMenuApp(App):
         Binding("x", "context_item", "Context", show=True),
         Binding("f", "favorite_item", "Pin", show=True),
         Binding("/", "toggle_search", "Search", show=True),
-        Binding("enter", "run_item", "Run", show=True),
+        Binding("enter", "run_item('swap')", "Swap", show=True),
+        Binding("shift+enter", "run_item('push')", "New Tab", show=True),
+        Binding("ctrl+enter", "run_item('replace')", "Replace", show=True),
         Binding("escape", "go_back", "Back", show=True),
         Binding("backspace", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=True),
@@ -475,10 +477,10 @@ class NexusMenuApp(App):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle Enter/Selection in list."""
-        self.action_run_item()
+        self.action_run_item("swap")
 
-    def action_run_item(self) -> None:
-        self.action_item("run")
+    def action_run_item(self, intent: str = "swap") -> None:
+        self.action_item("run", intent=intent)
 
     def action_edit_item(self) -> None:
         self.action_item("edit")
@@ -489,7 +491,7 @@ class NexusMenuApp(App):
     def action_favorite_item(self) -> None:
         self.action_item("favorite")
 
-    def action_item(self, verb: str) -> None:
+    def action_item(self, verb: str, intent: str = "swap") -> None:
         item = None
         if self.current_layout == "list":
             list_view = self.query_one("#menu-list", ListView)
@@ -517,13 +519,18 @@ class NexusMenuApp(App):
                 return
 
             # Otherwise, call nxs-action-dispatch
-            self.run_nexus_action(verb, item.e_type, item.payload)
+            self.run_nexus_action(verb, item.e_type, item.payload, intent=intent)
 
-    def run_nexus_action(self, verb: str, e_type: str, payload: str) -> None:
+    def run_nexus_action(self, verb: str, e_type: str, payload: str, intent: str = "swap") -> None:
         # We need to suspend the TUI and run the command
         env = os.environ.copy()
-        if self.current_context == "system":
-            env["NXS_DISPATCH_ROLE"] = "local"
+        env["NXS_INTENT"] = intent
+        env["NXS_CALLER"] = "menu"
+        
+        # If we have a target pane from the popup environment, use it
+        target_pane = os.environ.get("NXS_TARGET_PANE")
+        if target_pane:
+            env["NXS_TARGET_PANE"] = target_pane
         
         with self.suspend():
             try:

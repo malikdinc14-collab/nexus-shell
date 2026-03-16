@@ -118,6 +118,11 @@ echo "[*] Loading Workspace Configuration..."
 
 eval "$("$Python_BIN" "$NEXUS_CORE/api/config_helper.py")"
 
+# Load Extensions
+if [[ -f "$NEXUS_HOME/extensions/loader.sh" ]]; then
+    source "$NEXUS_HOME/extensions/loader.sh"
+fi
+
 # Axiom Note: Saved session detection moved to final stage (P-05)
 COMPOSITION="${NEXUS_COMPOSITION:-__saved_session__}"
 PROFILE=""

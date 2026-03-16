@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# modules/menu/bin/nxs-menu-fzf
+# Tier 0 Bulletproof Menu for Nexus Shell.
+# Uses FZF for zero-dependency reliability.
+
+BIN_DIR="${0:A:h}"
+MENU_ENGINE="${BIN_DIR}/../lib/core/menu_engine.py"
+DISPATCH_BIN="${BIN_DIR}/nxs-action-dispatch"
+
+# Standardize environment
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}"
+export PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
+
+# Resolve Python Binary
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && Python_BIN="$NEXUS_HOME/.venv/bin/python3" \
+|| Python_BIN="${Python_BIN:-python3}"
+
+CONTEXT="${1:-system}"
+[[ "$CONTEXT" == "--context" ]] && CONTEXT="$2"
+
+# 1. Fetch items from engine
+ITEMS_JSON=$("$Python_BIN" "$MENU_ENGINE" --context "$CONTEXT")
+
+# 2. Render with FZF (Centered)
+SELECTED_JSON=$(echo "$ITEMS_JSON" | fzf --ansi \
+    --header="Nexus Portal: $CONTEXT" \
+    --reverse \
+    --height=100% \
+    --margin=20%,25% \
+    --border=sharp \
+    --info=inline \
+    --prompt="> " \
+    --with-nth=1 \
+    --preview-window=hidden \
+    --delimiter='\t' 
+)
+
+[[ -z "$SELECTED_JSON" ]] && exit 0
+
+# 3. Parse and Dispatch
+LABEL=$(echo "$SELECTED_JSON" | jq -r '.label')
+TYPE=$(echo "$SELECTED_JSON" | jq -r '.type')
+PAYLOAD=$(echo "$SELECTED_JSON" | jq -r '.payload')
+
+if [[ "$TYPE" == "FOLDER" || "$TYPE" == "PLANE" ]]; then
+    # Drill down recursively with FZF
+    "$0" --context "$PAYLOAD"
+else
+    # Dispatch action
+    export NXS_CALLER="menu"
+    export NXS_TARGET_PANE=$(tmux display-message -p "#{pane_id}")
+    "$DISPATCH_BIN" "run" "$TYPE" "$PAYLOAD"
+fi

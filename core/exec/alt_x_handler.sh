@@ -47,20 +47,49 @@ if [[ "$CMD" == *"nexus-menu"* || "$CMD" == *"nxm.py"* || "$CMD" == *"fzf"* || "
     IS_MENU=true
 fi
 
-if [[ "$IS_MENU" == "true" ]]; then
-    # STATE: Menu -> Terminal
-    echo "[$(date +%T)] Menu detected -> Switching to Terminal" >> "$LOG_FILE"
-    tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_HOME/core/boot/pane_wrapper.sh /bin/zsh -i"
+    # THE PORTAL (Alt-X) Logic
+    # 1. Any Tool -> Menu
+    # 2. Menu -> Terminal
+    # 3. Terminal -> Menu
     
-elif [[ "$IS_SHELL" == "true" ]]; then
-    # STATE: Terminal (Idle) -> Menu
-    echo "[$(date +%T)] Terminal detected -> Switching to Menu" >> "$LOG_FILE"
+    echo "[$(date +%T)] Triggering Portal Switch" >> "$LOG_FILE"
+    STACK_BIN="$NEXUS_HOME/core/stack/nxs-stack"
     MENU_BIN="$NEXUS_HOME/modules/menu/bin/nexus-menu"
-    tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_HOME/core/boot/pane_wrapper.sh $MENU_BIN --context modules"
+    FZF_MENU_BIN="$NEXUS_HOME/modules/menu/bin/nxs-menu-fzf"
 
-else
-    # STATE: Active Tool -> Menu
-    echo "[$(date +%T)] Tool detected ($CMD) -> Switching to Menu" >> "$LOG_FILE"
-    MENU_BIN="$NEXUS_HOME/modules/menu/bin/nexus-menu"
-    tmux respawn-pane -k -t "$PANE_ID" -e "SESSION_ID=$SESSION_ID" -e "PROJECT_ROOT=$PROJECT_ROOT" -e "NEXUS_HOME=$NEXUS_HOME" "$NEXUS_HOME/core/boot/pane_wrapper.sh $MENU_BIN --context system"
-fi
+    # Helper: Find Menu Index in local stack
+    FIND_MENU_IDX() {
+        "$STACK_BIN" list local | jq '.tabs | to_entries | .[] | select(.value.name == "Menu") | .key' 2>/dev/null
+    }
+
+    if [[ "$IS_MENU" == "true" ]]; then
+        # STATE: Menu -> Terminal (Foundation)
+        echo "[$(date +%T)] Menu detected -> Switching to nexus-terminal (Index 0)" >> "$LOG_FILE"
+        "$STACK_BIN" switch local 0
+    else
+        # STATE: Tool/Terminal -> Menu (Portal)
+        MENU_IDX=$(FIND_MENU_IDX)
+        
+        if [[ -n "$MENU_IDX" ]]; then
+             echo "[$(date +%T)] Existing Menu found at index $MENU_IDX -> Switching" >> "$LOG_FILE"
+             # Hardening: Check if the menu pane actually exists before switching
+             if "$STACK_BIN" switch local "$MENU_IDX"; then
+                exit 0
+             fi
+             echo "[$(date +%T)] Menu switch failed (stale ID). Forcing fresh launch." >> "$LOG_FILE"
+        fi
+
+        # TIERED LAUNCHER
+        # Try Tier 1 (Premium) unless Stable Mode is forced
+        if [[ "$NXS_STABLE_MODE" != "true" ]]; then
+            echo "[$(date +%T)] Attempting Tier 1 (Textual) Launch" >> "$LOG_FILE"
+            if "$STACK_BIN" push local "$MENU_BIN --context system" "Menu"; then
+                exit 0
+            fi
+            echo "[$(date +%T)] Tier 1 Failed. Falling back to Tier 0." >> "$LOG_FILE"
+        fi
+
+        # Fallback to Tier 0 (Bulletproof)
+        echo "[$(date +%T)] Launching Tier 0 (FZF) Fallback" >> "$LOG_FILE"
+        "$STACK_BIN" push local "$FZF_MENU_BIN --context system" "Menu"
+    fi

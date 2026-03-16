@@ -23,3 +23,13 @@ env:
   PI_PROVIDER: "sovereign-proxy"
   PI_MODEL: "stable-mesh"
   NEXUS_ROLE: "sovereign"
+
+governance:
+  can_spawn: true
+  role: "orchestrator" # Elevation hint
+  max_depth: 2
+  allowed_sub_profiles:
+    - praxis
+    - distiller
+    - researcher
+    - focus

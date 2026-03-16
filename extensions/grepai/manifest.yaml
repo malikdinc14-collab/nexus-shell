@@ -1,0 +1,41 @@
+name: grepai
+version: 1.0.0
+description: AI-powered semantic code search with call graph tracing
+author: yoanbernabeu
+license: MIT
+repository: https://github.com/yoanbernabeu/grepai
+type: tool
+
+# Installation
+install: install.sh
+binary: grepai
+dependencies:
+  - ollama
+
+# Commands exposed
+commands:
+  - name: nxs-grepai
+    description: Semantic code search
+    path: bin/nxs-grepai
+
+# Integration hooks
+hooks:
+  search_provider: hooks/search_provider.sh
+  menu_provider: hooks/menu_provider.sh
+
+# Event bus subscriptions
+events:
+  subscribe:
+    - FILE_CHANGED
+  publish:
+    - SEARCH_RESULT
+    - INDEX_UPDATED
+
+# MCP integration
+mcp:
+  enabled: true
+  server: "grepai mcp"
+  tools:
+    - semantic_search
+    - trace_callers
+    - list_functions

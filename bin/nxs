@@ -14,6 +14,7 @@ show_help() {
     echo "  boot [args]    Launch a new station (default)"
     echo "  stop           Kill all active Nexus stations and background daemons"
     echo "  list           List available layouts (compositions) and profiles"
+    echo "  extension      Manage extensions (list, install, info)"
     echo "  doctor         Check system health and dependencies"
     echo "  status         Show active sessions and station info"
     echo "  version        Show version information"
@@ -34,8 +35,35 @@ case "$1" in
         ;;
     list)
         shift
-        # Re-use logic from launcher.sh --list
         exec "$NEXUS_CORE/boot/launcher.sh" --list
+        ;;
+    extension|ext)
+        shift
+        if [[ -f "$NEXUS_HOME/extensions/loader.sh" ]]; then
+            case "${1:-list}" in
+                list)
+                    "$NEXUS_HOME/extensions/loader.sh" list
+                    ;;
+                install)
+                    shift
+                    "$NEXUS_HOME/extensions/loader.sh" install "$@"
+                    ;;
+                info)
+                    shift
+                    "$NEXUS_HOME/extensions/loader.sh" info "$@"
+                    ;;
+                uninstall)
+                    shift
+                    "$NEXUS_HOME/extensions/loader.sh" uninstall "$@"
+                    ;;
+                *)
+                    echo "Usage: nxs extension {list|install|info|uninstall} [name]"
+                    ;;
+            esac
+        else
+            echo "[!] Extension system not found"
+            exit 1
+        fi
         ;;
     doctor)
         shift

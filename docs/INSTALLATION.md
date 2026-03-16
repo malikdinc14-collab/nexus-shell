@@ -39,7 +39,7 @@ nxs
 Nexus uses a dual-path execution strategy for its modular workstation:
 
 - **System Tools (Global)**: By default, Nexus checks your system `PATH`. If you have `lazygit` or `btop` installed via `brew`, Nexus will use them.
-- **Isolated Modules (Local)**: For specialized creative tools or AI engines (like `agent-zero`), Nexus can use "Internal" versions located in the `services/` or `lib/` directories. 
+- **Isolated Modules (Local)**: For specialized creative tools or custom AI dispatchers, Nexus can use "Internal" versions located in the `services/` or `lib/` directories. 
 - **Portability**: This allows you to have a production-grade IDE on your MacBook while maintaining a lightweight, self-contained set of scripts on the **uConsole**.
 
 ## 5. Hardware Optimization

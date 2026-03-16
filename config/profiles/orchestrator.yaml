@@ -1,0 +1,19 @@
+theme: dracula
+composition: sovereign
+tools:
+  chat:
+    - pi
+  orchestration:
+    - spawn_agent
+governance:
+  can_spawn: true
+  max_depth: 2
+  allowed_sub_profiles:
+    - praxis
+    - distiller
+    - researcher
+    - focus
+env:
+  PI_PROVIDER: "sovereign-proxy"
+  PI_MODEL: "stable-mesh"
+  NEXUS_ROLE: "orchestrator"

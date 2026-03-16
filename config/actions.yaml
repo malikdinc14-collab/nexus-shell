@@ -21,3 +21,11 @@ actions:
   # Agents
   switch_model: "nxs-agent-switch-model"
   set_role: "nxs-agent-set-role"
+
+# Identity Mappings
+# Allows the dispatcher to find existing tabs in the stack.
+identity:
+  editor: "editor"
+  explorer: "explorer"
+  chat: "chat"
+  terminal: "terminal"

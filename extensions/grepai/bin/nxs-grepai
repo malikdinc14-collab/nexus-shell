@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# extensions/grepai/bin/nxs-grepai
+# Nexus Shell wrapper for grepai semantic search
+
+set -e
+
+NEXUS_HOME="${NEXUS_HOME:-$HOME/.nexus-shell}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
+
+# Verify grepai is installed
+if ! command -v grepai &>/dev/null; then
+    echo "[grepai] Not installed. Run: nxs extension install grepai"
+    exit 1
+fi
+
+# Initialize project index if needed
+init_project() {
+    if [[ ! -d "$PROJECT_ROOT/.grepai" ]]; then
+        echo "[grepai] Initializing index for $(basename "$PROJECT_ROOT")..." >&2
+        (cd "$PROJECT_ROOT" && grepai init >/dev/null 2>&1)
+    fi
+}
+
+# Ensure project is indexed before search
+ensure_indexed() {
+    init_project
+    if [[ ! -f "$PROJECT_ROOT/.grepai/index.db" ]]; then
+        echo "[grepai] Building initial index..." >&2
+        (cd "$PROJECT_ROOT" && timeout 60 grepai index 2>/dev/null || true)
+    fi
+}
+
+# Help text
+show_help() {
+    cat <<EOF
+nxs-grepai - Semantic code search for Nexus Shell
+
+Usage:
+    nxs-grepai search <query>      Semantic search by meaning
+    nxs-grepai trace callers <fn>  Find who calls a function
+    nxs-grepai trace callees <fn>  Find what a function calls
+    nxs-grepai list                List all indexed functions
+    nxs-grepai index               Force reindex the project
+    nxs-grepai watch               Start file watcher daemon
+    nxs-grepai mcp                 Start MCP server for AI agents
+    nxs-grepai status              Show index status
+
+Examples:
+    nxs-grepai search "error handling"
+    nxs-grepai search "authentication flow"
+    nxs-grepai trace callers "handleUserLogin"
+    nxs-grepai trace callees "processPayment"
+
+Modes:
+    search   - AI-powered semantic search (understands intent)
+    trace    - Call graph analysis (callers/callees)
+    list     - Enumerate all functions in codebase
+    index    - Build/rebuild vector index
+    watch    - Auto-index on file changes
+    mcp      - Run as MCP server for Claude/Cursor
+
+Integration:
+    This tool integrates with Nexus Shell's search system.
+    Set NEXUS_SEARCH_PROVIDER=grepai to use as default.
+EOF
+}
+
+# Main dispatcher
+case "${1:-search}" in
+    -h|--help|help)
+        show_help
+        ;;
+    
+    init)
+        cd "$PROJECT_ROOT" && grepai init
+        ;;
+    
+    index)
+        cd "$PROJECT_ROOT" && grepai index
+        ;;
+    
+    watch)
+        echo "[grepai] Starting file watcher..." >&2
+        cd "$PROJECT_ROOT" && grepai watch
+        ;;
+    
+    status)
+        if [[ -d "$PROJECT_ROOT/.grepai" ]]; then
+            echo "Index: $PROJECT_ROOT/.grepai"
+            ls -la "$PROJECT_ROOT/.grepai/" 2>/dev/null
+        else
+            echo "Not indexed: $PROJECT_ROOT"
+        fi
+        ;;
+    
+    search|query|s)
+        shift
+        ensure_indexed
+        cd "$PROJECT_ROOT" && grepai search "$@"
+        ;;
+    
+    trace|t)
+        shift
+        ensure_indexed
+        cd "$PROJECT_ROOT" && grepai trace "$@"
+        ;;
+    
+    list|ls)
+        shift
+        ensure_indexed
+        cd "$PROJECT_ROOT" && grepai list functions "$@"
+        ;;
+    
+    mcp)
+        cd "$PROJECT_ROOT" && exec grepai mcp
+        ;;
+    
+    version)
+        grepai version
+        ;;
+    
+    *)
+        # Pass through to grepai
+        ensure_indexed
+        cd "$PROJECT_ROOT" && grepai "$@"
+        ;;
+esac

@@ -1,0 +1,71 @@
+# grepai extension configuration
+# Location: extensions/grepai/config/grepai.yaml
+# Override at: ~/.nexus/extensions/grepai.yaml
+
+# Embedding configuration
+embedding:
+  provider: ollama           # ollama | openai | lmstudio
+  model: nomic-embed-text    # Model for embeddings
+  base_url: null             # Custom endpoint (optional)
+
+# File watcher for auto-indexing
+watch:
+  enabled: true              # Enable file watcher
+  debounce_ms: 500           # Debounce time for batch updates
+  ignore_initial: false      # Index existing files on start
+
+# Search behavior
+search:
+  max_results: 20            # Maximum results to return
+  context_lines: 3           # Lines of context around matches
+  include_file_info: true    # Include file metadata in results
+  min_score: 0.5             # Minimum similarity score
+
+# Call graph tracing
+trace:
+  max_depth: 10              # Maximum call graph depth
+  include_stdlib: false      # Include standard library calls
+
+# Indexing exclusions
+exclude:
+  dirs:
+    - node_modules
+    - .git
+    - vendor
+    - __pycache__
+    - .venv
+    - venv
+    - target
+    - build
+    - dist
+    - .next
+    - .nexus
+  files:
+    - "*.min.js"
+    - "*.min.css"
+    - "*.lock"
+    - "*.sum"
+    - "package-lock.json"
+    - "yarn.lock"
+    - "go.sum"
+  patterns:
+    - ".*_test\\.py$"
+    - ".*\\.spec\\.ts$"
+
+# File type prioritization
+priority:
+  extensions:
+    - ".py"
+    - ".ts"
+    - ".tsx"
+    - ".js"
+    - ".jsx"
+    - ".go"
+    - ".rs"
+    - ".java"
+    - ".rb"
+
+# Performance
+performance:
+  batch_size: 100            # Files per batch during indexing
+  parallel_workers: 4        # Parallel indexing workers
