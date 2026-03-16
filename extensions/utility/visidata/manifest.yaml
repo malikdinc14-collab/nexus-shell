@@ -1,0 +1,9 @@
+name: visidata
+version: 1.0.0
+type: tool
+category: utility
+description: A terminal spreadsheet multitool
+binary: vd
+install:
+  macos: [brew install visidata]
+  linux: [pip install visidata]

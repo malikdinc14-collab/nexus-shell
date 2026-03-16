@@ -1,0 +1,11 @@
+name: bandwhich
+version: 1.0.0
+type: tool
+category: monitor
+description: Terminal bandwidth utilization tool
+author: imsnif
+license: MIT
+binary: bandwhich
+install:
+  macos: [brew install bandwhich]
+  linux: [brew install bandwhich]

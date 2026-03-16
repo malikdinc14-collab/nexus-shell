@@ -1,0 +1,11 @@
+name: bottom
+version: 1.0.0
+type: tool
+category: monitor
+description: Yet another cross-platform graphical process/system monitor
+author: ClementTsang
+license: MIT
+binary: btm
+install:
+  macos: [brew install bottom]
+  linux: [brew install bottom]

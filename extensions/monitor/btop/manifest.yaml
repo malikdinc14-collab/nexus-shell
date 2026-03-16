@@ -1,0 +1,11 @@
+name: btop
+version: 1.0.0
+type: tool
+category: monitor
+description: A monitor of resources
+author: aristocratos
+license: Apache-2.0
+binary: btop
+install:
+  macos: [brew install btop]
+  linux: [brew install btop]

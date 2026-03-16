@@ -1,0 +1,13 @@
+name: lazygit
+version: 1.0.0
+type: tool
+category: git
+description: Simple terminal UI for git commands
+author: jesseduffield
+license: MIT
+binary: lazygit
+role: git
+role_priority: 100
+install:
+  macos: [brew install lazygit]
+  linux: [brew install lazygit]

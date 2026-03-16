@@ -1,0 +1,10 @@
+name: gh-dash
+version: 1.0.0
+type: tool
+category: git
+description: A GitHub CLI extension for PRs and Issues
+binary: gh-dash
+install:
+  macos: [gh extension install dlvhdr/gh-dash]
+  linux: [gh extension install dlvhdr/gh-dash]
+dependencies: [gh]

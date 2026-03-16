@@ -1,0 +1,20 @@
+name: ripgrep
+version: 1.0.0
+type: tool
+category: search
+description: Recursively searches directories for a regex pattern
+author: BurntSushi
+license: MIT
+repository: https://github.com/BurntSushi/ripgrep
+
+binary: rg
+binary_candidates: [rg, ripgrep]
+
+role: search
+role_priority: 60
+
+install:
+  macos:
+    - brew install ripgrep
+  linux:
+    - sudo apt install ripgrep

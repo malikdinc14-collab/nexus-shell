@@ -1,0 +1,22 @@
+name: nnn
+version: 1.0.0
+type: tool
+category: explorer
+description: The missing terminal file manager for X
+author: jarun
+license: BSD-2-Clause
+repository: https://github.com/jarun/nnn
+
+binary: nnn
+binary_candidates: [nnn, n]
+
+role: explorer
+role_priority: 90
+
+install:
+  macos:
+    - brew install nnn
+  linux:
+    - sudo apt install nnn || sudo dnf install nnn
+
+dependencies: []

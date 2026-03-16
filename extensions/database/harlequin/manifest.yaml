@@ -1,0 +1,9 @@
+name: harlequin
+version: 1.0.0
+type: tool
+category: database
+description: The SQL IDE for Your Terminal
+binary: harlequin
+install:
+  macos: [brew install harlequin]
+  linux: [pip install harlequin]

@@ -1,0 +1,20 @@
+name: bat
+version: 1.0.0
+type: tool
+category: viewer
+description: A cat clone with syntax highlighting and Git integration
+author: sharkdp
+license: Apache-2.0
+repository: https://github.com/sharkdp/bat
+
+binary: bat
+binary_candidates: [bat, batcat]
+
+role: viewer
+role_priority: 90
+
+install:
+  macos:
+    - brew install bat
+  linux:
+    - sudo apt install bat

@@ -1,0 +1,22 @@
+name: lf
+version: 1.0.0
+type: tool
+category: explorer
+description: Terminal file manager
+author: gokcehan
+license: MIT
+repository: https://github.com/gokcehan/lf
+
+binary: lf
+binary_candidates: [lf]
+
+role: explorer
+role_priority: 70
+
+install:
+  macos:
+    - brew install lf
+  linux:
+    - sudo apt install lf || go install github.com/gokcehan/lf@latest
+
+dependencies: []

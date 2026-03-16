@@ -1,0 +1,25 @@
+name: yazi
+version: 1.0.0
+type: tool
+category: explorer
+description: Blazing fast terminal file manager
+author: sxyazi
+license: MIT
+repository: https://github.com/sxyazi/yazi
+
+binary: yazi
+binary_candidates: [yazi, ya]
+
+role: explorer
+role_priority: 100
+
+install:
+  macos:
+    - brew install yazi
+  linux:
+    - cargo install yazi-fm
+  fallback:
+    - bash -c "$(curl -sL https://raw.githubusercontent.com/sxyazi/yazi/main/scripts/install.sh)"
+
+config_dir: ~/.config/yazi
+dependencies: []

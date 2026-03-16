@@ -1,0 +1,22 @@
+name: ranger
+version: 1.0.0
+type: tool
+category: explorer
+description: VIM-inspired filemanager for the console
+author: ranger
+license: GPL-3.0
+repository: https://github.com/ranger/ranger
+
+binary: ranger
+binary_candidates: [ranger]
+
+role: explorer
+role_priority: 80
+
+install:
+  macos:
+    - brew install ranger
+  linux:
+    - pip install ranger-fm
+
+dependencies: [python3]

@@ -1,0 +1,9 @@
+name: trippy
+version: 1.0.0
+type: tool
+category: network
+description: A network diagnostic tool
+binary: trippy
+install:
+  macos: [brew install trippy]
+  linux: [brew install trippy]

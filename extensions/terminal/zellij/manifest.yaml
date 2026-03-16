@@ -1,0 +1,22 @@
+name: zellij
+version: 1.0.0
+type: tool
+category: terminal
+description: A terminal workspace with tabs and layouts
+author: ajeetdsouza
+license: MIT
+repository: https://github.com/ajeetdsouza/zellij
+
+binary: zellij
+binary_candidates: [zellij]
+
+role: terminal
+role_priority: 100
+
+install:
+  macos:
+    - brew install zellij
+  linux:
+    - bash -c "$(curl -L zellij.dev/launch)"
+
+config_dir: ~/.config/zellij

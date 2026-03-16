@@ -6,39 +6,140 @@
 EXTENSION_DIR="${NEXUS_HOME}/extensions"
 REGISTRY_FILE="${EXTENSION_DIR}/.registry.json"
 
+# Get all manifest files (supports nested category structure)
+get_all_manifests() {
+    find "$EXTENSION_DIR" -name "manifest.yaml" -type f 2>/dev/null | grep -v ".registry"
+}
+
+# Parse manifest key
+parse_manifest_key() {
+    local manifest="$1"
+    local key="$2"
+    grep "^${key}:" "$manifest" 2>/dev/null | head -1 | awk -F': ' '{print $2}' | xargs
+}
+
+# Get extension name from manifest path
+get_ext_name_from_manifest() {
+    local manifest="$1"
+    basename "$(dirname "$manifest")"
+}
+
+# Get extension category from manifest path
+get_ext_category_from_manifest() {
+    local manifest="$1"
+    basename "$(dirname "$(dirname "$manifest")")"
+}
+
 # List all available extensions
 list_extensions() {
     local found=0
-    for manifest in "$EXTENSION_DIR"/*/manifest.yaml; do
+    for manifest in $(get_all_manifests); do
         [[ -f "$manifest" ]] || continue
-        local name=$(basename "$(dirname "$manifest")")
-        local desc=$(grep "^description:" "$manifest" 2>/dev/null | cut -d: -f2- | xargs || echo "No description")
-        local binary=$(grep "^binary:" "$manifest" 2>/dev/null | awk '{print $2}' || echo "$name")
-        local installed=$(command -v "$binary" &>/dev/null && echo "✓" || echo "○")
-        echo "$installed $name - $desc"
+        local name=$(parse_manifest_key "$manifest" "name")
+        local desc=$(parse_manifest_key "$manifest" "description")
+        local binary=$(parse_manifest_key "$manifest" "binary")
+        local category=$(parse_manifest_key "$manifest" "category")
+        
+        [[ -z "$name" ]] && name=$(get_ext_name_from_manifest "$manifest")
+        [[ -z "$category" ]] && category=$(get_ext_category_from_manifest "$manifest")
+        
+        local installed="○"
+        [[ -n "$binary" ]] && command -v "$binary" &>/dev/null && installed="✓"
+        
+        printf "%s %-15s [%-10s] %s\n" "$installed" "$name" "$category" "$desc"
         found=1
     done
     [[ $found -eq 0 ]] && echo "No extensions found"
 }
 
+# List all extensions (detailed, for fzf)
+list_all_extensions() {
+    for manifest in $(get_all_manifests); do
+        [[ -f "$manifest" ]] || continue
+        local name=$(parse_manifest_key "$manifest" "name")
+        local desc=$(parse_manifest_key "$manifest" "description")
+        local binary=$(parse_manifest_key "$manifest" "binary")
+        local category=$(parse_manifest_key "$manifest" "category")
+        
+        [[ -z "$name" ]] && name=$(get_ext_name_from_manifest "$manifest")
+        [[ -z "$category" ]] && category=$(get_ext_category_from_manifest "$manifest")
+        
+        local installed="○"
+        [[ -n "$binary" ]] && command -v "$binary" &>/dev/null && installed="✓"
+        
+        echo "$installed $name [$category] - $desc"
+    done | sort
+}
+
+# List extensions by category
+list_by_category() {
+    local category="$1"
+    for manifest in $(get_all_manifests); do
+        local cat=$(parse_manifest_key "$manifest" "category")
+        [[ -z "$cat" ]] && cat=$(get_ext_category_from_manifest "$manifest")
+        [[ "$cat" == "$category" ]] || continue
+        
+        local name=$(parse_manifest_key "$manifest" "name")
+        local desc=$(parse_manifest_key "$manifest" "description")
+        local binary=$(parse_manifest_key "$manifest" "binary")
+        
+        [[ -z "$name" ]] && name=$(get_ext_name_from_manifest "$manifest")
+        
+        local installed="○"
+        [[ -n "$binary" ]] && command -v "$binary" &>/dev/null && installed="✓"
+        
+        echo "$installed $name - $desc"
+    done
+}
+
+# Find manifest by extension name
+find_manifest() {
+    local ext_name="$1"
+    # Try flat structure first
+    if [[ -f "$EXTENSION_DIR/$ext_name/manifest.yaml" ]]; then
+        echo "$EXTENSION_DIR/$ext_name/manifest.yaml"
+        return
+    fi
+    # Try nested structure
+    for manifest in $(get_all_manifests); do
+        local name=$(parse_manifest_key "$manifest" "name")
+        local dir_name=$(get_ext_name_from_manifest "$manifest")
+        if [[ "$name" == "$ext_name" ]] || [[ "$dir_name" == "$ext_name" ]]; then
+            echo "$manifest"
+            return
+        fi
+    done
+}
+
+# Find extension directory by name
+find_ext_dir() {
+    local ext_name="$1"
+    local manifest=$(find_manifest "$ext_name")
+    [[ -n "$manifest" ]] && dirname "$manifest"
+}
+
 # Check if extension binary is installed
 is_installed() {
     local ext_name="$1"
-    local manifest="$EXTENSION_DIR/$ext_name/manifest.yaml"
-    [[ -f "$manifest" ]] || return 1
-    local binary=$(grep "^binary:" "$manifest" 2>/dev/null | awk '{print $2}')
+    local manifest=$(find_manifest "$ext_name")
+    [[ -z "$manifest" ]] && return 1
+    local binary=$(parse_manifest_key "$manifest" "binary")
     [[ -n "$binary" ]] && command -v "$binary" &>/dev/null
 }
 
 # Get extension info
 get_info() {
     local ext_name="$1"
-    local manifest="$EXTENSION_DIR/$ext_name/manifest.yaml"
-    [[ -f "$manifest" ]] || { echo "Extension not found: $ext_name"; return 1; }
+    local manifest=$(find_manifest "$ext_name")
+    
+    if [[ -z "$manifest" ]]; then
+        echo "Extension not found: $ext_name"
+        return 1
+    fi
     
     echo "Extension: $ext_name"
     echo "---"
-    grep -E "^(name|version|description|author|type|binary):" "$manifest" 2>/dev/null | while read line; do
+    grep -E "^(name|version|description|author|type|category|binary|role):" "$manifest" 2>/dev/null | while read line; do
         echo "$line"
     done
     
@@ -52,9 +153,10 @@ get_info() {
 # Install an extension
 install_extension() {
     local ext_name="$1"
-    local ext_dir="$EXTENSION_DIR/$ext_name"
+    local manifest=$(find_manifest "$ext_name")
+    local ext_dir=$(dirname "$manifest")
     
-    if [[ ! -f "$ext_dir/manifest.yaml" ]]; then
+    if [[ -z "$manifest" ]]; then
         echo "[!] Extension not found: $ext_name"
         return 1
     fi
@@ -68,22 +170,23 @@ install_extension() {
         echo "[*] Installing $ext_name..."
         bash "$ext_dir/install.sh"
     else
-        echo "[!] No install script for $ext_name"
+        echo "[*] $ext_name has no install script. Install manually."
+        echo "    Binary: $(parse_manifest_key "$manifest" "binary")"
         return 1
     fi
 }
 
-# Uninstall an extension (removes binary, not extension directory)
+# Uninstall an extension
 uninstall_extension() {
     local ext_name="$1"
-    local manifest="$EXTENSION_DIR/$ext_name/manifest.yaml"
+    local manifest=$(find_manifest "$ext_name")
     
-    if [[ ! -f "$manifest" ]]; then
+    if [[ -z "$manifest" ]]; then
         echo "[!] Extension not found: $ext_name"
         return 1
     fi
     
-    local binary=$(grep "^binary:" "$manifest" 2>/dev/null | awk '{print $2}')
+    local binary=$(parse_manifest_key "$manifest" "binary")
     if [[ -z "$binary" ]]; then
         echo "[!] No binary defined for $ext_name"
         return 1
@@ -103,10 +206,10 @@ uninstall_extension() {
 # Load extension hooks into environment
 load_extension() {
     local ext_name="$1"
-    local ext_dir="$EXTENSION_DIR/$ext_name"
-    local manifest="$ext_dir/manifest.yaml"
+    local ext_dir=$(find_ext_dir "$ext_name")
+    local manifest=$(find_manifest "$ext_name")
     
-    [[ -f "$manifest" ]] || return 1
+    [[ -z "$manifest" ]] && return 1
     
     # Add bin/ to PATH
     if [[ -d "$ext_dir/bin" ]]; then
@@ -121,9 +224,9 @@ load_extension() {
 
 # Load all extensions at boot
 load_all_extensions() {
-    for manifest in "$EXTENSION_DIR"/*/manifest.yaml; do
-        [[ -f "$manifest" ]] || continue
-        local name=$(basename "$(dirname "$manifest")")
+    for manifest in $(get_all_manifests); do
+        local name=$(parse_manifest_key "$manifest" "name")
+        [[ -z "$name" ]] && name=$(get_ext_name_from_manifest "$manifest")
         load_extension "$name" 2>/dev/null
     done
 }
@@ -132,7 +235,8 @@ load_all_extensions() {
 get_hook() {
     local ext_name="$1"
     local hook_name="$2"
-    local hook_path="$EXTENSION_DIR/$ext_name/hooks/${hook_name}.sh"
+    local ext_dir=$(find_ext_dir "$ext_name")
+    local hook_path="$ext_dir/hooks/${hook_name}.sh"
     [[ -f "$hook_path" ]] && echo "$hook_path"
 }
 
@@ -140,10 +244,9 @@ get_hook() {
 exec_hook() {
     local hook_name="$1"
     shift
-    for manifest in "$EXTENSION_DIR"/*/manifest.yaml; do
-        [[ -f "$manifest" ]] || continue
-        local name=$(basename "$(dirname "$manifest")")
-        local hook_path="$EXTENSION_DIR/$name/hooks/${hook_name}.sh"
+    for manifest in $(get_all_manifests); do
+        local ext_dir=$(dirname "$manifest")
+        local hook_path="$ext_dir/hooks/${hook_name}.sh"
         if [[ -f "$hook_path" ]]; then
             bash "$hook_path" "$@" 2>/dev/null
         fi
@@ -152,27 +255,38 @@ exec_hook() {
 
 # Build registry (for caching)
 build_registry() {
-    local tmp_file=$(mktemp)
-    echo "{" > "$tmp_file"
-    local first=1
-    for manifest in "$EXTENSION_DIR"/*/manifest.yaml; do
-        [[ -f "$manifest" ]] || continue
-        local name=$(basename "$(dirname "$manifest")")
-        [[ $first -eq 0 ]] && echo "," >> "$tmp_file"
-        first=0
-        echo -n "  \"$name\": " >> "$tmp_file"
-        # Convert YAML to JSON inline
-        python3 -c "import yaml,json,sys; print(json.dumps(yaml.safe_load(open('$manifest'))))" >> "$tmp_file" 2>/dev/null || echo "{}" >> "$tmp_file"
-    done
-    echo "" >> "$tmp_file"
-    echo "}" >> "$tmp_file"
-    mv "$tmp_file" "$REGISTRY_FILE"
-    echo "[*] Registry built: $REGISTRY_FILE"
+    python3 << 'PYTHON'
+import os
+import yaml
+import json
+from pathlib import Path
+
+ext_dir = os.environ.get("EXTENSION_DIR", "")
+registry = {}
+
+for manifest_path in Path(ext_dir).rglob("manifest.yaml"):
+    try:
+        with open(manifest_path) as f:
+            data = yaml.safe_load(f) or {}
+        name = data.get("name", manifest_path.parent.name)
+        registry[name] = data
+    except:
+        pass
+
+output_path = Path(ext_dir) / ".registry.json"
+with open(output_path, "w") as f:
+    json.dump(registry, f, indent=2)
+
+print(f"[*] Registry built: {output_path}")
+print(f"[*] {len(registry)} extensions indexed")
+PYTHON
 }
 
 # CLI dispatcher
 case "${1:-}" in
     list) list_extensions ;;
+    list-all) list_all_extensions ;;
+    list-category) shift; list_by_category "$@" ;;
     info) shift; get_info "$@" ;;
     install) shift; install_extension "$@" ;;
     uninstall) shift; uninstall_extension "$@" ;;
@@ -181,6 +295,13 @@ case "${1:-}" in
     hook) shift; get_hook "$@" ;;
     exec-hook) shift; exec_hook "$@" ;;
     registry) build_registry ;;
+    find) shift; find_manifest "$@" ;;
+    categories)
+        echo "Available categories:"
+        for dir in "$EXTENSION_DIR"/*/; do
+            [[ -d "$dir" ]] && echo "  - $(basename "$dir")"
+        done
+        ;;
     *)
         echo "Nexus Extension Manager"
         echo ""
@@ -188,6 +309,9 @@ case "${1:-}" in
         echo ""
         echo "Commands:"
         echo "  list              List all extensions"
+        echo "  list-all          List all extensions (detailed)"
+        echo "  list-category CAT List extensions in a category"
+        echo "  categories        List all categories"
         echo "  info NAME         Show extension details"
         echo "  install NAME      Install an extension"
         echo "  uninstall NAME    Uninstall an extension"

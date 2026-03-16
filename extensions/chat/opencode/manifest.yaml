@@ -1,0 +1,23 @@
+name: opencode
+version: 1.0.0
+type: tool
+category: chat
+description: AI pair programming in your terminal
+author: opencode-ai
+license: MIT
+repository: https://github.com/opencode-ai/opencode
+
+binary: opencode
+binary_candidates: [opencode]
+
+role: chat
+role_priority: 100
+
+install:
+  macos:
+    - brew install opencode
+  linux:
+    - curl -sSL https://get.opencode.dev | sh
+
+mcp:
+  enabled: true

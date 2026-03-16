@@ -1,0 +1,9 @@
+name: termshark
+version: 1.0.0
+type: tool
+category: network
+description: A terminal UI for tshark, inspired by Wireshark
+binary: termshark
+install:
+  macos: [brew install termshark]
+  linux: [go install github.com/gcla/termshark@latest]

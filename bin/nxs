@@ -15,6 +15,8 @@ show_help() {
     echo "  stop           Kill all active Nexus stations and background daemons"
     echo "  list           List available layouts (compositions) and profiles"
     echo "  extension      Manage extensions (list, install, info)"
+    echo "  profile        Manage user profile (show, edit, detect)"
+    echo "  wizard         Run first-run setup wizard"
     echo "  doctor         Check system health and dependencies"
     echo "  status         Show active sessions and station info"
     echo "  version        Show version information"
@@ -62,6 +64,55 @@ case "$1" in
             esac
         else
             echo "[!] Extension system not found"
+            exit 1
+        fi
+        ;;
+    profile)
+        shift
+        PROFILE_FILE="$HOME/.nexus/profile.yaml"
+        case "${1:-show}" in
+            show)
+                if [[ -f "$PROFILE_FILE" ]]; then
+                    cat "$PROFILE_FILE"
+                else
+                    echo "[*] No profile found. Run 'nxs wizard' to create one."
+                fi
+                ;;
+            edit)
+                ${EDITOR:-nvim} "$PROFILE_FILE"
+                ;;
+            reset)
+                rm -f "$PROFILE_FILE"
+                rm -f "$HOME/.nexus/.first_run_complete"
+                echo "[*] Profile reset. Run 'nxs wizard' to reconfigure."
+                ;;
+            detect)
+                source "$NEXUS_HOME/core/lib/detector.sh"
+                detect_as_json
+                ;;
+            roles)
+                if [[ -f "$PROFILE_FILE" ]]; then
+                    python3 -c "
+import yaml
+with open('$PROFILE_FILE') as f:
+    data = yaml.safe_load(f)
+for role, tool in data.get('roles', {}).items():
+    print(f'{role}: {tool}')
+"
+                else
+                    echo "[*] No profile found"
+                fi
+                ;;
+            *)
+                echo "Usage: nxs profile {show|edit|reset|detect|roles}"
+                ;;
+        esac
+        ;;
+    wizard)
+        if [[ -f "$NEXUS_CORE/boot/first_run.sh" ]]; then
+            NEXUS_SKIP_FIRST_RUN=1 source "$NEXUS_CORE/boot/first_run.sh" --force
+        else
+            echo "[!] Wizard not found"
             exit 1
         fi
         ;;

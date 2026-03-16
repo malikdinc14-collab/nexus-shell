@@ -1,0 +1,10 @@
+name: taskwarrior-tui
+version: 1.0.0
+type: tool
+category: utility
+description: A terminal user interface for taskwarrior
+binary: taskwarrior-tui
+install:
+  macos: [brew install taskwarrior-tui]
+  linux: [cargo install taskwarrior-tui]
+dependencies: [taskwarrior]

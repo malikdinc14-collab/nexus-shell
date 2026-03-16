@@ -1,0 +1,20 @@
+name: television
+version: 1.0.0
+type: tool
+category: search
+description: A cross-platform fuzzy finder for the terminal
+author: aylamz
+license: MIT
+repository: https://github.com/aylamz/television
+
+binary: tv
+binary_candidates: [tv, television]
+
+role: search
+role_priority: 80
+
+install:
+  macos:
+    - brew install television
+  linux:
+    - cargo install television

@@ -1,0 +1,11 @@
+name: gum
+version: 1.0.0
+type: tool
+category: utility
+description: A tool for glamorous shell scripts
+author: charmbracelet
+license: MIT
+binary: gum
+install:
+  macos: [brew install gum]
+  linux: [brew install gum]

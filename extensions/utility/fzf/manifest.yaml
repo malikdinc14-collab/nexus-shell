@@ -1,0 +1,13 @@
+name: fzf
+version: 1.0.0
+type: tool
+category: utility
+description: A command-line fuzzy finder
+author: junegunn
+license: MIT
+binary: fzf
+role: fuzzy_finder
+role_priority: 100
+install:
+  macos: [brew install fzf]
+  linux: [brew install fzf]

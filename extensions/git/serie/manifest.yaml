@@ -1,0 +1,9 @@
+name: serie
+version: 1.0.0
+type: tool
+category: git
+description: A rich git commit graph in your terminal
+binary: serie
+install:
+  macos: [brew install serie]
+  linux: [cargo install serie]

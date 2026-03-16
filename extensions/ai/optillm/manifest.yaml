@@ -1,0 +1,9 @@
+name: optillm
+version: 1.0.0
+type: tool
+category: ai
+description: Optimizing inference proxy for LLMs
+binary: optillm
+install:
+  macos: [pip install optillm]
+  linux: [pip install optillm]

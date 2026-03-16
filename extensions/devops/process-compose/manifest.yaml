@@ -1,0 +1,13 @@
+name: process-compose
+version: 1.0.0
+type: tool
+category: devops
+description: Process Composition
+author: f1bonacc1
+license: Apache-2.0
+binary: process-compose
+role: devops
+role_priority: 70
+install:
+  macos: [brew install process-compose]
+  linux: [brew install process-compose]

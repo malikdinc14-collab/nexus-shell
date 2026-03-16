@@ -1,0 +1,9 @@
+name: cava
+version: 1.0.0
+type: tool
+category: media
+description: Console-based Audio Visualizer for ALSA
+binary: cava
+install:
+  macos: [brew install cava]
+  linux: [sudo apt install cava]

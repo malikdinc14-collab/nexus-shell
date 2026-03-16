@@ -1,0 +1,13 @@
+name: dive
+version: 1.0.0
+type: tool
+category: devops
+description: A tool for exploring each layer in a docker image
+author: wagoodman
+license: MIT
+binary: dive
+role: devops
+role_priority: 80
+install:
+  macos: [brew install dive]
+  linux: [brew install dive]

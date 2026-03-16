@@ -1,0 +1,13 @@
+name: lazydocker
+version: 1.0.0
+type: tool
+category: devops
+description: The lazier way to manage everything docker
+author: jesseduffield
+license: MIT
+binary: lazydocker
+role: devops
+role_priority: 90
+install:
+  macos: [brew install lazydocker]
+  linux: [brew install lazydocker]

@@ -1,0 +1,13 @@
+name: k9s
+version: 1.0.0
+type: tool
+category: devops
+description: Kubernetes CLI To Manage Your Clusters In Style
+author: derailed
+license: Apache-2.0
+binary: k9s
+role: devops
+role_priority: 100
+install:
+  macos: [brew install k9s]
+  linux: [brew install k9s]

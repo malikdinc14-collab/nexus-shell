@@ -1,0 +1,9 @@
+name: presenterm
+version: 1.0.0
+type: tool
+category: utility
+description: A terminal slideshow tool
+binary: presenterm
+install:
+  macos: [brew install presenterm]
+  linux: [cargo install presenterm]

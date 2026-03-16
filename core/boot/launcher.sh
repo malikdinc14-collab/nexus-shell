@@ -47,6 +47,92 @@ export NEXUS_SCRIPTS="$NEXUS_CORE/boot"
 # PREPEND NEXUS BIN TO PATH (Critical for isolated modules)
 export PATH="$HOME/.nexus-shell/bin:$PATH"
 
+# 2.1 First-Run Check
+PROFILE_DIR="$HOME/.nexus"
+PROFILE_FILE="$PROFILE_DIR/profile.yaml"
+FIRST_RUN_FLAG="$PROFILE_DIR/.first_run_complete"
+
+if [[ ! -f "$FIRST_RUN_FLAG" ]] && [[ -z "$NEXUS_SKIP_FIRST_RUN" ]] && [[ -z "$NEXUS_BOOT_IN_PROGRESS" ]]; then
+    echo "[*] First run detected. Launching setup wizard..."
+    source "$NEXUS_CORE/boot/first_run.sh"
+fi
+
+# 2.2 Load User Profile
+load_profile_env() {
+    local profile="$PROFILE_FILE"
+    if [[ ! -f "$profile" ]]; then
+        return
+    fi
+    
+    # Load roles from profile into environment
+    eval $(python3 -c "
+import yaml
+try:
+    with open('$profile') as f:
+        data = yaml.safe_load(f)
+    roles = data.get('roles', {})
+    for role, tool in roles.items():
+        env_var = 'NEXUS_' + role.upper()
+        print(f'export {env_var}=\"{tool}\"')
+except: pass
+" 2>/dev/null)
+}
+
+load_profile_env
+
+# 2.3 Dynamic Tool Resolution
+get_tool_for_role() {
+    local role="$1"
+    local env_var="NEXUS_$(echo "$role" | tr '[:lower:]' '[:upper:]')"
+    
+    # 1. Check environment (highest priority - user set explicitly)
+    if [[ -n "${!env_var}" ]]; then
+        echo "${!env_var}"
+        return
+    fi
+    
+    # 2. Check profile
+    if [[ -f "$PROFILE_FILE" ]]; then
+        local tool=$(python3 -c "
+import yaml
+try:
+    with open('$PROFILE_FILE') as f:
+        print(yaml.safe_load(f).get('roles', {}).get('$role', ''))
+except: pass
+" 2>/dev/null)
+        if [[ -n "$tool" ]]; then
+            echo "$tool"
+            return
+        fi
+    fi
+    
+    # 3. Check detected
+    if [[ -f "$PROFILE_FILE" ]]; then
+        local tool=$(python3 -c "
+import yaml
+try:
+    with open('$PROFILE_FILE') as f:
+        print(yaml.safe_load(f).get('detected', {}).get('$role', ''))
+except: pass
+" 2>/dev/null)
+        if [[ -n "$tool" ]]; then
+            echo "$tool"
+            return
+        fi
+    fi
+    
+    # 4. Fallback
+    case "$role" in
+        editor) echo "vi" ;;
+        explorer) echo "ls" ;;
+        chat) echo "zsh" ;;
+        terminal) echo "zsh" ;;
+        viewer) echo "cat" ;;
+        search) echo "grep" ;;
+        *) echo "echo" ;;
+    esac
+}
+
 # 2.5 Path Utility
 abspath() {
     [[ "$1" == /* ]] && echo "$1" || echo "$PWD/$1"
@@ -188,12 +274,14 @@ if [[ -f "$TOOLS_CONF" ]]; then
 fi
 
 # Apply Tool Defaults (Configuration Hierarchy)
-# Handled by config_helper.py (Sovereign Authority)
-export NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
-export NEXUS_FILES="${NEXUS_FILES:-yazi}"
-export NEXUS_CHAT="${NEXUS_CHAT:-opencode}"
+# Priority: 1. Environment 2. Profile 3. Detection 4. Fallback
+export NEXUS_EDITOR="${NEXUS_EDITOR:-$(get_tool_for_role editor)}"
+export NEXUS_FILES="${NEXUS_FILES:-$(get_tool_for_role explorer)}"
+export NEXUS_CHAT="${NEXUS_CHAT:-$(get_tool_for_role chat)}"
+export NEXUS_TERMINAL="${NEXUS_TERMINAL:-$(get_tool_for_role terminal)}"
+export NEXUS_VIEWER="${NEXUS_VIEWER:-$(get_tool_for_role viewer)}"
+export NEXUS_SEARCH="${NEXUS_SEARCH:-$(get_tool_for_role search)}"
 export NEXUS_MENU="${NEXUS_MENU:-$NEXUS_HOME/modules/menu/bin/nexus-menu}"
-export NEXUS_TERMINAL="${NEXUS_TERMINAL:-/bin/zsh -i}"
 ROUTER_BIN="$NEXUS_CORE/exec/router.sh"
 
 # Build isolated state directory

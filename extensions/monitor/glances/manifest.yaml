@@ -1,0 +1,11 @@
+name: glances
+version: 1.0.0
+type: tool
+category: monitor
+description: An eye on your system
+author: nicolargo
+license: LGPL-3.0
+binary: glances
+install:
+  macos: [brew install glances]
+  linux: [pip install glances]

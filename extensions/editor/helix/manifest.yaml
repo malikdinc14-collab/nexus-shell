@@ -1,0 +1,22 @@
+name: helix
+version: 1.0.0
+type: tool
+category: editor
+description: A post-modern modal text editor
+author: helix-editor
+license: MPL-2.0
+repository: https://github.com/helix-editor/helix
+
+binary: hx
+binary_candidates: [hx, helix]
+
+role: editor
+role_priority: 90
+
+install:
+  macos:
+    - brew install helix
+  linux:
+    - sudo apt install helix || sudo dnf install helix
+
+dependencies: []

@@ -1,0 +1,9 @@
+name: slumber
+version: 1.0.0
+type: tool
+category: utility
+description: Terminal-based HTTP client
+binary: slumber
+install:
+  macos: [brew install slumber]
+  linux: [cargo install slumber]

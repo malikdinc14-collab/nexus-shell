@@ -1,0 +1,9 @@
+name: lazysql
+version: 1.0.0
+type: tool
+category: database
+description: A lazy SQL terminal user interface
+binary: lazysql
+install:
+  macos: [brew install lazysql]
+  linux: [go install github.com/jorgerojas26/lazysql@latest]

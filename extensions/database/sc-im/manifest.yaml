@@ -1,0 +1,9 @@
+name: sc-im
+version: 1.0.0
+type: tool
+category: database
+description: An ncurses spreadsheet program for terminal
+binary: sc-im
+install:
+  macos: [brew install sc-im]
+  linux: [sudo apt install sc-im]

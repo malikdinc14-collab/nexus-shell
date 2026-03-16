@@ -1,0 +1,20 @@
+name: gptme
+version: 1.0.0
+type: tool
+category: chat
+description: A chat-CLI for LLMs, enabling interaction with LLMs via terminal
+author: ErikBjare
+license: MIT
+repository: https://github.com/ErikBjare/gptme
+
+binary: gptme
+binary_candidates: [gptme]
+
+role: chat
+role_priority: 80
+
+install:
+  macos:
+    - pip install gptme
+  linux:
+    - pip install gptme

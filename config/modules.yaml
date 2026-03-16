@@ -1,10 +1,27 @@
-# Default System Roles & Providers
-# Hierarchy: Project (.nexus/modules.yaml) -> User (~/.nexus/modules.yaml) -> Global (config/modules.yaml)
+# Nexus Shell Role Configuration
+# ================================
+# This file defines default role mappings.
+# 
+# Priority (highest to lowest):
+#   1. Environment variables (NEXUS_EDITOR, etc.)
+#   2. ~/.nexus/profile.yaml (user profile from wizard)
+#   3. This file (system defaults)
+#
+# Run 'nxs wizard' to configure your profile interactively.
 
 roles:
-  editor: "nvim"
-  explorer: "yazi"
-  chat: "zsh -i"
-  viewer: "nxs-view"
-  terminal: "zsh -i"
-  search: "nxs-grepai"
+  editor: nvim
+  explorer: yazi
+  chat: opencode
+  terminal: zsh
+  viewer: glow
+  search: grepai
+
+# Role descriptions (used by wizard)
+role_descriptions:
+  editor: "Code/text editing"
+  explorer: "File navigation"
+  chat: "AI pair programming"
+  terminal: "Terminal enhancements"
+  viewer: "Content viewing"
+  search: "Code search"

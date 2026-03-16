@@ -1,0 +1,22 @@
+name: code
+version: 1.0.0
+type: tool
+category: editor
+description: Visual Studio Code (tunnel mode for terminal)
+author: microsoft
+license: MIT
+repository: https://github.com/microsoft/vscode
+
+binary: code
+binary_candidates: [code, code-insiders]
+
+role: editor
+role_priority: 40
+
+install:
+  macos:
+    - brew install --cask visual-studio-code
+  linux:
+    - sudo snap install code --classic
+
+note: "For terminal editing, use 'code tunnel' or 'code --remote'"

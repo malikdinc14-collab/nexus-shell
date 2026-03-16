@@ -1,0 +1,9 @@
+name: ncspot
+version: 1.0.0
+type: tool
+category: media
+description: Cross-platform ncurses Spotify client
+binary: ncspot
+install:
+  macos: [brew install ncspot]
+  linux: [cargo install ncspot]

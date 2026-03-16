@@ -1,0 +1,23 @@
+name: micro
+version: 1.0.0
+type: tool
+category: editor
+description: Modern and intuitive terminal-based text editor
+author: zyedidia
+license: MIT
+repository: https://github.com/zyedidia/micro
+
+binary: micro
+binary_candidates: [micro]
+
+role: editor
+role_priority: 50
+
+install:
+  macos:
+    - brew install micro
+  linux:
+    - curl https://getmic.ro | bash
+    - sudo mv micro /usr/local/bin/
+
+dependencies: []

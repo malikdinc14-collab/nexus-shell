@@ -1,0 +1,9 @@
+name: spotify-player
+version: 1.0.0
+type: tool
+category: media
+description: A Spotify player in the terminal with full feature parity
+binary: spotify-player
+install:
+  macos: [brew install spotify-player]
+  linux: [cargo install spotify-player]

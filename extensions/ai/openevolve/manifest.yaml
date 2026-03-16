@@ -1,0 +1,9 @@
+name: openevolve
+version: 1.0.0
+type: tool
+category: ai
+description: Evolutionary code optimization
+binary: openevolve
+install:
+  macos: [pip install openevolve]
+  linux: [pip install openevolve]

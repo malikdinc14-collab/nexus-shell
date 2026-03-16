@@ -1,0 +1,9 @@
+name: posting
+version: 1.0.0
+type: tool
+category: utility
+description: The modern API client for the terminal
+binary: posting
+install:
+  macos: [brew install posting]
+  linux: [pip install posting]

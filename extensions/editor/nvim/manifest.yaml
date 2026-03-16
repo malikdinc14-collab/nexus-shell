@@ -1,0 +1,27 @@
+name: nvim
+version: 1.0.0
+type: tool
+category: editor
+description: Hyperextensible Vim-based text editor
+author: neovim
+license: Apache-2.0
+repository: https://github.com/neovim/neovim
+
+binary: nvim
+binary_candidates: [nvim, vim]
+
+role: editor
+role_priority: 100
+
+install:
+  macos:
+    - brew install neovim
+  linux:
+    - sudo apt install neovim || sudo dnf install neovim
+  fallback:
+    - curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-macos.tar.gz
+    - tar xzf nvim-macos.tar.gz
+    - sudo mv nvim-macos/bin/nvim /usr/local/bin/
+
+config_dir: ~/.config/nvim
+dependencies: []
