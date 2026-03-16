@@ -310,6 +310,9 @@ echo "[5/6] Setting up shell integration..."
 NEXUS_ZSH="$USER_HOME/.nexus-shell.zsh"
 cat > "$NEXUS_ZSH" << EOF
 # Nexus-Shell Integration
+# Only run in Zsh
+[[ -n "\$ZSH_VERSION" ]] || return 0
+
 # Point NEXUS_HOME to the config directory for runtime usage
 export NEXUS_HOME="$CONFIG_DIR"
 export NEXUS_CONFIG="$CONFIG_DIR"
@@ -326,7 +329,8 @@ source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
 
 # Source module inits (with nullglob safety)
 if [[ -d "\$NEXUS_CONFIG/modules" ]]; then
-    for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh(N); do
+    # Use standard expansion and check existence loop for better compatibility
+    for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh; do
         [[ -f "\$init_file" ]] && source "\$init_file"
     done
 fi
@@ -338,7 +342,7 @@ if [[ -f "$ZSHRC" ]]; then
     if ! grep -q "nexus-shell.zsh" "$ZSHRC" 2>/dev/null; then
         echo "" >> "$ZSHRC"
         echo "# Nexus-Shell" >> "$ZSHRC"
-        echo '[[ -f "$HOME/.nexus-shell.zsh" ]] && source "$HOME/.nexus-shell.zsh"' >> "$ZSHRC"
+        echo '[[ -n "$ZSH_VERSION" && -f "$HOME/.nexus-shell.zsh" ]] && source "$HOME/.nexus-shell.zsh"' >> "$ZSHRC"
         echo "    Added to ~/.zshrc"
     else
         echo "    ~/.zshrc already has nexus-shell integration"
