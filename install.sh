@@ -30,14 +30,14 @@ echo "    Core Modules: OK"
 
 # Check for tmux
 if ! command -v tmux &>/dev/null; then
-    echo "    ERROR: tmux is required. Install with: brew install tmux"
+    echo "    ERROR: tmux is required. Install with: sudo apt-get install tmux (Linux) or brew install tmux (macOS)"
     exit 1
 fi
 echo "    tmux: OK"
 
 # Check for fzf
 if ! command -v fzf &>/dev/null; then
-    echo "    ERROR: fzf is required. Install with: brew install fzf"
+    echo "    ERROR: fzf is required. Install with: sudo apt-get install fzf (Linux) or brew install fzf (macOS)"
     exit 1
 fi
 echo "    fzf: OK"
