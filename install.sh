@@ -25,23 +25,8 @@ if [[ -d "$NEXUS_HOME/.git" ]]; then
     git -C "$NEXUS_HOME" submodule update --init --recursive
 fi
 
-# Install/Update Parallax from submodule
-if [[ -d "$NEXUS_HOME/modules/parallax" ]]; then
-    echo "    Updating Parallax components..."
-    (cd "$NEXUS_HOME/modules/parallax" && ./install.sh --dev)
-else
-    if ! command -v parallax &>/dev/null && [[ ! -f "$HOME/.parallax/bin/parallax" ]]; then
-        echo ""
-        echo "    ERROR: Parallax is required but not installed."
-        echo ""
-        echo "    Install Parallax first:"
-        echo "      git clone https://github.com/samir-alsayad/parallax.git"
-        echo "      cd parallax && ./install.sh"
-        echo ""
-        exit 1
-    fi
-fi
-echo "    Parallax: OK"
+# Note: Parallax is now integrated into the menu module.
+echo "    Core Modules: OK"
 
 # Check for tmux
 if ! command -v tmux &>/dev/null; then
@@ -290,11 +275,9 @@ cp -r "$NEXUS_HOME/docs" "$CONFIG_DIR/"
 cp -r "$NEXUS_HOME/modules" "$CONFIG_DIR/"
 cp -r "$NEXUS_HOME/examples" "$CONFIG_DIR/"
 
-# Install Nexus actions to Parallax
-if [[ -d "$HOME/.parallax/content/actions" ]]; then
-    echo "    Installing Nexus actions to Parallax..."
-    mkdir -p "$HOME/.parallax/content/actions/nexus"
-    cp -rf "$NEXUS_HOME/core/actions/"* "$HOME/.parallax/content/actions/nexus/" 2>/dev/null || true
+# Install Nexus actions
+if [[ -d "$NEXUS_HOME/core/actions" ]]; then
+    echo "    Setting up Nexus actions..."
 fi
 
 # Copy example configs and integration files

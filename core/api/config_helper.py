@@ -57,11 +57,9 @@ def main():
     safe_export("NEXUS_MENU", tools.get('menu', '$NEXUS_HOME/modules/menu/bin/nexus-menu'))
     safe_export("NEXUS_TERMINAL", tools.get('terminal', '/bin/zsh -i'))
     
-    # Parallax Specifics
-    parallax = config.get('parallax', {})
-    safe_export("PX_ENABLED", str(parallax.get('enabled', True)).lower())
-    pillars = set(parallax.get('pillars', []))
-    safe_export("PX_PILLARS", ','.join(pillars))
+    # Menu/UI Specifics
+    # Menu module handles the UI orchestration previously done by Parallax
+    safe_export("NEXUS_MENU_ENABLED", "true")
 
 if __name__ == "__main__":
     main()

@@ -192,8 +192,8 @@ export NEXUS_TERMINAL="${NEXUS_TERMINAL:-/bin/zsh -i}"
 ROUTER_BIN="$NEXUS_CORE/exec/router.sh"
 
 # Build isolated state directory
-export PX_STATE_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME/parallax"
-mkdir -p "$PX_STATE_DIR"
+export NEXUS_STATE_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME/state"
+mkdir -p "$NEXUS_STATE_DIR"
 
 # 5. Mandatory State Reset & Initialization
 # DISCOVERY: Do not kill-server. We want multi-window support.
