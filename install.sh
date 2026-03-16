@@ -129,29 +129,20 @@ if [[ "$DOWNLOAD_TOOLS" =~ ^[Yy]$ ]]; then
             
             if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
                 echo "$NEXUS_BIN/$tool_name"
-            else
+            elif [[ -n "$conf_val" ]]; then
                 echo "$conf_val"
+            else
+                echo "$tool_name"
             fi
         }
 
         VAL_EDITOR=$(get_isolated_or_conf "nvim" "NEXUS_EDITOR")
-        [[ -z "$VAL_EDITOR" ]] && VAL_EDITOR="nvim"
-        
         VAL_FILES=$(get_isolated_or_conf "yazi" "NEXUS_FILES")
-        [[ -z "$VAL_FILES" ]] && VAL_FILES="yazi"
-        
         VAL_RENDER=$(get_isolated_or_conf "glow" "NEXUS_RENDER")
-        [[ -z "$VAL_RENDER" ]] && VAL_RENDER="glow"
-        
         VAL_GUM=$(get_isolated_or_conf "gum" "NEXUS_GUM")
-        [[ -z "$VAL_GUM" ]] && VAL_GUM="gum"
-        
         VAL_GIT=$(get_isolated_or_conf "lazygit" "NEXUS_GIT")
-        [[ -z "$VAL_GIT" ]] && VAL_GIT="lazygit"
-        
         VAL_CHAT=$(get_conf_val "NEXUS_CHAT")
         [[ -z "$VAL_CHAT" ]] && VAL_CHAT="$DETECTED_CHAT"
-        
         VAL_PX_UI=$(get_conf_val "NEXUS_PX_UI")
         [[ -z "$VAL_PX_UI" ]] && VAL_PX_UI="tmux"
 
@@ -163,20 +154,30 @@ NEXUS_FILES="$VAL_FILES"
 NEXUS_RENDER="$VAL_RENDER"
 NEXUS_GUM="$VAL_GUM"
 NEXUS_GIT="$VAL_GIT"
-NEXUS_CHAT="$VAL_CHAT"
+NEXUS_CHAT="${VAL_CHAT:-aider}"
 NEXUS_PX_UI="$VAL_PX_UI"
 NEXUS_ISOLATED="true"
 EOF
     else
-        # Write tools config to use downloaded binaries with isolated configs
+        # Helper: Use isolated if exists, else fallback to command name
+        use_isolated_or_cmd() {
+            local tool_name="$1"
+            if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
+                echo "$NEXUS_BIN/$tool_name"
+            else
+                echo "$tool_name"
+            fi
+        }
+
+        # Write tools config
         cat > "$CONFIG_DIR/tools.conf" << EOF
-# Nexus-Shell Tool Configuration (downloaded binaries, isolated configs)
-NEXUS_EDITOR="$NEXUS_BIN/nvim"
-NEXUS_FILES="$NEXUS_BIN/yazi"
-NEXUS_RENDER="$NEXUS_BIN/glow"
-NEXUS_GUM="$NEXUS_BIN/gum"
-NEXUS_GIT="$NEXUS_BIN/lazygit"
-NEXUS_CHAT="$DETECTED_CHAT"
+# Nexus-Shell Tool Configuration (validated paths)
+NEXUS_EDITOR="$(use_isolated_or_cmd nvim)"
+NEXUS_FILES="$(use_isolated_or_cmd yazi)"
+NEXUS_RENDER="$(use_isolated_or_cmd glow)"
+NEXUS_GUM="$(use_isolated_or_cmd gum)"
+NEXUS_GIT="$(use_isolated_or_cmd lazygit)"
+NEXUS_CHAT="${DETECTED_CHAT:-aider}"
 NEXUS_PX_UI="tmux"
 NEXUS_ISOLATED="true"
 EOF
@@ -323,9 +324,9 @@ export NEXUS_BIN="$NEXUS_BIN"
 # Shell hooks (Kernel Location)
 source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
 
-# Source module inits
+# Source module inits (with nullglob safety)
 if [[ -d "\$NEXUS_CONFIG/modules" ]]; then
-    for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh; do
+    for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh(N); do
         [[ -f "\$init_file" ]] && source "\$init_file"
     done
 fi
