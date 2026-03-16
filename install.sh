@@ -121,28 +121,31 @@ if [[ "$DOWNLOAD_TOOLS" =~ ^[Yy]$ ]]; then
 
         # Determine values (Priority: Isolated > Existing > Default)
         
-        # Helper: Check isolated binary
-        get_isolated_or_conf() {
+        # Helper: Check isolated binary or system command
+        get_best_tool_path() {
             local tool_name="$1"
             local conf_key="$2"
             local conf_val=$(get_conf_val "$conf_key")
             
+            # 1. Check isolated binary
             if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
                 echo "$NEXUS_BIN/$tool_name"
-            elif [[ -n "$conf_val" ]]; then
+            # 2. Check existing config value (if it's a valid path)
+            elif [[ -x "$conf_val" ]]; then
                 echo "$conf_val"
+            # 3. Fallback to system command via 'command -v'
             else
-                echo "$tool_name"
+                local sys_path=$(command -v "$tool_name" 2>/dev/null || echo "$tool_name")
+                echo "$sys_path"
             fi
         }
 
-        VAL_EDITOR=$(get_isolated_or_conf "nvim" "NEXUS_EDITOR")
-        VAL_FILES=$(get_isolated_or_conf "yazi" "NEXUS_FILES")
-        VAL_RENDER=$(get_isolated_or_conf "glow" "NEXUS_RENDER")
-        VAL_GUM=$(get_isolated_or_conf "gum" "NEXUS_GUM")
-        VAL_GIT=$(get_isolated_or_conf "lazygit" "NEXUS_GIT")
-        VAL_CHAT=$(get_conf_val "NEXUS_CHAT")
-        [[ -z "$VAL_CHAT" ]] && VAL_CHAT="$DETECTED_CHAT"
+        VAL_EDITOR=$(get_best_tool_path "nvim" "NEXUS_EDITOR")
+        VAL_FILES=$(get_best_tool_path "yazi" "NEXUS_FILES")
+        VAL_RENDER=$(get_best_tool_path "glow" "NEXUS_RENDER")
+        VAL_GUM=$(get_best_tool_path "gum" "NEXUS_GUM")
+        VAL_GIT=$(get_best_tool_path "lazygit" "NEXUS_GIT")
+        VAL_CHAT=$(get_best_tool_path "aider" "NEXUS_CHAT")
         VAL_PX_UI=$(get_conf_val "NEXUS_PX_UI")
         [[ -z "$VAL_PX_UI" ]] && VAL_PX_UI="tmux"
 
@@ -154,30 +157,30 @@ NEXUS_FILES="$VAL_FILES"
 NEXUS_RENDER="$VAL_RENDER"
 NEXUS_GUM="$VAL_GUM"
 NEXUS_GIT="$VAL_GIT"
-NEXUS_CHAT="${VAL_CHAT:-aider}"
+NEXUS_CHAT="$VAL_CHAT"
 NEXUS_PX_UI="$VAL_PX_UI"
 NEXUS_ISOLATED="true"
 EOF
     else
-        # Helper: Use isolated if exists, else fallback to command name
-        use_isolated_or_cmd() {
+        # Helper: Use isolated if exists, else system command
+        use_isolated_or_sys() {
             local tool_name="$1"
             if [[ -x "$NEXUS_BIN/$tool_name" ]]; then
                 echo "$NEXUS_BIN/$tool_name"
             else
-                echo "$tool_name"
+                command -v "$tool_name" 2>/dev/null || echo "$tool_name"
             fi
         }
 
         # Write tools config
         cat > "$CONFIG_DIR/tools.conf" << EOF
 # Nexus-Shell Tool Configuration (validated paths)
-NEXUS_EDITOR="$(use_isolated_or_cmd nvim)"
-NEXUS_FILES="$(use_isolated_or_cmd yazi)"
-NEXUS_RENDER="$(use_isolated_or_cmd glow)"
-NEXUS_GUM="$(use_isolated_or_cmd gum)"
-NEXUS_GIT="$(use_isolated_or_cmd lazygit)"
-NEXUS_CHAT="${DETECTED_CHAT:-aider}"
+NEXUS_EDITOR="$(use_isolated_or_sys nvim)"
+NEXUS_FILES="$(use_isolated_or_sys yazi)"
+NEXUS_RENDER="$(use_isolated_or_sys nvim)" # Fallback render for nvim
+NEXUS_GUM="$(use_isolated_or_sys gum)"
+NEXUS_GIT="$(use_isolated_or_sys lazygit)"
+NEXUS_CHAT="$(use_isolated_or_sys aider)"
 NEXUS_PX_UI="tmux"
 NEXUS_ISOLATED="true"
 EOF
@@ -327,12 +330,15 @@ export NEXUS_BIN="$NEXUS_BIN"
 # Shell hooks (Kernel Location)
 source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
 
-# Source module inits (with nullglob safety)
+# Source module inits (with Zsh-safe globbing)
 if [[ -d "\$NEXUS_CONFIG/modules" ]]; then
-    # Use standard expansion and check existence loop for better compatibility
-    for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh; do
-        [[ -f "\$init_file" ]] && source "\$init_file"
-    done
+    # Use anonymous function with nullglob for safety
+    () {
+        setopt localoptions nullglob
+        for init_file in "\$NEXUS_CONFIG"/modules/*/init.zsh; do
+            [[ -f "\$init_file" ]] && source "\$init_file"
+        done
+    }
 fi
 EOF
 
