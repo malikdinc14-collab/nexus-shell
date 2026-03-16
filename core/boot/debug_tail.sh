@@ -7,13 +7,21 @@ echo -e "Tailing all service logs for project: \033[1;36m$PROJECT_NAME\033[0m"
 echo "----------------------------------------------------"
 
 LOG_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME"
-mkdir -p "$LOG_DIR"
+echo "Log Directory: $LOG_DIR"
 
-# Wait for logs to be created
-sleep 1
+# Check if directory exists
+if [[ ! -d "$LOG_DIR" ]]; then
+    echo "[!] Log directory does not exist yet. Waiting..."
+    for i in {1..20}; do
+        [[ -d "$LOG_DIR" ]] && break
+        sleep 0.5
+    done
+fi
 
-# Using tail with --follow=name to handle file recreation
-tail -f "$LOG_DIR"/*.log 2>/dev/null | grep --line-buffered -v "DEBUG" || echo "[!] No logs found yet..."
+# Multi-tail all log files
+echo "[*] Starting live monitor..."
+tail -f "$LOG_DIR"/*.log 2>/dev/null || echo "[!] No log files found in $LOG_DIR"
 
 # Keep window open if tail fails
+echo "--- Monitor Stopped ---"
 /bin/zsh

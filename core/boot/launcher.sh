@@ -336,19 +336,21 @@ fi
 # PHASE 0: Event Bus (Nervous System)
 # Start the event server in the background
 echo "[*] Starting Nexus Event Bus..."
-export NEXUS_BUS_LOG="/tmp/nexus_$(whoami)/$PROJECT_NAME/bus.log"
+export NEXUS_LOG_DIR="/tmp/nexus_$(whoami)/$PROJECT_NAME"
+mkdir -p "$NEXUS_LOG_DIR"
+export NEXUS_BUS_LOG="$NEXUS_LOG_DIR/bus.log"
 "$Python_BIN" "$NEXUS_CORE/bus/event_server.py" > "$NEXUS_BUS_LOG" 2>&1 &
 export NEXUS_BUS_PID=$!
 # Wait for socket
 for i in {1..10}; do
-    [[ -S "/tmp/nexus_$(whoami)/$PROJECT_NAME/bus.sock" ]] && break
+    [[ -S "$NEXUS_LOG_DIR/bus.sock" ]] && break
     sleep 0.1
 done
 
 # Start Sovereign Intelligence Daemon (SID)
 if [[ -f "$NEXUS_CORE/ai/sid.py" ]]; then
     echo "[*] Starting Sovereign Intelligence Daemon (SID)..."
-    export NEXUS_SID_LOG="/tmp/nexus_$(whoami)/$PROJECT_NAME/sid.log"
+    export NEXUS_SID_LOG="$NEXUS_LOG_DIR/sid.log"
     "$Python_BIN" "$NEXUS_CORE/ai/sid.py" > "$NEXUS_SID_LOG" 2>&1 &
     export NEXUS_SID_PID=$!
 fi
