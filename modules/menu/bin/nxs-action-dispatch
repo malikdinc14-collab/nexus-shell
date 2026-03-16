@@ -199,7 +199,12 @@ case "$VERB" in
         if [[ -n "$CMD" ]]; then
              log "Resolved global action: $PAYLOAD -> $CMD"
              # Execute in LOCAL stack, not the 'terminal' role
-             "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$CMD" "$PAYLOAD"
+             # Use replace for menu calls to keep slot stable
+             if [[ "$NXS_CALLER" == "menu" ]]; then
+                  "$NEXUS_HOME/core/stack/nxs-stack" replace "local" "$CMD" "$PAYLOAD"
+             else
+                  "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$CMD" "$PAYLOAD"
+             fi
              exit 0
         fi
 
@@ -225,11 +230,17 @@ case "$VERB" in
             log "Routing: Intent=$INTENT | Role=$TARGET_ROLE | Payload=$PAYLOAD"
             # Modernization: If it's an ACTION and we have no mapping, execute directly instead of using router.sh
             if [[ "$ITEM_TYPE" == "ACTION" ]]; then
-                 "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$PAYLOAD" "$IDENTITY"
+                 case "$INTENT" in
+                     replace) "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "$PAYLOAD" "$IDENTITY" ;;
+                     push|*)  "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$PAYLOAD" "$IDENTITY" ;;
+                 esac
             else
                  # Fallback for structured types (PLACE, NOTE etc)
                  ROUTER_CMD="echo '$ITEM_TYPE|$PAYLOAD' | ${NEXUS_HOME}/core/exec/router.sh"
-                 "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$ROUTER_CMD"
+                 case "$INTENT" in
+                     replace) "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "$ROUTER_CMD" "$IDENTITY" ;;
+                     push|*)  "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$ROUTER_CMD" "$IDENTITY" ;;
+                 esac
             fi
         fi
         ;;

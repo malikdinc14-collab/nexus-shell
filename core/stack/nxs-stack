@@ -83,9 +83,14 @@ def resolve_role(role):
     
     # "local" or None = resolve to either Current Slot Role or Pane ID
     if not role or role == "local":
-        if is_role_routing_enabled():
+        # Rule: If the current pane ALREADY has a private ID-based role (starts with %), 
+        # we MUST keep using it to avoid stack fragmentation.
+        if focused_role and focused_role.startswith("%"):
+            result = focused_role
+        elif is_role_routing_enabled():
             result = focused_role if focused_role and focused_role != "null" else focused_id
         else:
+            # Anchor to the current focused ID (creates a new private stack if none exists)
             result = focused_id
         
         _trace("RESOLVE_ROLE", input=role, focused_id=focused_id, role_on_focused=focused_role, output=result, role_routing=is_role_routing_enabled())
