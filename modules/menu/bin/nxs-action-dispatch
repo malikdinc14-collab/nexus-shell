@@ -194,6 +194,24 @@ case "$VERB" in
             INTENT="replace"
         fi
 
+        if [[ "$ITEM_TYPE" == "ROLE" ]]; then
+            IDENTITY="$PAYLOAD"
+            CMD=$($Python_BIN "$NEXUS_HOME/core/api/module_registry.py" "$IDENTITY")
+            log "Resolved ROLE item: $IDENTITY -> $CMD"
+            
+            # SMART RESOLVE: If role identity exists in local stack
+            if check_stack "$IDENTITY" && [[ "$INTENT" == "swap" || "$NXS_CALLER" == "menu" ]]; then
+                IDX=$(get_stack_idx "$IDENTITY")
+                log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
+                "$STACK_BIN" switch "local" "$IDX"
+                exit 0
+            fi
+
+            # Update CMD and IDENTITY for downstream
+            PAYLOAD="$CMD"
+            ITEM_TYPE="ACTION"
+        fi
+
         # Check global actions first
         CMD=$(get_global_action "$PAYLOAD")
         if [[ -n "$CMD" ]]; then
@@ -209,11 +227,39 @@ case "$VERB" in
         fi
 
         # Resolve by type/verb
+        if [[ "$ITEM_TYPE" == "SET_DEFAULT" ]]; then
+            ROLE=$(echo "$PAYLOAD" | cut -d'|' -f1)
+            CMD_VAL=$(echo "$PAYLOAD" | cut -d'|' -f2)
+            log "Setting default for role: $ROLE to $CMD_VAL"
+            
+            # Update config/modules.yaml
+            # Priority: Project > User > Global (For now, let's stick to Global for system-wide defaults as requested)
+            TARGET_CONFIG="$NEXUS_HOME/config/modules.yaml"
+            
+            $Python_BIN - "$TARGET_CONFIG" "$ROLE" "$CMD_VAL" <<'PYEOF' 2>> "$LOG_FILE"
+import sys, yaml
+f_path, role, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(f_path, 'r') as f:
+        data = yaml.safe_load(f) or {}
+    if "roles" not in data: data["roles"] = {}
+    data["roles"][role] = cmd
+    with open(f_path, 'w') as f:
+        yaml.safe_dump(data, f)
+except Exception as e:
+    sys.stderr.write(f"Config Merge Error: {e}\n")
+PYEOF
+            
+            echo "[Nexus] Default for $ROLE set to $CMD_VAL"
+            sleep 0.5
+            exit 0
+        fi
+
         CMD=$(get_action "run" "$ITEM_TYPE")
         
         # Determine Target Slot (Role)
-        # Always target the LOCAL slot (Active Pane) for menu-originated actions
-        TARGET_ROLE="local"
+        # Narrowing: Use IDENTITY for ROLE launches to transition out of the 'menu' role.
+        TARGET_ROLE="${IDENTITY:-local}"
 
         if [[ -n "$CMD" ]]; then
             log "Execution: Intent=$INTENT | Role=$TARGET_ROLE | Cmd=$CMD"
