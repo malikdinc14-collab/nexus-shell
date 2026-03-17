@@ -116,7 +116,7 @@ case "$VERB" in
         if [[ "$REAL_TYPE" == "renderer" ]]; then
             log "Intelligent Routing: Rerouting $PAYLOAD to Local Stack (Renderer)"
             # Push to the LOCAL stack (In-Place)
-            /Users/Shared/Projects/nexus-shell/core/stack/nxs-stack push "local" "/Users/Shared/Projects/nexus-shell/core/view/nxs-view '$PAYLOAD'" "View: $(basename "$PAYLOAD")"
+            "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$NEXUS_HOME/core/view/nxs-view '$PAYLOAD'" "View: $(basename "$PAYLOAD")"
             exit 0
         fi
 
@@ -167,128 +167,46 @@ case "$VERB" in
         # Default to 'swap' for system context (In-Place), 'push' for others
         INTENT="${NXS_INTENT:-swap}"
         
-        # Parse payload for identity
-        # Format: identity:Label:Command
-        if [[ "$PAYLOAD" == identity:* ]]; then
-            IDENTITY=$(echo "$PAYLOAD" | cut -d: -f2)
-            CMD=$(echo "$PAYLOAD" | cut -d: -f3-)
-            
-            # SMART RESOLVE: If identity exists in local stack
-            # We prioritize switching over launching if intent is 'swap' or caller is 'menu'
-            if check_stack "$IDENTITY" && [[ "$INTENT" == "swap" || "$NXS_CALLER" == "menu" ]]; then
-                IDX=$(get_stack_idx "$IDENTITY")
-                log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
-                "$STACK_BIN" switch "local" "$IDX"
-                exit 0
-            fi
-            
-            # Update CMD for downstream
-            PAYLOAD="$CMD"
-        else
-            IDENTITY=$(get_action "identity" "$ITEM_TYPE")
-        fi
-
-        # INTELLIGENCE: If we are calling from the Menu, 'swap' means 'replace the menu'
-        if [[ "$NXS_CALLER" == "menu" && "$INTENT" == "swap" ]]; then
-            log "Caller is menu: Upgrading 'swap' to 'replace' for in-pane experience"
-            INTENT="replace"
-        fi
-
-        if [[ "$ITEM_TYPE" == "ROLE" ]]; then
-            IDENTITY="$PAYLOAD"
-            CMD=$($Python_BIN "$NEXUS_HOME/core/api/module_registry.py" "$IDENTITY")
-            log "Resolved ROLE item: $IDENTITY -> $CMD"
-            
-            # SMART RESOLVE: If role identity exists in local stack
-            if check_stack "$IDENTITY" && [[ "$INTENT" == "swap" || "$NXS_CALLER" == "menu" ]]; then
-                IDX=$(get_stack_idx "$IDENTITY")
-                log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
-                "$STACK_BIN" switch "local" "$IDX"
-                exit 0
-            fi
-
-            # Update CMD and IDENTITY for downstream
-            PAYLOAD="$CMD"
-            ITEM_TYPE="ACTION"
-        fi
-
-        # Check global actions first
-        CMD=$(get_global_action "$PAYLOAD")
-        if [[ -n "$CMD" ]]; then
-             log "Resolved global action: $PAYLOAD -> $CMD"
-             # Execute in LOCAL stack, not the 'terminal' role
-             # Use replace for menu calls to keep slot stable
-             if [[ "$NXS_CALLER" == "menu" ]]; then
-                  "$NEXUS_HOME/core/stack/nxs-stack" replace "local" "$CMD" "$PAYLOAD"
-             else
-                  "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$CMD" "$PAYLOAD"
-             fi
-             exit 0
-        fi
-
-        # Resolve by type/verb
-        if [[ "$ITEM_TYPE" == "SET_DEFAULT" ]]; then
-            ROLE=$(echo "$PAYLOAD" | cut -d'|' -f1)
-            CMD_VAL=$(echo "$PAYLOAD" | cut -d'|' -f2)
-            log "Setting default for role: $ROLE to $CMD_VAL"
-            
-            # Update config/modules.yaml
-            # Priority: Project > User > Global (For now, let's stick to Global for system-wide defaults as requested)
-            TARGET_CONFIG="$NEXUS_HOME/config/modules.yaml"
-            
-            $Python_BIN - "$TARGET_CONFIG" "$ROLE" "$CMD_VAL" <<'PYEOF' 2>> "$LOG_FILE"
-import sys, yaml
-f_path, role, cmd = sys.argv[1], sys.argv[2], sys.argv[3]
-try:
-    with open(f_path, 'r') as f:
-        data = yaml.safe_load(f) or {}
-    if "roles" not in data: data["roles"] = {}
-    data["roles"][role] = cmd
-    with open(f_path, 'w') as f:
-        yaml.safe_dump(data, f)
-except Exception as e:
-    sys.stderr.write(f"Config Merge Error: {e}\n")
-PYEOF
-            
-            echo "[Nexus] Default for $ROLE set to $CMD_VAL"
-            sleep 0.5
-            exit 0
-        fi
-
-        CMD=$(get_action "run" "$ITEM_TYPE")
+        # V3 Unified Intelligence Kernel Delegation
+        # ---
+        PLAN_JSON=$($Python_BIN "$NEXUS_HOME/core/api/intent_resolver.py" "$VERB" "$ITEM_TYPE" "$PAYLOAD" "$INTENT" "$NXS_CALLER" 2>> "$LOG_FILE")
         
-        # Determine Target Slot (Role)
-        # Narrowing: Use IDENTITY for ROLE launches to transition out of the 'menu' role.
-        TARGET_ROLE="${IDENTITY:-local}"
-
-        if [[ -n "$CMD" ]]; then
-            log "Execution: Intent=$INTENT | Role=$TARGET_ROLE | Cmd=$CMD"
-            
-            case "$INTENT" in
-                replace)
-                    "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}" "$IDENTITY"
-                    ;;
-                push|*)
-                    "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "${CMD//\$PAYLOAD/$PAYLOAD}" "$IDENTITY"
-                    ;;
-            esac
-        else
-            log "Routing: Intent=$INTENT | Role=$TARGET_ROLE | Payload=$PAYLOAD"
-            # Modernization: If it's an ACTION and we have no mapping, execute directly instead of using router.sh
-            if [[ "$ITEM_TYPE" == "ACTION" ]]; then
-                 case "$INTENT" in
-                     replace) "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "$PAYLOAD" "$IDENTITY" ;;
-                     push|*)  "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$PAYLOAD" "$IDENTITY" ;;
-                 esac
-            else
-                 # Fallback for structured types (PLACE, NOTE etc)
-                 ROUTER_CMD="echo '$ITEM_TYPE|$PAYLOAD' | ${NEXUS_HOME}/core/exec/router.sh"
-                 case "$INTENT" in
-                     replace) "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "$ROUTER_CMD" "$IDENTITY" ;;
-                     push|*)  "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$ROUTER_CMD" "$IDENTITY" ;;
-                 esac
-            fi
+        if [[ -z "$PLAN_JSON" ]]; then
+            log "Kernel Error: Empty execution plan returned."
+            exit 1
         fi
+
+        STRATEGY=$(echo "$PLAN_JSON" | jq -r '.strategy')
+        TARGET_ROLE=$(echo "$PLAN_JSON" | jq -r '.role')
+        CMD=$(echo "$PLAN_JSON" | jq -r '.cmd')
+        IDENTITY=$(echo "$PLAN_JSON" | jq -r '.name // empty')
+        
+        log "Kernel Execution: Strategy=$STRATEGY | Role=$TARGET_ROLE | Identity=$IDENTITY"
+
+        case "$STRATEGY" in
+            stack_switch)
+                IDX=$(echo "$PLAN_JSON" | jq -r '.index')
+                "$STACK_BIN" switch "local" "$IDX"
+                ;;
+            stack_replace)
+                "$STACK_BIN" replace "$TARGET_ROLE" "$CMD" "$IDENTITY"
+                ;;
+            stack_push)
+                "$STACK_BIN" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
+                ;;
+            exec_local)
+                eval "$CMD" 2>> "$LOG_FILE"
+                ;;
+            remote_control)
+                TARGET=$(echo "$PLAN_JSON" | jq -r '.target')
+                "$NEXUS_HOME/core/bin/nxs-control" "$TARGET" "$CMD"
+                ;;
+            *)
+                log "Strategy mismatch: $STRATEGY. Falling back to default push."
+                "$STACK_BIN" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
+                ;;
+        esac
+        exit 0
         ;;
     context)
         if [[ "$ITEM_TYPE" == "SHELF_ITEM" ]]; then
@@ -319,6 +237,37 @@ PYEOF
             CMD=$(echo "$ACTIONS_JSON" | jq -r ".[] | select(.label == \"$SELECTED\") | .cmd" 2>> "$LOG_FILE")
             eval "${CMD//\$PAYLOAD/$PAYLOAD}" 2>> "$LOG_FILE"
         fi
+        ;;
+    favorite)
+        log "Favoriting $ITEM_TYPE: $PAYLOAD"
+        FAV_DIR="$HOME/.nexus/favorites"
+        mkdir -p "$FAV_DIR"
+        
+        # Determine specific favorite file based on type (lower-case)
+        F_FILE="$FAV_DIR/${ITEM_TYPE,,}s.json"
+        
+        # Use python for robust JSON array manipulation
+        $Python_BIN - "$F_FILE" "$PAYLOAD" <<'PYEOF'
+import sys, json, os
+f_path, payload = sys.argv[1], sys.argv[2]
+data = []
+if os.path.exists(f_path):
+    try:
+        with open(f_path, "r") as f:
+            data = json.load(f)
+    except: pass
+
+if payload in data:
+    data.remove(payload)
+    print(f"Removed from favorites: {payload}")
+else:
+    data.append(payload)
+    print(f"Added to favorites: {payload}")
+
+with open(f_path, "w") as f:
+    json.dump(data, f, indent=2)
+PYEOF
+        exit 0
         ;;
     *)
         echo "[Nexus] Unknown verb: $VERB"

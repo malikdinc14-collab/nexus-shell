@@ -8,18 +8,40 @@ USER_TMP = Path(f"/tmp/nexus_{os.getlogin()}")
 STACK_STATE = USER_TMP / "stacks.json"
 DEBUG_MODE_FILE = USER_TMP / "debug_pane_ids"
 
+# State Handshake
+sys.path.append(str(Path(__file__).resolve().parent.parent / "state"))
+try:
+    from state_engine import NexusStateEngine
+except ImportError:
+    NexusStateEngine = None
 
-def is_debug_mode():
-    return DEBUG_MODE_FILE.exists()
-
+def get_engine():
+    project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
+    if NexusStateEngine:
+        return NexusStateEngine(project_root)
+    return None
 
 def load_state():
-    if not STACK_STATE.exists():
-        return {}
+    engine = get_engine()
+    if engine:
+        return engine.get("ui.stacks") or {}
+    return {}
+
+
+def get_slot(pane_id):
     try:
-        return json.loads(STACK_STATE.read_text())
+        import subprocess
+
+        out = (
+            subprocess.check_output(
+                ["tmux", "display-message", "-p", "-t", pane_id, "#{@nexus_slot}"]
+            )
+            .decode()
+            .strip()
+        )
+        return out if out and out != "null" else None
     except:
-        return {}
+        return None
 
 
 def get_role(pane_id):
@@ -95,11 +117,18 @@ def main():
     # Debug mode: show pane ID prominently
     if is_debug_mode():
         role = get_role(pane_id)
-        # Avoid showing the ID twice if the role IS the ID
-        role_label = ""
-        if role and role != pane_id:
-            role_label = f" ({role})"
-        print(f"#[fg=yellow,bold][{pane_id}]{role_label}#[default]")
+        slot = get_slot(pane_id)
+        # Hide raw %id if we have a slot, unless NEXUS_DEBUG_RAW_IDS is set
+        if slot and os.environ.get("NEXUS_DEBUG_RAW_IDS") != "true":
+            id_label = f"#{slot}"
+        else:
+            id_label = f"[{pane_id}]"
+
+        if role and role != "null" and role != pane_id and not role.startswith("slot_"):
+            label = f"{id_label} ({role})"
+        else:
+            label = id_label
+        print(f"#[fg=yellow,bold]{label}#[default]")
         return
 
     # 1. Check for Neovim First (Hybrid Mode)
@@ -117,17 +146,39 @@ def main():
         return
 
     # 2. Fallback to Nexus Stack
-    role = get_role(pane_id) or pane_id
+    role = get_role(pane_id)
+    slot = get_slot(pane_id)
+    
+    # Hide raw %id if we have a slot, unless NEXUS_DEBUG_RAW_IDS is set
+    if slot and os.environ.get("NEXUS_DEBUG_RAW_IDS") != "true":
+        id_label = f"#{slot}"
+    else:
+        id_label = f"[{pane_id}]"
+
+    # The visual identity is either the role or the pane_id
+    # Rule: If we have a semantic role, use it. Otherwise, use the stable ID label.
+    visual_id = role if role and role != "null" else pane_id
+    
     state = load_state()
-    if role not in state or not state[role]["tabs"]:
-        print(f"#[fg=cyan,bold] {role} ")
+    
+    # Check if this role/pane has a stack
+    stack = state.get(visual_id)
+    if not stack or not stack.get("tabs"):
+        # Just show the ID/Role
+        if role and role != "null" and role != pane_id and not role.startswith("slot_"):
+            print(f"#[fg=yellow,bold]{id_label}#[default] #[fg=cyan,bold]({role})")
+        else:
+            print(f"#[fg=yellow,bold]{id_label}#[default]")
         return
 
-    stack = state[role]
     tabs = stack["tabs"]
     active_idx = stack["active_index"]
 
     output = []
+    # Prefix with stable slot ID if it's not already the primary thing
+    if slot and visual_id != f"slot_{slot}" and visual_id != role:
+         output.append(f"#[fg=yellow,bold]#{slot}#[default]")
+
     for i, tab in enumerate(tabs):
         name = tab["name"]
         if i == active_idx:

@@ -25,7 +25,7 @@ if [[ "$FOCUSED_ROLE" == "editor" ]]; then
     fi
 else
     # General Sovereign Stack Provider
-    STACK_JSON=$(/Users/Shared/Projects/nexus-shell/core/stack/nxs-stack list "$FOCUSED_ROLE" 2>/dev/null)
+    STACK_JSON=$( "$NEXUS_HOME/core/stack/nxs-stack" list "$FOCUSED_ROLE" 2>/dev/null)
     if [[ -n "$STACK_JSON" && "$STACK_JSON" != "{}" ]]; then
         # Format: [pane1] [pane2*] [pane3]
         STACK_DATA=$(echo "$STACK_JSON" | jq -r '.tabs as $t | .active_index as $a | $t | to_entries | map(if .key == $a then "[\(.value.name)*]" else "[\(.value.name)]" end) | join(" ")')

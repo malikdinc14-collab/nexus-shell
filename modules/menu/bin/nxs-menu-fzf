@@ -48,6 +48,5 @@ if [[ "$TYPE" == "FOLDER" || "$TYPE" == "PLANE" ]]; then
 else
     # Dispatch action
     export NXS_CALLER="menu"
-    export NXS_TARGET_PANE=$(tmux display-message -p "#{pane_id}")
     "$DISPATCH_BIN" "run" "$TYPE" "$PAYLOAD"
 fi

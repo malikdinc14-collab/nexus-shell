@@ -93,13 +93,11 @@ fi
         
         if [[ -n "$MENU_IDX" ]]; then
              echo "[$(date +%T)] Existing Menu found at index $MENU_IDX -> Switching" >> "$LOG_FILE"
-             if "$STACK_BIN" switch local "$MENU_IDX"; then
-                # After switching, the menu pane is now visible. Apply the return address.
-                NEW_ID=$(tmux display-message -p "#{pane_id}")
-                tmux set-option -p -t "$NEW_ID" "@nexus_portal_return" "$CUR_IDX"
-                exit 0
-             fi
-             echo "[$(date +%T)] Menu switch failed. Forcing fresh launch." >> "$LOG_FILE"
+             "$STACK_BIN" switch local "$MENU_IDX"
+             # After switching, the menu pane is now visible. Apply the return address.
+             NEW_ID=$(tmux display-message -p "#{pane_id}")
+             tmux set-option -p -t "$NEW_ID" "@nexus_portal_return" "$CUR_IDX"
+             exit 0
         fi
 
         # TIERED LAUNCHER

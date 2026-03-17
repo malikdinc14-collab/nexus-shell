@@ -2,17 +2,17 @@
 # core/boot/nxs-aliases.sh
 # Standard shell aliases for Nexus navigation.
 
-alias menu="/Users/Shared/Projects/nexus-shell/core/exec/nxs-switch.sh menu"
-alias chat="/Users/Shared/Projects/nexus-shell/core/exec/nxs-switch.sh chat"
-alias edit="/Users/Shared/Projects/nexus-shell/core/exec/nxs-switch.sh edit"
-alias explorer="/Users/Shared/Projects/nexus-shell/core/exec/nxs-switch.sh explorer"
-alias view="/Users/Shared/Projects/nexus-shell/core/exec/nxs-switch.sh view"
-alias preview="/Users/Shared/Projects/nexus-shell/core/exec/nxs-preview.sh"
+alias menu="$NEXUS_HOME/core/exec/nxs-switch.sh menu"
+alias chat="$NEXUS_HOME/core/exec/nxs-switch.sh chat"
+alias edit="$NEXUS_HOME/core/exec/nxs-switch.sh edit"
+alias explorer="$NEXUS_HOME/core/exec/nxs-switch.sh explorer"
+alias view="$NEXUS_HOME/core/exec/nxs-switch.sh view"
+alias preview="$NEXUS_HOME/core/exec/nxs-preview.sh"
 
 # Geometric Docking (Hiding In-Place)
-alias min="/Users/Shared/Projects/nexus-shell/core/exec/nxs-dock.sh toggle"
-alias expand="/Users/Shared/Projects/nexus-shell/core/exec/nxs-dock.sh toggle"
-alias shelf="/Users/Shared/Projects/nexus-shell/core/exec/nxs-switch.sh shelf"
+alias min="$NEXUS_HOME/core/exec/nxs-dock.sh toggle"
+alias expand="$NEXUS_HOME/core/exec/nxs-dock.sh toggle"
+alias shelf="$NEXUS_HOME/core/exec/nxs-switch.sh shelf"
 
 # Helpful shortcut for the aggregator and system status
-alias nxs-status="/Users/Shared/Projects/nexus-shell/core/hud/renderer.sh"
+alias nxs-status="$NEXUS_HOME/core/hud/renderer.sh"

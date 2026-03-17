@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# modules/agents/bin/nxs-claude
+# Proxy-aware wrapper for Claude Code
+
+# 1. Start Model-Server Proxy if not running? 
+# (Actually, let's assume the Gateway/Mesh is stable at 8080)
+# Dynamic Slot routing via X-Slot-Index or simple Mesh fallback.
+
+export ANTHROPIC_BASE_URL="http://localhost:8080/v1"
+
+# Inherit API keys from Nexus Keys
+# (This ensures we don't have to keep keys in the shell profile)
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+eval "$("${NEXUS_HOME}/bin/nxs-keys.sh" export anthropic 2>/dev/null || true)"
+
+# Execute Claude with all args
+exec claude "$@"

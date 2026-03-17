@@ -10,6 +10,10 @@ else
     PAYLOAD="$1"
 fi
 
+# Bootstrap Paths
+SCRIPT_DIR="${0:A:h}"
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
+
 # If no payload, do nothing
 if [[ -z "$PAYLOAD" ]]; then
     exit 0
@@ -33,79 +37,41 @@ TERM_PANE=$(get_pane_by_title "terminal")
 # If NXS_STRICT_LOCAL is set, we never jump.
 STRICT_LOCAL="${NXS_STRICT_LOCAL:-false}"
 
-case "$TYPE" in
-    PLACE)
-        # Directory Navigation
-        if [[ "$STRICT_LOCAL" == "false" && -n "$TERM_PANE" ]]; then
-            tmux send-keys -t "$TERM_PANE" "cd \"$DATA\" && clear" Enter
-        else
-            cd "$DATA" || exit
-            clear
-            exec zsh -i
-        fi
-        ;;
+# V3 Unified Intelligence Kernel Delegation
+# ---
+# Convert legacy TYPE|DATA into a Kernel Plan
+PLAN_JSON=$(python3 "$NEXUS_HOME/core/api/intent_resolver.py" "$TYPE|$DATA" 2>/dev/null)
 
-    ACTION)
-        # Execute the string (script or command)
-        if [[ "$DATA" == :* ]]; then
-            # Handle special Nexus commands
-            local COMMAND_TYPE="${DATA%% *}"
-            local COMMAND_ARGS="${DATA#* }"
-            case "$COMMAND_TYPE" in
-                ":workspace") "${NEXUS_HOME}/core/commands/workspace.sh" "$COMMAND_ARGS" ;;
-                ":profile")   "${NEXUS_HOME}/core/commands/profile.sh" load "$COMMAND_ARGS" ;;
-                ":focus")     "${NEXUS_HOME}/core/commands/focus.sh" ;;
-                ":debug")     "${NEXUS_HOME}/core/exec/dap_handler.sh" "$COMMAND_ARGS" ;;
-                *)
-                    # execute locally
-                    eval "$DATA"
-                    ;;
-            esac
-        elif [[ "$STRICT_LOCAL" == "false" && -n "$TERM_PANE" ]]; then
-            tmux send-keys -t "$TERM_PANE" "$DATA" Enter
-        else
-            # Execute in current pane
-            eval "$DATA"
-        fi
-        ;;
+if [[ -z "$PLAN_JSON" ]]; then
+    echo "Kernel Error: Could not resolve payload $TYPE|$DATA"
+    exit 1
+fi
 
-    NOTE|DOC)
-        # Open in Editor or Viewer
-        if [[ "$STRICT_LOCAL" == "false" && -n "$EDITOR_PANE" ]]; then
-            # Send escape to ensure we are in normal mode, then open the file
-            tmux send-keys -t "$EDITOR_PANE" Escape Escape ":e $DATA" Enter
-        else
-            # execute in current pane
-            ${NEXUS_EDITOR:-nvim} "$DATA"
-        fi
-        ;;
+STRATEGY=$(echo "$PLAN_JSON" | jq -r '.strategy')
+TARGET_ROLE=$(echo "$PLAN_JSON" | jq -r '.role')
+CMD=$(echo "$PLAN_JSON" | jq -r '.cmd')
+IDENTITY=$(echo "$PLAN_JSON" | jq -r '.name // empty')
 
-    MODEL|AGENT)
-        # Open the AI Agent connection 
-        echo -e "\033[1;34m🤖 Connecting to $DATA...\033[0m"
-        if command -v px-agent &>/dev/null; then
-            px-agent chat "$DATA"
-        else
-            # fallback to direct bin
-            "$NEXUS_HOME/modules/agents/bin/px-agent" chat "$DATA"
-        fi
+case "$STRATEGY" in
+    stack_switch)
+        IDX=$(echo "$PLAN_JSON" | jq -r '.index')
+        "$NEXUS_HOME/core/stack/nxs-stack" switch "local" "$IDX"
         ;;
-
-    PROJECT)
-        # Switch into a project workspace
-        echo "Starting Workspace: $DATA"
-        cd "$DATA" || exit
-        exec zsh -i
+    stack_replace)
+        "$NEXUS_HOME/core/stack/nxs-stack" replace "$TARGET_ROLE" "$CMD" "$IDENTITY"
         ;;
-        
-    RAW)
-        # Just echo it
-        echo "$DATA"
+    stack_push)
+        "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
         ;;
-
+    exec_local)
+        eval "$CMD"
+        ;;
+    remote_control)
+        TARGET=$(echo "$PLAN_JSON" | jq -r '.target')
+        "$NEXUS_HOME/core/bin/nxs-control" "$TARGET" "$CMD"
+        ;;
     *)
-        echo "Unknown Payload Type: $TYPE"
-        echo "Data: $DATA"
-        sleep 2
+        # Default fallback for router is usually just executing the command in the target slot
+        "$NEXUS_HOME/core/stack/nxs-stack" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
         ;;
 esac

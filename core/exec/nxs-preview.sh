@@ -2,7 +2,8 @@
 # core/exec/nxs-preview.sh
 # Hotswaps from Editor to Renderer for the current file.
 
-NEXUS_HOME="${NEXUS_HOME:-/Users/Shared/Projects/nexus-shell}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
 
 # 1. Query Neovim for current file
 if [[ -S "$NVIM_PIPE" ]]; then

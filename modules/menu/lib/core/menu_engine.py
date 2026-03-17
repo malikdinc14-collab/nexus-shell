@@ -158,106 +158,223 @@ def render_home() -> list:
     except Exception as e:
         return [fmt(f"Error loading {winning_hf.name}: {e}", "ERROR", "NONE")]
 
+def render_tool_selector(role: str) -> list:
+    """List available tools for a role so the user can 'Set Default'."""
+    catalog_path = NEXUS_HOME / "core" / "api" / "tool_catalog.yaml"
+    items = []
+    
+    tools = []
+    if catalog_path.exists():
+        try:
+            catalog = yaml.safe_load(catalog_path.read_text()) or {}
+            tools = catalog.get(role, [])
+        except:
+            pass
+            
+    if not tools:
+        # Fallback to current only
+        from module_registry import resolve_role
+        current = resolve_role(role)
+        tools = [{"label": f"Current: {current}", "cmd": current}]
+
+    for t in tools:
+        # payload format for SET_DEFAULT: role|command
+        payload = f"{role}|{t['cmd']}"
+        items.append(fmt(t["label"], "SET_DEFAULT", payload, icon="🛠️", description=f"Set as default {role}"))
+    
+    if items:
+        first = json.loads(items[0])
+        first["_root"] = {"name": f"Select Default {role.capitalize()}", "layout": "list"}
+        items[0] = json.dumps(first)
+        
+    return items
+
+# ── Dynamic Source Kernel ──────────────────────────────────────────────────
+
+def load_lists_config() -> dict:
+    """Merge lists.yaml across layers (Global -> Profile -> Workspace)."""
+    locations = [
+        NEXUS_HOME / "config" / "lists.yaml",
+        USER_CONFIG / "lists.yaml",
+    ]
+    if ACTIVE_PROFILE:
+        locations.append(USER_CONFIG / "profiles" / ACTIVE_PROFILE / "lists.yaml")
+    locations.append(PROJECT_ROOT / ".nexus" / "lists.yaml")
+
+    config = {}
+    for loc in locations:
+        if loc.exists():
+            try:
+                data = yaml.safe_load(loc.read_text()) or {}
+                for key, val in data.items():
+                    if key not in config or val.get("policy") == "override":
+                        config[key] = val
+                    else:
+                        # Aggregate sources
+                        existing_sources = config[key].get("sources", [])
+                        new_sources = val.get("sources", [])
+                        config[key]["sources"] = existing_sources + new_sources
+            except Exception as e:
+                # Axiom: Noise on config error
+                print(f"DEBUG: Error loading {loc}: {e}", file=sys.stderr)
+    return config
+
+def resolve_sources(context: str, config: dict) -> list:
+    """Resolve a context into a list of normalized source dictionaries."""
+    if context in config:
+        return config[context].get("sources", [])
+    
+    # Tiered Fallback: models:local:ssd -> models:local -> models
+    parts = context.split(":")
+    for i in range(len(parts) - 1, 0, -1):
+        parent_context = ":".join(parts[:i])
+        if parent_context in config:
+            return config[parent_context].get("sources", [])
+
+    # Fallback to legacy directory-based discovery
+    layers = get_list_layers(context)
+    return [{"type": "directory", "path": str(l)} for l in layers]
+
 def get_items(context: str) -> list:
-    """The Primary Discovery Dispatcher."""
+    """The Primary Discovery Dispatcher (V4)."""
     if context == "home":
         return render_home()
 
-    # Split context for drill-down (e.g., "notes/personal" or "workspace:notes")
-    if ":" in context:
-        layer_prefix, _, path_rest = context.partition(":")
-        subpath = path_rest
-        # If it's just "workspace:", list all root folders in that layer
-        if not subpath:
-            layer_root = None
-            if layer_prefix == "global": layer_root = BUILTIN_LISTS
-            if layer_prefix == "profile": layer_root = PROFILE_LISTS
-            if layer_prefix == "workspace": layer_root = PROJECT_LISTS
-            if layer_prefix == "user": layer_root = USER_LISTS
-            
-            if layer_root and layer_root.exists():
-                items = []
-                for f in sorted(layer_root.iterdir()):
-                    if f.is_dir() and not f.name.startswith(("_", ".")):
-                        items.append(fmt(f.name.capitalize(), "PLANE", f"{layer_prefix}:{f.name}"))
-                
-                if items:
-                    first = json.loads(items[0])
-                    # Title based on layer
-                    titles = {"global": "Global Lists", "profile": "Personal Profile", "workspace": "Project Workspace"}
-                    first["_root"] = {"name": titles.get(layer_prefix, layer_prefix.capitalize()), "layout": "list"}
-                    items[0] = json.dumps(first)
-                return items
-    else:
-        parts = context.split("/")
-        subpath = "/".join(parts[1:]) if len(parts) > 1 else ""
+    if context.startswith("set_default:"):
+        role = context.partition(":")[2]
+        return render_tool_selector(role)
 
-    layers = get_list_layers(context)
-    if not layers and not subpath:
-        return [fmt(f"List not found: {context}", "ERROR", "NONE")]
-
-    # Load Metadata (Icons, Layout hints)
-    meta = load_metadata(layers)
-    items = []
+    config = load_lists_config()
+    sources = resolve_sources(context, config)
     
-    # 1. Discover Children (Folders & Files)
-    seen = {}
-    shadowed = meta.get("_hide", set())
-    for layer in layers:
-        for f in sorted(layer.iterdir()):
-            if f.name.startswith(("_", ".")): continue # Ignore metadata/hidden
-            if f.name in shadowed: continue # Explicit shadow
+    # Metadata for the list itself (layout, name)
+    list_meta = config.get(context, {})
+    
+    items = []
+    seen_labels = set()
+
+    for src in sources:
+        s_type = src.get("type", "directory")
+        s_path = expand(src.get("path", ""))
+        if not s_path: continue
+        
+        path_obj = Path(s_path)
+        if s_type == "directory" and path_obj.exists() and path_obj.is_dir():
+            # Load directory items
+            # Merge logic for directory items
+            meta_file = path_obj / "_list.yaml"
+            dir_meta = {}
+            if meta_file.exists():
+                try: dir_meta = yaml.safe_load(meta_file.read_text()) or {}
+                except: pass
             
-            rel_name = f.name
-            if f.is_dir():
-                seen[rel_name] = fmt(f"📁 {f.name}/", "FOLDER", f"{context}/{f.name}")
-            else:
-                # File handling based on extensions
-                icon = meta.get("icon", "📄")
+            for f in sorted(path_obj.iterdir()):
+                if f.name.startswith(("_", ".")): continue
+                
+                label = f.stem
                 e_type = "ACTION"
+                icon = list_meta.get("icon", dir_meta.get("icon", "📄"))
                 
                 if f.suffix == ".md":
                     e_type = "NOTE"
-                    icon = meta.get("icon_note", "📝")
+                    icon = "📝"
                 elif f.suffix == ".sh":
-                    # Provider Check: If executable, run it
                     if os.access(f, os.X_OK):
+                        # Script Provider logic (Fail-Fast)
                         try:
-                            # Run provider and capture its lines
                             env = os.environ.copy()
                             env["NEXUS_HOME"] = str(NEXUS_HOME)
                             env["PROJECT_ROOT"] = str(PROJECT_ROOT)
-                            output = subprocess.check_output([str(f)], stderr=subprocess.DEVNULL, env=env).decode().strip()
+                            output = subprocess.check_output([str(f), context], 
+                                                           stderr=subprocess.PIPE, 
+                                                           env=env,
+                                                           timeout=5).decode().strip()
                             if output:
-                                # A provider can return multiple JSON objects or a single list
-                                try:
-                                    parsed = json.loads(output)
-                                    if isinstance(parsed, list):
-                                        for p_item in parsed:
-                                            seen[f"{f.name}_{json.dumps(p_item)}"] = json.dumps(p_item)
+                                lines = output.splitlines()
+                                for line in lines:
+                                    line = line.strip()
+                                    if not line: continue
+                                    # Axiom: Deterministic Protocol
+                                    if line.startswith("{"):
+                                        try:
+                                            pi = json.loads(line)
+                                            if isinstance(pi, dict):
+                                                pi["source_path"] = str(f)
+                                                items.append(json.dumps(pi))
+                                            else:
+                                                items.append(fmt(str(pi), "ACTION", str(pi), source_path=str(f)))
+                                        except json.JSONDecodeError:
+                                            items.append(fmt(f"Malformed JSON: {line[:30]}...", "ERROR", "NONE", source_path=str(f)))
                                     else:
-                                        seen[f.name] = output
-                                except json.JSONDecodeError:
-                                    # Fallback to line by line JSON
-                                    for line in output.split("\n"):
-                                        seen[f"{f.name}_{line}"] = line
-                            continue # Skip adding the script itself
-                        except:
-                            pass
-                    icon = meta.get("icon_script", "🏗️")
+                                        # Non-JSON: Try TSV parsing
+                                        parts = line.split("\t")
+                                        if len(parts) >= 3:
+                                            items.append(fmt(parts[0], parts[1], parts[2], source_path=str(f)))
+                                        else:
+                                            items.append(fmt(line, "ACTION", line, source_path=str(f)))
+                            continue
+                        except Exception as e:
+                            items.append(fmt(f"Error in {f.name}: {str(e)}", "ERROR", "NONE", source_path=str(f)))
+                            continue
+                    icon = "🏗️"
                 
-                seen[rel_name] = fmt(f"{icon} {f.stem}", e_type, str(f))
+                items.append(fmt(label, e_type, str(f), icon=icon, source_path=str(f)))
 
-    items = list(seen.values())
+        elif s_type == "yaml" and path_obj.exists():
+            try:
+                data = yaml.safe_load(path_obj.read_text()) or {}
+                for item in data.get("items", []):
+                    item["source_path"] = str(path_obj)
+                    items.append(json.dumps(item))
+            except Exception as e:
+                items.append(fmt(f"Error in {path_obj.name}: {str(e)}", "ERROR", "NONE", source_path=str(path_obj)))
 
-    # 2. Add Root Metadata to first item for TUI
+        elif s_type == "script" and path_obj.exists():
+            if os.access(path_obj, os.X_OK):
+                try:
+                    env = os.environ.copy()
+                    env["NEXUS_HOME"] = str(NEXUS_HOME)
+                    env["PROJECT_ROOT"] = str(PROJECT_ROOT)
+                    output = subprocess.check_output([str(path_obj), context], 
+                                                   stderr=subprocess.PIPE, 
+                                                   env=env,
+                                                   timeout=5).decode().strip()
+                    if output:
+                        for line in output.splitlines():
+                            line = line.strip()
+                            if not line: continue
+                            
+                            # Axiom: Deterministic Protocol
+                            if line.startswith("{"):
+                                try:
+                                    pi = json.loads(line)
+                                    if isinstance(pi, dict):
+                                        pi["source_path"] = str(path_obj)
+                                        items.append(json.dumps(pi))
+                                    else:
+                                        items.append(fmt(str(pi), "ACTION", str(pi), source_path=str(path_obj)))
+                                except json.JSONDecodeError:
+                                    items.append(fmt(f"Malformed JSON: {line[:30]}...", "ERROR", "NONE", source_path=str(path_obj)))
+                            else:
+                                # Non-JSON: Try TSV parsing
+                                parts = line.split("\t")
+                                if len(parts) >= 3:
+                                    items.append(fmt(parts[0], parts[1], parts[2], source_path=str(path_obj)))
+                                else:
+                                    items.append(fmt(line, "ACTION", line, source_path=str(path_obj)))
+                except Exception as e:
+                    items.append(fmt(f"Error in {path_obj.name}: {str(e)}", "ERROR", "NONE", source_path=str(path_obj)))
+            else:
+                items.append(fmt(f"Script not executable: {path_obj.name}", "ERROR", "NONE", source_path=str(path_obj)))
+
+    # Add Root Metadata to first item for TUI
     if items:
         try:
             first = json.loads(items[0])
             first["_root"] = {
-                "layout": meta.get("layout", "list"),
-                "name": meta.get("name", context.capitalize()),
-                "icon": meta.get("icon", "📦")
+                "layout": list_meta.get("layout", "list"),
+                "name": list_meta.get("name", context.capitalize()),
+                "icon": list_meta.get("icon", "📦")
             }
             items[0] = json.dumps(first)
         except:
@@ -271,7 +388,6 @@ def main():
         if arg == "--context" and i + 1 < len(sys.argv):
             context = sys.argv[i + 1].lower()
     
-    # Simple CLI fallback if no args
     if len(sys.argv) == 2 and not sys.argv[1].startswith("-"):
         context = sys.argv[1]
 

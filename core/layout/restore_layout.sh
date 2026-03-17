@@ -114,4 +114,11 @@ done
 # Final Pass: Ensure layout is applied one last time after PTY handshakes
 tmux select-layout -t "$WINDOW_ID" "$LAYOUT_STRING" 2>/dev/null || true
 
+# --- Slot Invariant Anchoring ---
+idx=1
+for p in $(tmux list-panes -t "$WINDOW_ID" -F '#{pane_id}'); do
+    tmux set-option -p -t "$p" @nexus_slot "$idx"
+    ((idx++))
+done
+
 echo "    [*] Momentum state restored."

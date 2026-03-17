@@ -221,6 +221,7 @@ class NexusMenuApp(App):
         Binding("enter", "run_item('swap')", "Swap", show=True),
         Binding("shift+enter", "run_item('push')", "New Tab", show=True),
         Binding("ctrl+enter", "run_item('replace')", "Replace", show=True),
+        Binding("alt+e", "edit_default", "Set Default", show=True),
         Binding("escape", "go_back", "Back", show=True),
         Binding("backspace", "go_back", "Back", show=False),
         Binding("q", "quit", "Quit", show=True),
@@ -296,13 +297,28 @@ class NexusMenuApp(App):
             grid_view.remove_class("hidden")
             grid_wrapper.remove_class("hidden")
 
+        self.update_status(f"Loading {self.current_context}...")
+        
         for item_json in items_raw:
             try:
                 data = json.loads(item_json)
-                label = data.get("label", "Unknown")
-                e_type = data.get("type", "ACTION")
-                payload = data.get("payload", "NONE")
                 
+                if not isinstance(data, dict):
+                    # Fallback for weird strings if somehow passed as raw JSON
+                    label = str(data)
+                    e_type = "ACTION"
+                    payload = str(data)
+                else:
+                    label = data.get("label") or data.get("name")
+                    e_type = data.get("type", "ACTION")
+                    payload = data.get("payload", "NONE")
+                    
+                # Intelligent Labeling (Axiom: Sanity Fallback)
+                if not label or label == "Unknown":
+                    if ":" in payload: label = payload.split(":")[-1].replace("_", " ").capitalize()
+                    elif "/" in payload: label = Path(payload).name
+                    else: label = payload
+
                 # Skip SEPARATOR items in grid mode
                 if e_type == "SEPARATOR" and self.current_layout != "list":
                     continue
@@ -314,25 +330,21 @@ class NexusMenuApp(App):
                     self.all_items.append(item)
                     list_view.append(item)
                 else:
-                    # For grid, we just ignore separators
-                    if e_type == "SEPARATOR":
-                        continue
+                    if e_type == "SEPARATOR": continue
                     tile = NexusTile(label, e_type, payload, meta=data)
                     self.all_items.append(tile)
                     grid_view.mount(tile)
                     
             except Exception as e:
-                # Fallback for legacy TSV
-                parts = item_json.split("\t")
-                if len(parts) >= 3:
-                   item = NexusListItem(parts[0].strip(), parts[1].strip(), parts[2].strip())
-                   item.meta = {"label": parts[0], "type": parts[1], "payload": parts[2]}
-                   self.all_items.append(item)
-                   if self.current_layout == "list":
-                       list_view.append(item)
-                   else:
-                       tile = NexusTile(item.label_text, item.e_type, item.payload, meta=item.meta)
-                       grid_view.mount(tile)
+                with open("/tmp/nexus_menu_debug.log", "a") as f:
+                    f.write(f"[UI] Refresh Failed on: {item_json} | Error: {e}\n")
+                # Last resort: Try splitting as TSV if it's not JSON
+                if isinstance(item_json, str) and "\t" in item_json:
+                    parts = item_json.split("\t")
+                    if len(parts) >= 3:
+                        item = NexusListItem(parts[0].strip(), parts[1].strip(), parts[2].strip())
+                        self.all_items.append(item)
+                        list_view.append(item)
 
         if display_list and list_view.children:
             list_view.index = 0
@@ -458,6 +470,9 @@ class NexusMenuApp(App):
             self.context_stack.pop()
             self.current_context = self.context_stack[-1]
             self.refresh_items()
+        else:
+            # Axiom: Escape at root context = Exit Menu (Return to Portal)
+            self.exit()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         search_term = event.value.lower()
@@ -491,6 +506,26 @@ class NexusMenuApp(App):
     def action_favorite_item(self) -> None:
         self.action_item("favorite")
 
+    def action_edit_default(self) -> None:
+        """Trigger 'Set Default' flow for the highlighted role/module."""
+        item = None
+        if self.current_layout == "list":
+            list_view = self.query_one("#menu-list", ListView)
+            if list_view.highlighted_child:
+                item = list_view.highlighted_child
+        else:
+            item = self.focused if isinstance(self.focused, NexusTile) else None
+        
+        if not item or item.e_type != "ROLE":
+            self.update_status("Alt+e only works on Roles/Modules")
+            return
+
+        # Trigger specialized selection menu for this role
+        role_name = item.payload.strip().lower()
+        self.current_context = f"set_default:{role_name}"
+        self.context_stack.append(self.current_context)
+        self.refresh_items()
+
     def action_item(self, verb: str, intent: str = "swap") -> None:
         item = None
         if self.current_layout == "list":
@@ -518,6 +553,13 @@ class NexusMenuApp(App):
                 self.refresh_items()
                 return
 
+            if verb == "edit":
+                source_path = item.meta.get("source_path")
+                if source_path:
+                    # Deterministic editing of the source file/script
+                    self.run_nexus_action("run", "ACTION", f"nvim {source_path}")
+                    return
+
             # Otherwise, call nxs-action-dispatch
             self.run_nexus_action(verb, item.e_type, item.payload, intent=intent)
 
@@ -526,11 +568,6 @@ class NexusMenuApp(App):
         env = os.environ.copy()
         env["NXS_INTENT"] = intent
         env["NXS_CALLER"] = "menu"
-        
-        # If we have a target pane from the popup environment, use it
-        target_pane = os.environ.get("NXS_TARGET_PANE")
-        if target_pane:
-            env["NXS_TARGET_PANE"] = target_pane
         
         with self.suspend():
             try:

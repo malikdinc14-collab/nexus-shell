@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# modules/agents/bin/nxs-code
+# Proxy-aware wrapper for OpenCode (pi)
+
+export OPENAI_BASE_URL="http://localhost:8080/v1"
+
+# Inherit API keys from Nexus Keys
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+eval "$("${NEXUS_HOME}/bin/nxs-keys.sh" export openai 2>/dev/null || true)"
+
+# Execute OpenCode (pi) with all args
+exec pi "$@"

@@ -23,7 +23,10 @@ case "$ACTION" in
             DIM=$(tmux display-message -p '#{@nexus_min_dim}')
             
             log "Restoring $DIM to: $PREV_VAL"
-            if [[ -n "$PREV_VAL" && "$PREV_VAL" != "null" ]]; then
+            if [[ "$DIM" == "zoom" ]]; then
+                tmux resize-pane -t "$PANE_ID" -Z
+                tmux display-message "EXPANDED: $PANE_ID (ZOOMED)"
+            elif [[ -n "$PREV_VAL" && "$PREV_VAL" != "null" ]]; then
                 tmux resize-pane -t "$PANE_ID" -"$DIM" "$PREV_VAL"
                 tmux display-message "EXPANDED: $PANE_ID ($PREV_VAL $DIM)"
             fi
@@ -33,32 +36,47 @@ case "$ACTION" in
             CUR_W=$(tmux display-message -p '#{pane_width}')
             CUR_H=$(tmux display-message -p '#{pane_height}')
             
-            # Heuristic: Collapse along the smallest dimension relative to its partner
-            # Or simpler: if it's tall and thin, collapse X. If it's short and wide, collapse Y.
+            # Smart Orientation Check
             if [[ "$CUR_H" -gt "$CUR_W" ]]; then
+                # Vertical Sidebar: Minimize to strip, restore via zoom
+                log "Minimizing Vertical Sidebar to strip (restore via zoom)"
+                
+                # Store current width and set restore dimension to 'zoom'
+                tmux set-option -p -t "$PANE_ID" @nexus_pre_min_val "$CUR_W"
+                tmux set-option -p -t "$PANE_ID" @nexus_min_dim "zoom"
+                tmux set-option -p -t "$PANE_ID" @nexus_minimized 1
+                
+                # Collapse to a narrow strip
                 DIM="x"
-                VAL="$CUR_W"
-                TARGET_SIZE=3 # Width for sidebar strip
+                TARGET_SIZE=3
+                
+                # Avoid minimizing if already at target
+                if [[ "$CUR_W" -le "$TARGET_SIZE" ]]; then
+                    tmux display-message "Pane already docked ($CUR_W $DIM)"
+                    exit 0
+                fi
+
+                tmux resize-pane -t "$PANE_ID" -"$DIM" "$TARGET_SIZE"
             else
+                # Horizontal Bottom Bar: Minimize to strip, restore proportionally
                 DIM="y"
                 VAL="$CUR_H"
-                TARGET_SIZE=2 # Height for bottom bar
-            fi
+                TARGET_SIZE=2
+                log "Minimizing Horizontal Bar from: $VAL"
+                
+                # Avoid minimizing if already at target
+                if [[ "$VAL" -le "$TARGET_SIZE" ]]; then
+                    tmux display-message "Pane already docked ($VAL $DIM)"
+                    exit 0
+                fi
 
-            log "Minimizing $DIM from: $VAL"
-            
-            # Avoid minimizing if already at target
-            if [[ "$VAL" -le "$TARGET_SIZE" ]]; then
-                tmux display-message "Pane already docked ($VAL $DIM)"
-                exit 0
+                tmux set-option -p -t "$PANE_ID" @nexus_pre_min_val "$VAL"
+                tmux set-option -p -t "$PANE_ID" @nexus_min_dim "$DIM"
+                tmux set-option -p -t "$PANE_ID" @nexus_minimized 1
+                
+                tmux resize-pane -t "$PANE_ID" -"$DIM" "$TARGET_SIZE"
             fi
-
-            tmux set-option -p -t "$PANE_ID" @nexus_pre_min_val "$VAL"
-            tmux set-option -p -t "$PANE_ID" @nexus_min_dim "$DIM"
-            tmux set-option -p -t "$PANE_ID" @nexus_minimized 1
-            
-            tmux resize-pane -t "$PANE_ID" -"$DIM" "$TARGET_SIZE"
-            tmux display-message "DOCKED: $PANE_ID ($TARGET_SIZE $DIM)"
+            tmux display-message "DOCKED: $PANE_ID"
         fi
         ;;
     

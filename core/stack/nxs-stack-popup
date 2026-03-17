@@ -23,7 +23,7 @@ case $choice in
     2)
         # Force swap
         visible_pane=$(tmux display-message -p '#{pane_id}')
-        /Users/Shared/Projects/nexus-shell/core/stack/nxs-stack push_force "$ROLE" "$CMD" "$visible_pane"
+        "$NEXUS_HOME/core/stack/nxs-stack" push_force "$ROLE" "$CMD" "$visible_pane"
         ;;
     *)
         echo "Aborted."

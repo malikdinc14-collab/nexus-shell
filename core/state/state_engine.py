@@ -8,30 +8,65 @@ from datetime import datetime
 
 class NexusStateEngine:
     def __init__(self, project_root=None):
-        self.project_root = Path(project_root or os.getcwd())
+        self.project_root = Path(project_root or os.getcwd()).resolve()
+        
+        # 1. Primary: Project-local
         self.state_dir = self.project_root / ".nexus"
         self.state_file = self.state_dir / "state.json"
+        
+        # 2. Secondary: User-local Fallback (if project root is restricted)
+        import hashlib
+        proj_hash = hashlib.md5(str(self.project_root).encode()).hexdigest()[:10]
+        self.fallback_dir = Path.home() / ".nexus" / "storage" / proj_hash
+        self.fallback_file = self.fallback_dir / "state.json"
+        
+        self.active_file = self.state_file
         self.state = {}
         self.load()
 
     def load(self):
-        if self.state_file.exists():
-            try:
+        # Axiom: Try primary, fallback to secondary on any permission/system error
+        try:
+            if self.state_file.exists():
                 with open(self.state_file, 'r') as f:
                     self.state = json.load(f)
-            except:
-                self.state = {}
-        else:
-            self.state = {
-                "project": {"name": self.project_root.name},
-                "ui": {"slots": {}},
-                "context": {"last_opened_files": []}
-            }
+                    self.active_file = self.state_file
+                    return
+        except (PermissionError, OSError):
+            pass
+            
+        try:
+            if self.fallback_file.exists():
+                with open(self.fallback_file, 'r') as f:
+                    self.state = json.load(f)
+                    self.active_file = self.fallback_file
+                    return
+        except:
+            pass
+            
+        # Initial State if no file found or accessible
+        self.state = {
+            "project": {"name": self.project_root.name, "path": str(self.project_root)},
+            "ui": {"slots": {}, "stacks": {}},
+            "context": {"last_opened_files": []}
+        }
+        # If project dir is not writable, the FIRST save will pivot to fallback
+        if not os.access(self.state_dir, os.W_OK) if self.state_dir.exists() else not os.access(self.project_root, os.W_OK):
+            self.active_file = self.fallback_file
 
     def save(self):
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.state_file, 'w') as f:
-            json.dump(self.state, f, indent=4)
+        target_file = self.active_file
+        target_dir = target_file.parent
+        
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            with open(target_file, 'w') as f:
+                json.dump(self.state, f, indent=4)
+        except (PermissionError, OSError):
+            # If primary save fails, pivot to fallback forever for this session
+            if target_file == self.state_file:
+                self.active_file = self.fallback_file
+                self.save()
 
     def get(self, path):
         keys = path.split('.')

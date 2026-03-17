@@ -1,0 +1,42 @@
+# Nexus Global List Registry
+# Maps menu contexts to their data sources.
+
+# Defaults
+notes:
+  policy: aggregate
+  icon: "📝"
+  sources:
+    - { type: directory, path: "$NEXUS_HOME/modules/menu/lists/notes" }
+    - { type: directory, path: "$PROJECT_ROOT/.nexus/notes" }
+
+places:
+  policy: aggregate
+  icon: "📍"
+  sources:
+    - { type: directory, path: "$NEXUS_HOME/modules/menu/lists/places" }
+    - { type: directory, path: "$PROJECT_ROOT/.nexus/places" }
+
+scripts:
+  policy: aggregate
+  icon: "🏗️"
+  sources:
+    - { type: directory, path: "$NEXUS_HOME/modules/menu/lists/scripts" }
+    - { type: directory, path: "$PROJECT_ROOT/.nexus/scripts" }
+
+build:
+  policy: override
+  icon: "🔨"
+  sources:
+    - { type: directory, path: "$PROJECT_ROOT/.nexus/build" }
+
+agents:
+  policy: aggregate
+  icon: "🤖"
+  sources:
+    - { type: directory, path: "$NEXUS_HOME/modules/menu/lists/agents" }
+
+models:
+  policy: aggregate
+  icon: "🧠"
+  sources:
+    - { type: script, path: "$NEXUS_HOME/core/api/providers/model_provider.py" }

@@ -108,6 +108,14 @@ build_vscodelike() {
     tmux set-option -p -t "$CENTER_PANE" @nexus_role "editor"
     nxs_assert "Editor Initiation"
     
+    # --- Slot Invariant Anchoring ---
+    # Assign sequential Slot numbers in visual order (top-left to bottom-right)
+    local i=1
+    for p in $(tmux list-panes -t "$WINDOW_ID" -F '#{pane_id}'); do
+        tmux set-option -p -t "$p" @nexus_slot "$i"
+        ((i++))
+    done
+
     # Set titles and focus
     tmux select-pane -t "$CENTER_PANE" -T "editor"
     tmux select-pane -t "$TERM_PANE" -T "terminal"
@@ -228,6 +236,13 @@ except: print('false')
     "$Python_BIN" "$SCRIPT_DIR/processor.py" "$COMP_JSON" "$START_PANE" "$PROJECT_ROOT" >> "$LAYOUT_LOG" 2>&1
     
     # Final Focus and State Save
+    # --- Slot Invariant Anchoring ---
+    i=1
+    for p in $(tmux list-panes -t "$WINDOW_ID" -F '#{pane_id}'); do
+        tmux set-option -p -t "$p" @nexus_slot "$i"
+        ((i++))
+    done
+
     tmux set-window-option -t "$WINDOW_ID" @nexus_last_composition "$LAYOUT"
     tmux select-pane -t "$START_PANE"
     exit 0

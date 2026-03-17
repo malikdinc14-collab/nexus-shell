@@ -6,6 +6,13 @@ Nexus Shell is a **Modeless Meta-IDE** designed for **Sovereign Intelligence Orc
 ## 2. The Sovereignty Pillars
 - **Modeless Movement**: No "Escape" to exit. `Alt` (Option) is the universal spatial modifier. The terminal is always live.
 - **Cascading Authority**: Discovery of tools (Global → Profile → Project) ensures the project environment is always the ultimate truth.
+
+### v1.0.0 (The Sovereign Mesh)
+- [x] Tiered List Resolution (Global -> Profile -> Workspace)
+- [x] Recursive Agency (Orchestrator Guard)
+- [x] Generic Proxy Launcher (Stable MESH)
+- [x] HUD Mesh Status Module
+- [x] Protocol Documentation (Repo-side)
 - **Visual Intelligence**: Unified high-fidelity rendering (`nxs-view`) for diagrams, markdown, and code, making the terminal a "Visual Mind."
 - **Governance (GAP)**: Nexus Shell is the canonical harness for the **Gated Agent Protocol**, enforcing security and alignment through deterministic gates.
 

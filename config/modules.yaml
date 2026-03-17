@@ -12,7 +12,7 @@
 roles:
   editor: nvim
   explorer: yazi
-  chat: opencode
+  chat: nxs-code
   terminal: zsh
   viewer: glow
   search: grepai

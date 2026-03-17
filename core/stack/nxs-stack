@@ -9,11 +9,68 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
+# V3 Intelligence Kernel Path
+sys.path.append(str(Path(__file__).resolve().parent.parent / "api"))
+try:
+    from control_bridge import ControlBridge
+except ImportError:
+    ControlBridge = None
+
+class ControlProxy:
+    def __init__(self):
+        self.bridge = ControlBridge() if ControlBridge else None
+    
+    def rotate_editor(self, direction):
+        if not self.bridge: return False
+        cmd = ":tabnext" if direction > 0 else ":tabprev"
+        success, _ = self.bridge.send_to_editor(cmd)
+        return success
+
+BRIDGE = ControlProxy()
+
 # Paths
 USER_TMP = Path(f"/tmp/nexus_{os.getlogin()}")
 TRACE_DIR = USER_TMP / "trace"
 TRACE_SESSION_FILE = TRACE_DIR / "active_session"
 RESERVOIR = "RESERVOIR"
+
+## Resource Limits
+MAX_STACK_SIZE = int(os.environ.get("NEXUS_MAX_STACK", "20"))
+GLOBAL_RESERVOIR_CAP = 80
+ROLE_CAPS = {
+    "menu": 1
+}
+
+def _get_reservoir_panes():
+    """Returns a list of pane IDs currently in the reservoir."""
+    res = run_tmux(["list-panes", "-t", f"{SESSION_ID}:{RESERVOIR}", "-F", "#{pane_id}"])
+    return res.split("\n") if res else []
+
+def _global_prune(state):
+    """Ensures total panes in reservoir don't exceed GLOBAL_RESERVOIR_CAP."""
+    res_panes = _get_reservoir_panes()
+    if len(res_panes) <= GLOBAL_RESERVOIR_CAP: return
+    
+    log(f"Global Reservoir Cap Reached ({len(res_panes)} > {GLOBAL_RESERVOIR_CAP}). Pruning oldest background tabs.")
+    
+    # Identify all tabs that are currently in the reservoir
+    candidates = []
+    for role, data in state.items():
+        for i, tab in enumerate(data["tabs"]):
+            if i == 0: continue # Foundation is sacred
+            if tab["id"] in res_panes:
+                candidates.append((role, i, tab["id"]))
+    
+    # Prune oldest until we are under the cap (crude FIFO based on state order)
+    # Future: use timestamps for better FIFO
+    while len(res_panes) > GLOBAL_RESERVOIR_CAP and candidates:
+        role, idx, pane_id = candidates.pop(0)
+        log(f"Global Prune: Killing {pane_id} from role {role}")
+        run_tmux(["kill-pane", "-t", pane_id])
+        state[role]["tabs"].pop(idx)
+        if state[role].get("active_index", 0) >= idx:
+            state[role]["active_index"] -= 1
+        res_panes = _get_reservoir_panes()
 
 def _trace(event_type, **data):
     try:
@@ -59,7 +116,7 @@ def run_tmux(args):
 
 def ghost_swap(source_pane, target_pane):
     """Swaps panes while keeping the @nexus_slot anchored to the physical location."""
-    if source_pane == target_pane: return
+    if source_pane == target_pane: return True
     
     # 1. Detach: Capture physical slot from source
     slot = run_tmux(["display-message", "-p", "-t", source_pane, "#{@nexus_slot}"])
@@ -67,13 +124,17 @@ def ghost_swap(source_pane, target_pane):
     _trace("GHOST_SWAP_START", source=source_pane, target=target_pane, slot=slot)
     
     # 2. Swap: The containers move
-    run_tmux(["swap-pane", "-d", "-s", source_pane, "-t", target_pane])
-    
+    # Use explicit window check to verify IDs still exist
+    res = run_tmux(["swap-pane", "-d", "-s", source_pane, "-t", target_pane])
+    if res is None:
+        log(f"CRITICAL: swap-pane failed between {source_pane} and {target_pane}")
+        return False
+
     # 3. Assign: Re-apply slot to the new occupant of the physical spot
-    # Note: After swap, target_pane is now at source_pane's previous coordinate.
     if slot and slot != "null":
         run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_slot", slot])
         _trace("GHOST_SWAP_COMPLETE", target=target_pane, assigned_slot=slot)
+    return True
 
 def pane_exists(pane_id):
     if not pane_id: return False
@@ -131,6 +192,29 @@ def cleanup_reservoir():
             
     if dirty: save_state(state)
 
+def _prune_stack(state, role):
+    """Ensures stack doesn't exceed caps by removing oldest non-foundation tabs."""
+    if role not in state: return
+    tabs = state[role]["tabs"]
+    
+    limit = ROLE_CAPS.get(role, MAX_STACK_SIZE)
+    if len(tabs) <= limit: return
+
+    # Prune oldest non-foundation tab
+    to_kill = tabs[1]["id"]
+    log(f"Pruning {to_kill} for role {role} (Cap: {limit})")
+    
+    win_info = run_tmux(["display-message", "-p", "-t", to_kill, "#{window_name}"])
+    if win_info != RESERVOIR:
+        return
+
+    run_tmux(["kill-pane", "-t", to_kill])
+    state[role]["tabs"].pop(1)
+    if state[role]["active_index"] >= 1:
+        state[role]["active_index"] -= 1
+    
+    _global_prune(state)
+
 def is_role_routing_enabled():
     return os.environ.get("NEXUS_ROLE_ROUTING", "true").lower() == "true"
 
@@ -185,18 +269,22 @@ def push(role, cmd, name=None):
 
     if role not in state:
         # Axiom: Foundation Isolation. 
-        # If we are starting a new role stack from a pane that already belongs to another role (like menu),
-        # we do NOT kidnap it as the foundation. Instead, we spawn a fresh terminal.
         current_role = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_role}"])
         if current_role and current_role != role and current_role != "null":
-            foundation_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}.0", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), "zsh"])
+            # Reservoir Discipline: Use split-window in Reservoir instead of new-window
+            foundation_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), "zsh"])
             state[role] = {"active_index": 0, "tabs": [{"id": foundation_id, "name": "nexus-terminal"}]}
             run_tmux(["set-option", "-p", "-t", foundation_id, "@nexus_role", role])
         else:
             state[role] = {"active_index": 0, "tabs": [{"id": focused_id, "name": "nexus-terminal"}]}
             run_tmux(["set-option", "-p", "-t", focused_id, "@nexus_role", role])
 
-    new_pane_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}.0", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), cmd])
+    # Immortal Wrapper: Ensure tool exit returns to terminal (index 0)
+    nexus_home = os.environ.get("NEXUS_HOME", str(Path(__file__).resolve().parent.parent.parent))
+    wrapped_cmd = f"zsh -c '{cmd}; {nexus_home}/core/stack/nxs-stack switch local 0'"
+    
+    # Reservoir Discipline: Background tool spawn
+    new_pane_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), wrapped_cmd])
     if not new_pane_id: return
 
     tab_name = name or (Path(cmd.split()[-1]).name if "/" in cmd else "Shell")
@@ -222,12 +310,15 @@ def push(role, cmd, name=None):
     _trace("RESOLVE_VISIBLE", focused_id=focused_id, tabs=[{"id": t.get("id"), "name": t.get("name")} for t in state[role]["tabs"]], result=visible_pane, reason=reason)
     _trace("STACK_PUSH", role=role, cmd=cmd, name=tab_name, visible=visible_pane, new_pane=new_pane_id)
     
-    ghost_swap(visible_pane, new_pane_id)
-    run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_portal_return", ""])
-    run_tmux(["select-pane", "-t", new_pane_id])
+    if ghost_swap(visible_pane, new_pane_id):
+        run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_portal_return", ""])
+        run_tmux(["select-pane", "-t", new_pane_id])
+    else:
+        log(f"Push Swap Failed: {new_pane_id} remains in reservoir.")
     
     state[role]["tabs"].append({"id": new_pane_id, "name": tab_name})
     state[role]["active_index"] = len(state[role]["tabs"]) - 1
+    _prune_stack(state, role)
     save_state(state)
 
 def switch_to(role, index):
@@ -266,21 +357,23 @@ def switch_to(role, index):
     _trace("STACK_SWITCH", role=role, index=index, from_pane=visible_pane, to_pane=new_pane_id)
 
     if visible_pane != new_pane_id:
-        ghost_swap(visible_pane, new_pane_id)
-        run_tmux(["select-pane", "-t", new_pane_id])
-        state[role]["active_index"] = index
-        save_state(state)
+        if ghost_swap(visible_pane, new_pane_id):
+            run_tmux(["select-pane", "-t", new_pane_id])
+            state[role]["active_index"] = index
+            _global_prune(state)
+            save_state(state)
+        else:
+            log(f"Switch Swap Failed: {new_pane_id} remains in reservoir.")
 
 def rotate(role, direction):
     role = resolve_role(role)
     state = load_state()
     focused_id = run_tmux(["display-message", "-p", "#{pane_id}"])
     current_cmd = run_tmux(["display-message", "-p", "-t", focused_id, "#{pane_current_command}"])
-    nvim_pipe = os.environ.get("NVIM_PIPE")
-    if (role == "editor" or (current_cmd and "nvim" in current_cmd)) and nvim_pipe and os.path.exists(nvim_pipe):
-        cmd_str = ":tabnext<CR>" if direction > 0 else ":tabprev<CR>"
-        subprocess.run(["nvim", "--server", nvim_pipe, "--remote-send", cmd_str], check=False)
-        return
+    
+    if (role == "editor" or (current_cmd and "nvim" in current_cmd)):
+        if BRIDGE.rotate_editor(direction):
+            return
 
     if role not in state: return
     count = len(state[role]["tabs"])
@@ -320,9 +413,11 @@ def close_tab(role):
         if next_idx == idx: next_idx = 0
         new_active_pane = tabs[next_idx]["id"]
 
-        ghost_swap(visible_pane, new_active_pane)
-        run_tmux(["select-pane", "-t", new_active_pane])
-        run_tmux(["kill-pane", "-t", visible_pane])
+        if ghost_swap(visible_pane, new_active_pane):
+            run_tmux(["select-pane", "-t", new_active_pane])
+            run_tmux(["kill-pane", "-t", visible_pane])
+        else:
+            log(f"Close Tab Swap Failed: {visible_pane} was not swapped.")
         
         new_tabs = [t for t in tabs if t["id"] != pane_to_kill]
         state[role]["tabs"] = new_tabs
@@ -340,7 +435,12 @@ def replace(role, cmd, name=None):
     state = load_state()
     focused_id = run_tmux(["display-message", "-p", "#{pane_id}"])
     
-    new_pane_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}.0", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), cmd])
+    # Immortal Wrapper: Fallback to terminal
+    nexus_home = os.environ.get("NEXUS_HOME", str(Path(__file__).resolve().parent.parent.parent))
+    wrapped_cmd = f"zsh -c '{cmd}; {nexus_home}/core/stack/nxs-stack switch local 0'"
+
+    # Reservoir Discipline: Replace operation spawn
+    new_pane_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), wrapped_cmd])
     if not new_pane_id: return
 
     tab_name = name or (Path(cmd.split()[-1]).name if "/" in cmd else "Shell")
@@ -373,31 +473,37 @@ def replace(role, cmd, name=None):
         target_to_replace = state[role]["tabs"][idx]["id"]
         if idx == 0:
             log("Foundation Protection: Upgrading Replace to Push.")
-            ghost_swap(visible_pane, new_pane_id)
-            run_tmux(["select-pane", "-t", new_pane_id])
-            state[role]["tabs"].append({"id": new_pane_id, "name": tab_name})
-            state[role]["active_index"] = len(state[role]["tabs"]) - 1
+            if ghost_swap(visible_pane, new_pane_id):
+                run_tmux(["select-pane", "-t", new_pane_id])
+                state[role]["tabs"].append({"id": new_pane_id, "name": tab_name})
+                state[role]["active_index"] = len(state[role]["tabs"]) - 1
         else:
-            ghost_swap(visible_pane, new_pane_id)
-            run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_role", role])
-            run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_portal_return", ""])
-            run_tmux(["select-pane", "-t", new_pane_id])
-            if target_to_replace != new_pane_id: run_tmux(["kill-pane", "-t", target_to_replace])
-            state[role]["tabs"][idx] = {"id": new_pane_id, "name": tab_name}
+            if ghost_swap(visible_pane, new_pane_id):
+                run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_role", role])
+                run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_portal_return", ""])
+                run_tmux(["select-pane", "-t", new_pane_id])
+                if target_to_replace != new_pane_id: run_tmux(["kill-pane", "-t", target_to_replace])
+                state[role]["tabs"][idx] = {"id": new_pane_id, "name": tab_name}
+            else:
+                log(f"Replace Swap Failed: {new_pane_id} remains in reservoir.")
     else:
         # Migration: Replace current pane with a tool from a new role
         current_role = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_role}"])
         if current_role and current_role != role and current_role != "null":
-            foundation_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}.0", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), "zsh"])
+            # Reservoir Discipline for Foundations
+            foundation_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), "zsh"])
             state[role] = {"active_index": 1, "tabs": [{"id": foundation_id, "name": "nexus-terminal"}, {"id": new_pane_id, "name": tab_name}]}
             run_tmux(["set-option", "-p", "-t", foundation_id, "@nexus_role", role])
         else:
             state[role] = {"active_index": 1, "tabs": [{"id": focused_id, "name": "nexus-terminal"}, {"id": new_pane_id, "name": tab_name}]}
         
-        ghost_swap(visible_pane, new_pane_id)
-        run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_portal_return", ""])
-        run_tmux(["select-pane", "-t", new_pane_id])
+        if ghost_swap(visible_pane, new_pane_id):
+            run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_portal_return", ""])
+            run_tmux(["select-pane", "-t", new_pane_id])
+        else:
+            log(f"Migration Swap Failed: {new_pane_id} remains in reservoir.")
     
+    _prune_stack(state, role)
     save_state(state)
     cleanup_reservoir()
 
