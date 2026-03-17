@@ -1,0 +1,31 @@
+{
+    "name": "ai-pair",
+    "description": "Premium AI Pair Programming Layout featuring Pi Frontend",
+    "layout": {
+        "direction": "vertical",
+        "panes": [
+            {
+                "direction": "horizontal",
+                "panes": [
+                    {
+                        "command": "nvim",
+                        "size": "70%"
+                    },
+                    {
+                        "command": "nxs-chat",
+                        "size": "30%"
+                    }
+                ],
+                "size": "75%"
+            },
+            {
+                "command": "zsh",
+                "size": "25%"
+            }
+        ]
+    },
+    "hooks": {
+        "on_start": "nxs-agent start --headless",
+        "on_stop": "nxs-agent stop"
+    }
+}

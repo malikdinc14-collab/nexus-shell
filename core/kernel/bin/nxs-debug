@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""
+nxs-debug - Toggle debug mode for Nexus Shell
+
+Commands:
+  nxs-debug ids on     - Show pane IDs in title bars
+  nxs-debug ids off    - Show normal role names
+  nxs-debug ids status - Show current mode
+  nxs-debug trace on   - Enable trace logging
+  nxs-debug trace off  - Disable trace logging
+"""
+
+import os
+import sys
+from pathlib import Path
+
+USER_TMP = Path(f"/tmp/nexus_{os.getlogin()}")
+DEBUG_PANE_IDS = USER_TMP / "debug_pane_ids"
+
+def pane_ids_on():
+    USER_TMP.mkdir(parents=True, exist_ok=True)
+    DEBUG_PANE_IDS.touch()
+    # Force tmux to refresh pane borders
+    os.system("tmux refresh-client -S 2>/dev/null")
+    print("Pane IDs: ON (yellow labels)")
+
+def pane_ids_off():
+    if DEBUG_PANE_IDS.exists():
+        DEBUG_PANE_IDS.unlink()
+    os.system("tmux refresh-client -S 2>/dev/null")
+    print("Pane IDs: OFF (normal labels)")
+
+def pane_ids_status():
+    if DEBUG_PANE_IDS.exists():
+        print("Pane IDs: ON")
+    else:
+        print("Pane IDs: OFF")
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        return
+    
+    cmd = sys.argv[1]
+    subcmd = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    if cmd == "ids":
+        if subcmd == "on":
+            pane_ids_on()
+        elif subcmd == "off":
+            pane_ids_off()
+        elif subcmd == "status":
+            pane_ids_status()
+        else:
+            # Toggle
+            if DEBUG_PANE_IDS.exists():
+                pane_ids_off()
+            else:
+                pane_ids_on()
+    elif cmd == "trace":
+        trace_bin = Path(__file__).parent.parent / "bin" / "nxs-inspect"
+        if subcmd in ("on", "off", "status"):
+            os.system(f"python3 {trace_bin} trace {subcmd}")
+        else:
+            os.system(f"python3 {trace_bin} trace status")
+    else:
+        print(__doc__)
+
+if __name__ == "__main__":
+    main()

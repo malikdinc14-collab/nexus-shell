@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+"""
+nxs-inspect - Nexus State Inspector
+Visual debugging tool for pane/stack state with trace logging.
+"""
+
+import os
+import sys
+import json
+import subprocess
+from datetime import datetime
+from pathlib import Path
+
+TRACE_DIR = Path(f"/tmp/nexus_{os.getlogin()}/trace")
+TRACE_MODULE = Path(__file__).parent.parent / "debug" / "trace.py"
+
+def run_cmd(args):
+    try:
+        return subprocess.check_output(args, stderr=subprocess.DEVNULL).decode().strip()
+    except:
+        return None
+
+def get_panes():
+    raw = run_cmd(["tmux", "list-panes", "-a", "-F",
+        "#{pane_id}|#{window_name}|#{pane_current_command}|#{@nexus_role}|#{@nexus_tab_name}|#{pane_width}x#{pane_height}"])
+    if not raw:
+        return []
+    
+    panes = []
+    for line in raw.split("\n"):
+        if not line:
+            continue
+        parts = line.split("|")
+        panes.append({
+            "id": parts[0] if len(parts) > 0 else None,
+            "window": parts[1] if len(parts) > 1 else None,
+            "command": parts[2] if len(parts) > 2 else None,
+            "role": parts[3] if len(parts) > 3 else None,
+            "tab_name": parts[4] if len(parts) > 4 else None,
+            "dimensions": parts[5] if len(parts) > 5 else None
+        })
+    return panes
+
+def get_focused_pane():
+    return run_cmd(["tmux", "display-message", "-p", "#{pane_id}"])
+
+def get_stack_state():
+    stack_path = TRACE_DIR.parent / "stacks.json"
+    if stack_path.exists():
+        try:
+            return json.loads(stack_path.read_text())
+        except:
+            pass
+    return {}
+
+def print_state():
+    panes = get_panes()
+    focused = get_focused_pane()
+    stack = get_stack_state()
+    
+    print("═" * 67)
+    print(f"NEXUS STATE INSPECTOR [{datetime.now().strftime('%H:%M:%S')}]")
+    print("═" * 67)
+    
+    visible = [p for p in panes if p["window"] != "RESERVOIR"]
+    reservoir = [p for p in panes if p["window"] == "RESERVOIR"]
+    
+    windows = {}
+    for p in visible:
+        w = p["window"]
+        if w not in windows:
+            windows[w] = []
+        windows[w].append(p)
+    
+    for window_name, window_panes in windows.items():
+        print(f"\n┌─ VISIBLE PANES ({window_name}) " + "─" * (45 - len(window_name)))
+        print("│")
+        
+        for p in window_panes:
+            is_focused = p["id"] == focused
+            focus_marker = " [FOCUSED]" if is_focused else ""
+            
+            print(f"│  ┌─ {p['id']}{focus_marker} " + "─" * (40 - len(p['id']) - len(focus_marker)))
+            print(f"│  │ Role: {p['role'] or '(none)':<15} Tab: {p['tab_name'] or '(none)':<15}")
+            print(f"│  │ Cmd:  {p['command'] or '(none)':<15} Size: {p['dimensions'] or '?'}")
+            
+            stack_info = find_in_stack(p, stack)
+            if stack_info:
+                print(f"│  │ Stack: {stack_info}")
+            elif p["role"] and p["role"] not in ("reservoir-root",):
+                print(f"│  │ Stack: NOT IN STACK ⚠️")
+            
+            print("│  └" + "─" * 50)
+        print("│")
+    
+    if reservoir:
+        print("└─ RESERVOIR (hidden window) " + "─" * 37)
+        for p in reservoir:
+            print(f"    {p['id']}  Role: {p['role'] or '(none)':<20} Cmd: {p['command']}")
+        print()
+    
+    if stack:
+        print("\n┌─ STACK STATE " + "─" * 52)
+        for role, data in stack.items():
+            tabs = data.get("tabs", [])
+            active = data.get("active_index", 0)
+            tab_ids = [t.get("id", "null") for t in tabs]
+            print(f"│  {role:<12} active={active}  tabs={tab_ids}")
+        print("└" + "─" * 66)
+    
+    warnings = find_warnings(panes, stack, focused)
+    if warnings:
+        print("\n┌─ WARNINGS " + "─" * 55)
+        for w in warnings:
+            print(f"│  ⚠️  {w}")
+        print("└" + "─" * 66)
+    
+    print("\n" + "═" * 67)
+
+def find_in_stack(pane, stack):
+    for role, data in stack.items():
+        tabs = data.get("tabs", [])
+        for i, t in enumerate(tabs):
+            if t.get("id") == pane["id"]:
+                return f"{role}.tabs[{i}] = {json.dumps(t)}"
+    return None
+
+def find_warnings(panes, stack, focused):
+    warnings = []
+    
+    for role, data in stack.items():
+        tabs = data.get("tabs", [])
+        for i, t in enumerate(tabs):
+            if t.get("id") is None:
+                warnings.append(f"Foundation tab has null ID in '{role}' role (tabs[{i}])")
+    
+    pane_ids = {p["id"] for p in panes}
+    for role, data in stack.items():
+        tabs = data.get("tabs", [])
+        for t in tabs:
+            tid = t.get("id")
+            if tid and tid not in pane_ids:
+                warnings.append(f"Stale pane {tid} in {role}.tabs (pane no longer exists)")
+    
+    for p in panes:
+        if p["window"] == "RESERVOIR":
+            continue
+        if p["role"] and p["role"] not in ("reservoir-root",):
+            in_stack = any(
+                t.get("id") == p["id"]
+                for data in stack.values()
+                for t in data.get("tabs", [])
+            )
+            if not in_stack:
+                warnings.append(f"Pane {p['id']} has role '{p['role']}' but not in any stack")
+    
+    return warnings
+
+def print_focus():
+    focused = get_focused_pane()
+    panes = get_panes()
+    
+    for p in panes:
+        if p["id"] == focused:
+            print(f"Focused: {p['id']}")
+            print(f"  Window: {p['window']}")
+            print(f"  Role: {p['role'] or '(none)'}")
+            print(f"  Tab: {p['tab_name'] or '(none)'}")
+            print(f"  Command: {p['command']}")
+            return
+    
+    print(f"Focused pane: {focused} (details unavailable)")
+
+def print_role(target_role):
+    panes = get_panes()
+    stack = get_stack_state()
+    
+    print(f"Panes with role '{target_role}':")
+    for p in panes:
+        if p["role"] == target_role:
+            print(f"  {p['id']}  Window: {p['window']}  Cmd: {p['command']}")
+    
+    if target_role in stack:
+        print(f"\nStack entry for '{target_role}':")
+        print(json.dumps(stack[target_role], indent=2))
+    else:
+        print(f"\nNo stack entry for '{target_role}'")
+
+def trace_cmd(args):
+    if not args:
+        print("Usage: nxs-inspect trace <on|off|status|snapshot>")
+        return
+    
+    subcmd = args[0]
+    
+    if subcmd == "on":
+        verbosity = args[1] if len(args) > 1 else "normal"
+        if verbosity not in ("minimal", "normal", "verbose"):
+            print(f"Invalid verbosity: {verbosity}")
+            print("Options: minimal, normal, verbose")
+            return
+        
+        result = subprocess.run([
+            sys.executable, str(TRACE_MODULE), "start", verbosity
+        ], capture_output=True, text=True)
+        print(result.stdout.strip())
+        if result.returncode == 0:
+            os.environ["NXS_TRACE_VERBOSITY"] = verbosity
+    
+    elif subcmd == "off":
+        subprocess.run([sys.executable, str(TRACE_MODULE), "stop"], capture_output=True)
+        print("Trace stopped")
+    
+    elif subcmd == "status":
+        subprocess.run([sys.executable, str(TRACE_MODULE), "status"])
+    
+    elif subcmd == "snapshot":
+        label = args[1] if len(args) > 1 else ""
+        result = subprocess.run([
+            sys.executable, str(TRACE_MODULE), "snapshot", label
+        ], capture_output=True, text=True)
+        print(result.stdout.strip())
+    
+    else:
+        print(f"Unknown trace command: {subcmd}")
+
+def replay_cmd(args):
+    if not args:
+        print("Usage: nxs-inspect replay <file> [--step N] [--verbosity minimal|normal|verbose]")
+        return
+    
+    replay_args = [sys.executable, str(TRACE_MODULE), "replay"] + args
+    subprocess.run(replay_args)
+
+def capture_cmd(label):
+    trace_path = TRACE_DIR / "active_session"
+    if not trace_path.exists():
+        print("Error: No active trace session. Run 'nxs-inspect trace on' first.")
+        return
+    
+    result = subprocess.run([
+        sys.executable, str(TRACE_MODULE), "snapshot", label or "manual"
+    ], capture_output=True, text=True)
+    print(result.stdout.strip())
+
+def diff_cmd(before, after):
+    snapshots_dir = TRACE_DIR / "snapshots"
+    
+    before_path = None
+    after_path = None
+    
+    for f in snapshots_dir.glob("*.json"):
+        content = json.loads(f.read_text())
+        if content.get("label") == before:
+            before_path = f
+        if content.get("label") == after:
+            after_path = f
+    
+    if not before_path:
+        print(f"Snapshot '{before}' not found")
+        return
+    if not after_path:
+        print(f"Snapshot '{after}' not found")
+        return
+    
+    before_data = json.loads(before_path.read_text())
+    after_data = json.loads(after_path.read_text())
+    
+    print(f"Diff: {before} → {after}")
+    print("=" * 50)
+    
+    if before_data.get("focused") != after_data.get("focused"):
+        print(f"Focus changed: {before_data.get('focused')} → {after_data.get('focused')}")
+    
+    before_panes = {p["id"]: p for p in before_data.get("panes", [])}
+    after_panes = {p["id"]: p for p in after_data.get("panes", [])}
+    
+    new_ids = set(after_panes.keys()) - set(before_panes.keys())
+    gone_ids = set(before_panes.keys()) - set(after_panes.keys())
+    
+    if new_ids:
+        print(f"\nNew panes: {new_ids}")
+        for pid in new_ids:
+            p = after_panes[pid]
+            print(f"  {pid}: role={p.get('role')}, window={p.get('window')}")
+    
+    if gone_ids:
+        print(f"\nRemoved panes: {gone_ids}")
+    
+    for pid in set(before_panes.keys()) & set(after_panes.keys()):
+        bp = before_panes[pid]
+        ap = after_panes[pid]
+        
+        changes = []
+        for key in ["role", "tab_name", "command", "window"]:
+            if bp.get(key) != ap.get(key):
+                changes.append(f"{key}: {bp.get(key)} → {ap.get(key)}")
+        
+        if changes:
+            print(f"\n{pid} changed:")
+            for c in changes:
+                print(f"  {c}")
+    
+    print("\nStack changes:")
+    before_stack = before_data.get("stack", {})
+    after_stack = after_data.get("stack", {})
+    
+    all_roles = set(before_stack.keys()) | set(after_stack.keys())
+    for role in all_roles:
+        bt = before_stack.get(role, {}).get("tabs", [])
+        at = after_stack.get(role, {}).get("tabs", [])
+        
+        if bt != at:
+            print(f"  {role}: {[t.get('id') for t in bt]} → {[t.get('id') for t in at]}")
+
+def main():
+    args = sys.argv[1:]
+    
+    if not args:
+        print_state()
+        return
+    
+    cmd = args[0]
+    rest = args[1:]
+    
+    if cmd == "--focus":
+        print_focus()
+    elif cmd == "--role" and rest:
+        print_role(rest[0])
+    elif cmd == "trace":
+        trace_cmd(rest)
+    elif cmd == "replay":
+        replay_cmd(rest)
+    elif cmd == "--capture":
+        capture_cmd(rest[0] if rest else "")
+    elif cmd == "--diff" and len(rest) >= 2:
+        diff_cmd(rest[0], rest[1])
+    elif cmd in ("-h", "--help"):
+        print_help()
+    else:
+        print(f"Unknown command: {cmd}")
+        print_help()
+
+def print_help():
+    print("""
+nxs-inspect - Nexus State Inspector
+
+USAGE:
+  nxs-inspect                      Show full state dump
+  nxs-inspect --focus              Show focused pane only
+  nxs-inspect --role <name>        Show panes with specific role
+
+TRACE LOGGING:
+  nxs-inspect trace on [verbosity] Start trace logging
+                                  Verbosity: minimal, normal, verbose
+  nxs-inspect trace off            Stop trace logging
+  nxs-inspect trace status         Show trace status
+  nxs-inspect trace snapshot [label]  Capture state snapshot
+
+REPLAY:
+  nxs-inspect replay <file>        Replay trace log
+  nxs-inspect replay <file> --step N     Show action #N details
+  nxs-inspect replay <file> --verbosity <level>  Filter by verbosity
+
+CAPTURE & DIFF:
+  nxs-inspect --capture [label]    Capture state snapshot
+  nxs-inspect --diff <before> <after>  Compare two snapshots
+
+EXAMPLES:
+  nxs-inspect trace on verbose
+  nxs-inspect trace snapshot before_action
+  # ... perform action ...
+  nxs-inspect trace snapshot after_action
+  nxs-inspect --diff before_action after_action
+  nxs-inspect trace off
+  nxs-inspect replay /tmp/nexus_$USER/trace/session_*.log
+""")
+
+if __name__ == "__main__":
+    main()

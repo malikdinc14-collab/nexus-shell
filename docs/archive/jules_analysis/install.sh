@@ -339,7 +339,7 @@ export NEXUS_BIN="$NEXUS_BIN"
 [[ -d "\$NEXUS_BIN" ]] && export PATH="\$NEXUS_BIN:\$PATH"
 
 # Shell hooks (Kernel Location)
-source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
+source "\$NEXUS_CONFIG/core/kernel/boot/shell_hooks.zsh"
 
 # Source module inits
 if [[ -d "\$NEXUS_CONFIG/modules" ]]; then
@@ -374,10 +374,10 @@ else
     mkdir -p "$BIN_DIR"
 fi
 
-ln -sf "$CONFIG_DIR/core/boot/launcher.sh" "$BIN_DIR/nexus"
-ln -sf "$CONFIG_DIR/core/boot/launcher.sh" "$BIN_DIR/nxs"
-echo "    $BIN_DIR/nexus -> core/boot/launcher.sh"
-echo "    $BIN_DIR/nxs -> core/boot/launcher.sh"
+ln -sf "$CONFIG_DIR/core/kernel/boot/launcher.sh" "$BIN_DIR/nexus"
+ln -sf "$CONFIG_DIR/core/kernel/boot/launcher.sh" "$BIN_DIR/nxs"
+echo "    $BIN_DIR/nexus -> core/kernel/boot/launcher.sh"
+echo "    $BIN_DIR/nxs -> core/kernel/boot/launcher.sh"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"

@@ -1,0 +1,48 @@
+{
+    "name": "devops",
+    "description": "DevOps/SRE workstation: containers, clusters, monitoring, and logs.",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "files",
+                "size": 25,
+                "command": "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
+            },
+            {
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "menu",
+                        "size": 6,
+                        "command": "$PARALLAX_CMD"
+                    },
+                    {
+                        "id": "editor",
+                        "command": "$EDITOR_CMD"
+                    },
+                    {
+                        "id": "terminal",
+                        "size": 15,
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            },
+            {
+                "type": "vsplit",
+                "size": 50,
+                "panes": [
+                    {
+                        "id": "containers",
+                        "size": 50,
+                        "command": "lazydocker 2>/dev/null || echo 'lazydocker not installed. brew install lazydocker'"
+                    },
+                    {
+                        "id": "monitor",
+                        "command": "btop 2>/dev/null || top"
+                    }
+                ]
+            }
+        ]
+    }
+}

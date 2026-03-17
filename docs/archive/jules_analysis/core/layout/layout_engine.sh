@@ -67,7 +67,7 @@ build_vscodelike() {
 }
 
 # --- Entry Point ---
-# SCRIPT_DIR is .../nexus-shell/core/layout
+# SCRIPT_DIR is .../nexus-shell/core/kernel/layout
 SCRIPT_DIR="$(cd -P "$(dirname "$0")" && pwd)"
 export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
 export NEXUS_CORE="${NEXUS_CORE:-$NEXUS_HOME/core}"

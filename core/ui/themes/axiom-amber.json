@@ -1,0 +1,11 @@
+{
+  "name": "axiom-amber",
+  "description": "Warm amber tones on dark",
+  "bg": "#1a1a1a",
+  "fg": "#ffbf00",
+  "accent": "#ff8c00",
+  "border": "yellow",
+  "success": "#00ff00",
+  "warning": "#ffbf00",
+  "error": "#ff4500"
+}

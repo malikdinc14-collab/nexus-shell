@@ -15,7 +15,7 @@ TARGETS=(
     "core"
     "modules"
     "scripts"
-    "$NEXUS_HOME/core/state"
+    "$NEXUS_HOME/core/engine/state"
 )
 
 for dir in "${TARGETS[@]}"; do

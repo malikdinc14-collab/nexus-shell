@@ -1,0 +1,45 @@
+{
+    "name": "sovereign-control",
+    "description": "The Sovereign Command Center: Ascent Dashboard, Inference Monitor, and Control Stacks.",
+    "layout": {
+        "type": "vsplit",
+        "panes": [
+            {
+                "type": "hsplit",
+                "size": 60,
+                "panes": [
+                    {
+                        "id": "ascent_dashboard",
+                        "size": 50,
+                        "title": "🎓 LEARNER DASHBOARD",
+                        "command": "$NEXUS_CORE/services/dashboard_manager.sh ascent"
+                    },
+                    {
+                        "id": "sovereign_monitor",
+                        "size": 50,
+                        "title": "🌌 SOVEREIGN MONITOR",
+                        "command": "$NEXUS_CORE/services/dashboard_manager.sh sovereign"
+                    }
+                ]
+            },
+            {
+                "type": "hsplit",
+                "size": 40,
+                "panes": [
+                    {
+                        "id": "control_plane",
+                        "size": 50,
+                        "title": "🏗️ CONTROL PLANE",
+                        "command": "$NEXUS_CORE/exec/stack_manager.sh actions"
+                    },
+                    {
+                        "id": "sandbox_monitor",
+                        "size": 50,
+                        "title": "🕵️ SANDBOX STREAM",
+                        "command": "$NEXUS_CORE/services/stream_monitor.sh"
+                    }
+                ]
+            }
+        ]
+    }
+}

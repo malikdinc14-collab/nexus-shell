@@ -4,7 +4,7 @@
 
 ## Phase 2.1: Project-Wide Search
 - [ ] **2.1.1: Quick File Search popup** (Req-1.1, Req-1.5, Design 2.1.1)
-  - [ ] Create `core/search/quick_find.sh` using `fd` + `fzf` in a `tmux display-popup`
+  - [ ] Create `core/engine/search/quick_find.sh` using `fd` + `fzf` in a `tmux display-popup`
   - [ ] Wire selected file to nvim editor pane via `--remote` RPC
   - [ ] Add `Alt-f` keybind in `nexus.conf` for quick file search
   - [ ] Auto-focus the editor pane after file selection
@@ -21,7 +21,7 @@
   - [ ] Update `config_helper.py` to parse task definitions
 
 - [ ] **2.2.2: Task execution** (Req-2.2, Req-2.3, Design 2.2)
-  - [ ] Create `core/exec/task_runner.sh` that runs tasks in the terminal pane
+  - [ ] Create `core/kernel/exec/task_runner.sh` that runs tasks in the terminal pane
   - [ ] Add tasks as ACTION items in the menu engine (new "Tasks" context)
   - [ ] Register `:build`, `:test`, `:lint` commands dynamically from `.nexus.yaml`
 
@@ -42,7 +42,7 @@
   - [ ] Configure auto-restore on nvim startup inside a Nexus session
 
 - [ ] **2.3.3: Unified save/restore** (Req-3.1, Design 2.3.3)
-  - [ ] Create `core/session/persist.sh` that triggers both tmux and nvim saves
+  - [ ] Create `core/kernel/session/persist.sh` that triggers both tmux and nvim saves
   - [ ] Modify `bin/nxs` to detect saved state and offer restore on launch
 
 ## Phase 2.4: Debugging (DAP)
@@ -63,12 +63,12 @@
 
 ## Phase 2.5: AI Agent Integration
 - [ ] **2.5.1: Context passing** (Req-5.1, Design 2.5.1)
-  - [ ] Create `core/ai/send_context.sh` that reads current nvim buffer via RPC
+  - [ ] Create `core/engine/ai/send_context.sh` that reads current nvim buffer via RPC
   - [ ] Send buffer content to the AI pane via `tmux send-keys`
   - [ ] Add "Send to AI" action to the menu
 
 - [ ] **2.5.2: Error piping** (Req-5.2, Req-5.3, Design 2.5.2)
-  - [ ] Create `core/ai/pipe_error.sh` that captures terminal pane output
+  - [ ] Create `core/engine/ai/pipe_error.sh` that captures terminal pane output
   - [ ] Send captured output to the AI pane for analysis
   - [ ] Add `:ai-error` command to the registry
 
@@ -97,7 +97,7 @@
   - [ ] Define YAML schema for theme files (tmux, nvim, yazi sections)
 
 - [ ] **2.7.2: Theme application engine** (Req-7.2, Design 2.7)
-  - [ ] Update `core/boot/theme.sh` to read YAML theme files
+  - [ ] Update `core/kernel/boot/theme.sh` to read YAML theme files
   - [ ] Apply tmux colors via `set-option`
   - [ ] Apply nvim colorscheme via RPC
   - [ ] Apply Yazi theme via config file write

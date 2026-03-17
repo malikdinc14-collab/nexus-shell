@@ -31,7 +31,7 @@ graph TD
 
 ## Components and Interfaces
 
-### Station Manager (`core/api/station_manager.sh`)
+### Station Manager (`core/engine/api/station_manager.sh`)
 **Role**: Single source of truth for project-wide state and coordination.
 
 **Responsibilities**:
@@ -66,7 +66,7 @@ graph TD
 }
 ```
 
-### Layout Engine & Processor (`core/layout/`)
+### Layout Engine & Processor (`core/kernel/layout/`)
 **Role**: Transforms static composition data into a live tmux window.
 
 **Interface**:
@@ -75,7 +75,7 @@ graph TD
 
 **Environment Invariant**: All tool-specific variables (`$EDITOR_CMD`, `$PARALLAX_CMD`, etc.) must be explicitly exported by the engine before the processor starts to ensure they propagate to new panes.
 
-### Pane Lifecycle Management (`core/boot/pane_wrapper.sh`)
+### Pane Lifecycle Management (`core/kernel/boot/pane_wrapper.sh`)
 **Role**: Ensures pane survival and provides a fallback TUI for tool selection.
 
 **Design**:
@@ -94,7 +94,7 @@ graph TD
 ## Project Repository Structure (Nexus 2.0 Standard)
 ```text
 nexus-shell/
-├── bin/                # Public entry points -> core/boot/launcher.sh
+├── bin/                # Public entry points -> core/kernel/boot/launcher.sh
 ├── core/               # The Kernel (Static, privileged logic)
 │   ├── boot/           # Launcher, pane_wrapper, shell_hooks
 │   ├── api/            # Station Manager (nxs-state)

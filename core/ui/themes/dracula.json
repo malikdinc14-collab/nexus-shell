@@ -1,0 +1,11 @@
+{
+  "name": "dracula",
+  "description": "Classic Dracula purple theme",
+  "bg": "#282a36",
+  "fg": "#f8f8f2",
+  "accent": "#bd93f9",
+  "border": "magenta",
+  "success": "#50fa7b",
+  "warning": "#ffb86c",
+  "error": "#ff5555"
+}

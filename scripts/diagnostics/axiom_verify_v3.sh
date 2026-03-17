@@ -10,7 +10,7 @@ echo "[Axiom] Verifying V-3: save_layout.py --root"
 
 # Run save_layout with explicit root
 # We use --window to keep it narrow
-python3 core/layout/save_layout.py --root "$MOCK_ROOT" --window 0
+python3 core/kernel/layout/save_layout.py --root "$MOCK_ROOT" --window 0
 
 if [[ -f "$MOCK_ROOT/.nexus/state.json" ]]; then
     echo "SUCCESS: state.json created in mock root."

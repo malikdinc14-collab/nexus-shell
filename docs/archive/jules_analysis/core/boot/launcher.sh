@@ -34,7 +34,7 @@ while [ -h "$REAL_PATH" ]; do
     REAL_PATH="$(readlink "$REAL_PATH")"
     [[ $REAL_PATH != /* ]] && REAL_PATH="$DIR/$REAL_PATH"
 done
-# SCRIPT_DIR is .../nexus-shell/core/boot
+# SCRIPT_DIR is .../nexus-shell/core/kernel/boot
 SCRIPT_DIR="$(cd -P "$(dirname "$REAL_PATH")" && pwd)"
 export NEXUS_HOME="$(cd "$SCRIPT_DIR/../../" && pwd)"
 export NEXUS_CORE="$NEXUS_HOME/core"

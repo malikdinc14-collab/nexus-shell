@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import subprocess
+from pathlib import Path
+
+USER_TMP = Path(f"/tmp/nexus_{os.getlogin()}")
+STACK_STATE = USER_TMP / "stacks.json"
+
+def run_tmux(args):
+    return subprocess.check_output(["tmux"] + args).decode().strip()
+
+def get_stacks():
+    if not STACK_STATE.exists(): return {}
+    with open(STACK_STATE) as f: return json.load(f)
+
+def main():
+    print("\n=== NEXUS STATE AUDIT ===")
+    
+    # 1. Tmux Panes
+    print("\n[ Tmux Panes ]")
+    panes = run_tmux(["list-panes", "-a", "-F", "#{pane_id} | #{window_name} | #{@nexus_role} | #{pane_current_command}"])
+    for p in panes.split("\n"):
+        print(f"  {p}")
+    
+    # 2. Nexus Stacks
+    print("\n[ Stack Registry ]")
+    stacks = get_stacks()
+    for role, data in stacks.items():
+        print(f"  Stack: {role} (Active: {data['active_index']})")
+        for i, tab in enumerate(data['tabs']):
+            marker = "*" if i == data['active_index'] else " "
+            print(f"    {marker} [{i}] {tab['id']} -> {tab['name']}")
+
+    # 3. Focus
+    try:
+        focused = run_tmux(["display-message", "-p", "#{pane_id}"])
+        print(f"\n[ Current Focus ]\n  {focused}")
+    except: pass
+
+if __name__ == "__main__":
+    main()

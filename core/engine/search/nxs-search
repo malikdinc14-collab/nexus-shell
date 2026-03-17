@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# core/search/nxs-search
+# Unified search interface that dispatches to registered providers
+# Supports both traditional (ripgrep) and AI-powered (grepai) search
+
+set -e
+
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
+
+# Default provider: grepai if available, else ripgrep
+get_provider() {
+    local provider="${NEXUS_SEARCH_PROVIDER:-}"
+    
+    # Check if grepai extension is available
+    if [[ -z "$provider" ]]; then
+        if [[ -f "$NEXUS_HOME/extensions/grepai/hooks/search_provider.sh" ]] && command -v grepai &>/dev/null; then
+            provider="grepai"
+        else
+            provider="ripgrep"
+        fi
+    fi
+    
+    echo "$provider"
+}
+
+# Ripgrep search (traditional text search)
+search_ripgrep() {
+    local query="$1"
+    local paths=("${@:2}")
+    [[ ${#paths[@]} -eq 0 ]] && paths=(".")
+    
+    if command -v rg &>/dev/null; then
+        rg --column --line-number --no-heading --color=always --smart-case "$query" "${paths[@]}"
+    else
+        grep -rn --color=always "$query" "${paths[@]}"
+    fi
+}
+
+# Interactive fzf search
+search_interactive() {
+    local query="${1:-}"
+    local paths=("${@:2}")
+    [[ ${#paths[@]} -eq 0 ]] && paths=(".")
+    
+    local search_paths="${NEXUS_ROOTS:-.}"
+    IFS=':' read -ra SEARCH_PATHS <<< "$search_paths"
+    [[ ${#SEARCH_PATHS[@]} -gt 0 ]] && paths=("${SEARCH_PATHS[@]}")
+    
+    SELECTION=$(FZF_DEFAULT_COMMAND="rg --column --line-number --no-heading --color=always --smart-case '${query:-.}' ${paths[*]}" \
+        fzf --ansi --layout=reverse --border=rounded \
+            --prompt="🔎 Search > " \
+            --header="Live Grep (type to search)" \
+            --disabled --query "$query" \
+            --bind "change:reload:rg --column --line-number --no-heading --color=always --smart-case {q} ${paths[*]} || true" \
+            --preview 'bat --color=always --style=numbers --highlight-line {2} {1} 2>/dev/null' \
+            --preview-window='right:60%:+{2}-10' \
+            --delimiter ':')
+    
+    if [[ -n "$SELECTION" ]]; then
+        local file=$(echo "$SELECTION" | cut -d: -f1)
+        local line=$(echo "$SELECTION" | cut -d: -f2)
+        
+        # Open in editor
+        local nvim_pipe="${NVIM_PIPE:-/tmp/nexus_$(whoami)/pipes/nvim_${NEXUS_PROJECT:-default}.pipe}"
+        if [[ -S "$nvim_pipe" ]]; then
+            nvim --server "$nvim_pipe" --remote "$(pwd)/$file" 2>/dev/null
+            nvim --server "$nvim_pipe" --remote-send ":${LINE}<CR>zz" 2>/dev/null
+            tmux select-pane -t editor 2>/dev/null
+        else
+            echo "$file:$line"
+        fi
+    fi
+}
+
+# Main dispatcher
+PROVIDER=$(get_provider)
+MODE="${1:-semantic}"
+QUERY="${2:-}"
+shift 2 2>/dev/null || true
+
+case "$MODE" in
+    -h|--help|help)
+        cat <<EOF
+nxs-search - Unified Search Interface
+
+Usage:
+    nxs-search [mode] <query> [paths...]
+
+Modes:
+    semantic    AI-powered semantic search (default, requires grepai)
+    text        Traditional text search (ripgrep)
+    interactive Interactive fzf search
+    trace       Call graph: find callers
+    callees     Call graph: find callees
+    functions   List all functions
+
+Current Provider: $PROVIDER
+
+Environment:
+    NEXUS_SEARCH_PROVIDER  Override provider (grepai, ripgrep)
+    NEXUS_ROOTS            Search paths (colon-separated)
+EOF
+        ;;
+    
+    semantic|ai)
+        if [[ "$PROVIDER" == "grepai" ]]; then
+            "$NEXUS_HOME/extensions/grepai/hooks/search_provider.sh" "$QUERY" semantic
+        else
+            echo "[nxs-search] grepai not available, falling back to text search" >&2
+            search_ripgrep "$QUERY" "$@"
+        fi
+        ;;
+    
+    text|exact|grep)
+        search_ripgrep "$QUERY" "$@"
+        ;;
+    
+    interactive|fzf)
+        search_interactive "$QUERY" "$@"
+        ;;
+    
+    trace|callers)
+        if [[ "$PROVIDER" == "grepai" ]]; then
+            "$NEXUS_HOME/extensions/grepai/hooks/search_provider.sh" "$QUERY" trace
+        else
+            echo "[nxs-search] Call graph requires grepai extension" >&2
+            exit 1
+        fi
+        ;;
+    
+    callees)
+        if [[ "$PROVIDER" == "grepai" ]]; then
+            "$NEXUS_HOME/extensions/grepai/hooks/search_provider.sh" "$QUERY" callees
+        else
+            echo "[nxs-search] Call graph requires grepai extension" >&2
+            exit 1
+        fi
+        ;;
+    
+    functions|list)
+        if [[ "$PROVIDER" == "grepai" ]]; then
+            "$NEXUS_HOME/extensions/grepai/hooks/search_provider.sh" "" functions
+        else
+            echo "[nxs-search] Function listing requires grepai extension" >&2
+            exit 1
+        fi
+        ;;
+    
+    *)
+        # Treat as search query with default mode
+        QUERY="$MODE"
+        if [[ "$PROVIDER" == "grepai" ]]; then
+            "$NEXUS_HOME/extensions/grepai/hooks/search_provider.sh" "$QUERY" semantic
+        else
+            search_ripgrep "$QUERY" "$@"
+        fi
+        ;;
+esac

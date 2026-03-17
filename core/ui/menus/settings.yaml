@@ -1,0 +1,52 @@
+title: "Settings"
+context: "settings"
+items:
+  - label: "⚙️ Tmux Config (nexus.conf)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/config/tmux/nexus.conf"
+
+  - label: "⌨️ Switch Keybind Profile"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 50% -h 50% '$NEXUS_HOME/core/kernel/exec/nxs-keybind.sh'"
+
+  - label: "⚙️ Command Registry (registry.json)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/core/engine/api/registry.json"
+
+  - label: "⚙️ Default Layout (vscodelike.json)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/compositions/vscodelike.json"
+
+  - label: "⚙️ Default Settings (settings.yaml)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/core/engine/config/default_settings.yaml"
+
+  - separator: true
+
+  - label: "📁 Project Config (.nexus.yaml)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $PROJECT_ROOT/.nexus.yaml"
+
+  - label: "📁 Project Lists (.nexus/lists/)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $PROJECT_ROOT/.nexus/lists/"
+
+  - separator: true
+
+  - label: "🎨 Theme Files"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/config/themes/"
+
+  - label: "📋 Home Menu (home.yaml)"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/menus/home.yaml"
+
+  - label: "📋 Workspace Registry"
+    type: "ACTION"
+    payload: "$EDITOR_CMD $NEXUS_HOME/config/registry.yaml"
+
+  - separator: true
+
+  - label: "❓ Help"
+    type: "ACTION"
+    payload: "tmux display-popup -E -w 70% -h 85% '$NEXUS_HOME/core/kernel/boot/help.sh'"

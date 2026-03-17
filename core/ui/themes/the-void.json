@@ -1,0 +1,11 @@
+{
+  "name": "the-void",
+  "description": "Pure black with blood red accents",
+  "bg": "#000000",
+  "fg": "#ff0000",
+  "accent": "#880000",
+  "border": "red",
+  "success": "#00ff00",
+  "warning": "#ff8800",
+  "error": "#ff0000"
+}

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# core/view/nxs-view
+# Sovereign High-Fidelity Renderer
+# Handles: Markdown (glow), Mermaid (mmdc + Kitty), Code (bat)
+
+FILE="$1"
+[[ -z "$FILE" ]] && echo "Usage: nxs-view <file>" && exit 1
+
+EXT="${FILE##*.}"
+
+case "$EXT" in
+    md)
+        if command -v glow &> /dev/null; then
+            glow "$FILE"
+        else
+            cat "$FILE"
+        fi
+        ;;
+    mmd)
+        # Mermaid Renderer
+        OUTPUT="/tmp/nexus_vision_$(basename "$FILE").png"
+        echo "[*] Rendering Blueprint: $FILE"
+        
+        if command -v mmdc &> /dev/null; then
+            # Render to PNG using mermaid-cli
+            mmdc -i "$FILE" -o "$OUTPUT" -b transparent -t dark &> /dev/null
+            
+            # Pipe to terminal using Kitty Graphics Protocol (supported by Ghostty)
+            # Standard Kitty 'icat' or 'kitten icat'
+            if command -v kitten &> /dev/null; then
+                kitten icat --align center "$OUTPUT"
+            elif command -v icat &> /dev/null; then
+                icat "$OUTPUT"
+            else
+                echo "[!] Mermaid-CLI found, but no Kitty-compatible image viewer (kitten/icat)."
+                echo "    Viewing raw source:"
+                cat "$FILE"
+            fi
+        else
+            echo "[!] mermaid-cli (mmdc) not found. Install with: npm install -g @mermaid-js/mermaid-cli"
+            cat "$FILE"
+        fi
+        ;;
+    *)
+        # Code/Text View
+        if command -v bat &> /dev/null; then
+            bat --style=plain --paging=always --color=always "$FILE"
+        else
+            cat "$FILE"
+        fi
+        ;;
+esac
+
+# Persistent loop for "Live" feel if needed, but for now, we just wait for user to hit a key to 'refresh'
+# read -n 1 -s -p "Press any key to close preview..."

@@ -87,7 +87,7 @@ case "$1" in
                 echo "[*] Profile reset. Run 'nxs wizard' to reconfigure."
                 ;;
             detect)
-                source "$NEXUS_HOME/core/lib/detector.sh"
+                source "$NEXUS_HOME/core/engine/lib/detector.sh"
                 detect_as_json
                 ;;
             roles)

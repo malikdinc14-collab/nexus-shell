@@ -1,4 +1,4 @@
-# Specification: Daemon Manager (`core/services/daemon_manager.sh`)
+# Specification: Daemon Manager (`core/services/internal/daemon_manager.sh`)
 
 ## 1. Component Overview
 The Daemon Manager is responsible for orchestrating invisible background processes (Services) within the Nexus Shell environment. It must execute long-running services (like Language Servers, Debug Adapters, and AI Agents) without consuming visible geometric space in the active Tmux layout.

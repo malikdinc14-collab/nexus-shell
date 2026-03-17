@@ -8,8 +8,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 export NEXUS_HOME="$DIR"
 
 # Source theme if it exists for colored output
-if [ -f "$NEXUS_HOME/core/boot/theme.sh" ]; then
-    source "$NEXUS_HOME/core/boot/theme.sh"
+if [ -f "$NEXUS_HOME/core/kernel/boot/theme.sh" ]; then
+    source "$NEXUS_HOME/core/kernel/boot/theme.sh"
 else
     # Fallbacks if theme is unavailable
     COLOR_PRIMARY="\033[38;2;103;52;195m" # #6734c3
@@ -24,7 +24,7 @@ if [ -z "$NEXUS_SESSION" ]; then
     exit 1
 fi
 
-DAEMON_SCRIPT="$NEXUS_HOME/core/services/daemon_manager.sh"
+DAEMON_SCRIPT="$NEXUS_HOME/core/services/internal/daemon_manager.sh"
 AGENT_NAME="agent-zero"
 SETTINGS_FILE="$NEXUS_HOME/modules/agent-zero/usr/settings.json"
 

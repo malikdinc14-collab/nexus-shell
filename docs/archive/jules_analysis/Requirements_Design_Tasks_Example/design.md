@@ -403,7 +403,7 @@ class CircuitBreaker:
     def open_circuit(self, component: str, reason: str)
 ```
 
-### Configuration Manager (`integration/core/config_manager.py`)
+### Configuration Manager (`integration/core/engine/config_manager.py`)
 
 **Role:** Unified Configuration Management
 

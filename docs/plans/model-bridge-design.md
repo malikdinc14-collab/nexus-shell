@@ -1357,7 +1357,7 @@ items:
     payload: "sovereignty"
 ```
 
-### Commands for core/api/registry.json
+### Commands for core/engine/api/registry.json
 
 ```json
 {

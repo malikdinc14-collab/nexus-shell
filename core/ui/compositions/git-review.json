@@ -1,0 +1,43 @@
+{
+    "name": "git-review",
+    "description": "Git-centric layout: lazygit, commit graph, PR dashboard, and editor.",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "menu",
+                "size": 20,
+                "command": "$PARALLAX_CMD"
+            },
+            {
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "editor",
+                        "size": 55,
+                        "command": "$EDITOR_CMD"
+                    },
+                    {
+                        "id": "terminal",
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            },
+            {
+                "type": "vsplit",
+                "size": 45,
+                "panes": [
+                    {
+                        "id": "git",
+                        "size": 65,
+                        "command": "lazygit 2>/dev/null || echo 'Install: brew install lazygit'"
+                    },
+                    {
+                        "id": "prs",
+                        "command": "gh dash 2>/dev/null || echo 'Install: gh extension install dlvhdr/gh-dash'"
+                    }
+                ]
+            }
+        ]
+    }
+}

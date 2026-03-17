@@ -51,7 +51,7 @@
 - **3.5.6**: Keybinds MUST NOT conflict with tool-internal bindings (nvim, yazi, opencode all use their own keys)
 
 ### 3.6 Command Registry (Req-6)
-- **3.6.1**: Commands MUST be defined in `core/api/registry.json`
+- **3.6.1**: Commands MUST be defined in `core/engine/api/registry.json`
 - **3.6.2**: The dispatch system MUST resolve commands by name and execute their action
 - **3.6.3**: Preflight checks (e.g., `check_dirty`) MUST be non-fatal — failures default to "safe to proceed"
 - **3.6.4**: Unknown commands MUST show a helpful message, not crash

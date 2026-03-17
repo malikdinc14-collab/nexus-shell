@@ -41,8 +41,8 @@ Everything Else: Extension with Smart Detection
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `core/lib/detector.sh` | ~200 | System tool detection engine |
-| `core/boot/first_run.sh` | ~250 | Interactive first-run wizard |
+| `core/engine/lib/detector.sh` | ~200 | System tool detection engine |
+| `core/kernel/boot/first_run.sh` | ~250 | Interactive first-run wizard |
 
 ### Extensions
 
@@ -85,7 +85,7 @@ install:
 
 ## Files Modified
 
-### 1. `core/boot/launcher.sh`
+### 1. `core/kernel/boot/launcher.sh`
 
 **Changes:**
 - Added first-run check (lines ~48-55)
@@ -105,7 +105,7 @@ export NEXUS_EDITOR="${NEXUS_EDITOR:-$(get_tool_for_role editor)}"
 export NEXUS_FILES="${NEXUS_FILES:-$(get_tool_for_role explorer)}"
 ```
 
-### 2. `core/boot/doctor.sh`
+### 2. `core/kernel/boot/doctor.sh`
 
 **Changes:**
 - Complete rewrite to be extension-aware

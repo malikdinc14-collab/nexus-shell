@@ -1,0 +1,33 @@
+{
+    "name": "writer",
+    "description": "Minimalist writing environment: editor, markdown preview, and file browser.",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "files",
+                "size": 20,
+                "command": "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
+            },
+            {
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "menu",
+                        "size": 5,
+                        "command": "$PARALLAX_CMD"
+                    },
+                    {
+                        "id": "editor",
+                        "command": "$EDITOR_CMD"
+                    }
+                ]
+            },
+            {
+                "id": "preview",
+                "size": 40,
+                "command": "glow -p 2>/dev/null || echo 'Install: brew install glow'"
+            }
+        ]
+    }
+}

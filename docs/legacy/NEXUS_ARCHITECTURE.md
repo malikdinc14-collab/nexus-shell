@@ -9,13 +9,13 @@ Nexus-Shell is designed to exist in two distinct "states": **Source** and **Inst
 ### Source Repository (`~/Projects/personal/nexus-shell/`)
 - This is where you code.
 - Contains the `.git` history and the `install.sh` / `install_local.sh` scripts.
-- **core/boot/**: The core logic (Launcher, Architect, Wrapper).
+- **core/kernel/boot/**: The core logic (Launcher, Architect, Wrapper).
 - **modules/parallax/**: The submodule for state synchronization.
 
 ### Live Installation (`~/.config/nexus-shell/`)
 - This is the "Stable Snapshot" used by your terminal.
 - It is decoupled from the Source to prevent developmental bugs from crashing your active station.
-- **core/boot/**: Physical copies of the source scripts.
+- **core/kernel/boot/**: Physical copies of the source scripts.
 - **tmux/nexus.conf**: The hardened TMUX configuration.
 
 ---

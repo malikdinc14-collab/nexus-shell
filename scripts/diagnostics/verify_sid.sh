@@ -9,7 +9,7 @@ SOCKET="/tmp/nexus_$USER/$PROJECT/bus.sock"
 echo "=== Nexus SID Verification ==="
 
 # 1. Check if PID file/process exists
-SID_PID=$(pgrep -f "python3.*core/ai/sid.py")
+SID_PID=$(pgrep -f "python3.*core/engine/ai/sid.py")
 if [[ -n "$SID_PID" ]]; then
     echo "✓ SID process found (PID: $SID_PID)"
 else

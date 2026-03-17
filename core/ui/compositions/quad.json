@@ -1,0 +1,38 @@
+{
+    "name": "quad",
+    "description": "4-pane layout for testing",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "left",
+                "size": 50,
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "top-left",
+                        "command": "/bin/zsh -i"
+                    },
+                    {
+                        "id": "bottom-left",
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            },
+            {
+                "id": "right",
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "top-right",
+                        "command": "/bin/zsh -i"
+                    },
+                    {
+                        "id": "bottom-right",
+                        "command": "/bin/zsh -i"
+                    }
+                ]
+            }
+        ]
+    }
+}

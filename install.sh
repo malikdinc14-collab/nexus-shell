@@ -294,7 +294,7 @@ cp -r "$NEXUS_HOME/examples" "$CONFIG_DIR/"
 if [[ -d "$HOME/.parallax/content/actions" ]]; then
     echo "    Installing Nexus actions to Parallax..."
     mkdir -p "$HOME/.parallax/content/actions/nexus"
-    cp -rf "$NEXUS_HOME/core/actions/"* "$HOME/.parallax/content/actions/nexus/" 2>/dev/null || true
+    cp -rf "$NEXUS_HOME/core/services/actions/"* "$HOME/.parallax/content/actions/nexus/" 2>/dev/null || true
 fi
 
 # Copy example configs and integration files
@@ -315,7 +315,7 @@ echo ""
 echo "[4/6] Creating state directory..."
 NEXUS_STATE="/tmp/nexus_$USER_NAME"
 mkdir -p "$NEXUS_STATE/pipes"
-cp "$NEXUS_HOME/core/themes/nexus-cyber.json" "$NEXUS_STATE/theme.json" 2>/dev/null || true
+cp "$NEXUS_HOME/core/ui/themes/nexus-cyber.json" "$NEXUS_STATE/theme.json" 2>/dev/null || true
 echo "    State directory: $NEXUS_STATE"
 
 # === Step 5: Add shell hooks ===
@@ -338,7 +338,7 @@ export NEXUS_BIN="$NEXUS_BIN"
 [[ -d "\$NEXUS_BIN" ]] && export PATH="\$NEXUS_BIN:\$PATH"
 
 # Shell hooks (Kernel Location)
-source "\$NEXUS_CONFIG/core/boot/shell_hooks.zsh"
+source "\$NEXUS_CONFIG/core/kernel/boot/shell_hooks.zsh"
 
 # Source module inits
 if [[ -d "\$NEXUS_CONFIG/modules" ]]; then
@@ -373,10 +373,10 @@ else
     mkdir -p "$BIN_DIR"
 fi
 
-ln -sf "$CONFIG_DIR/core/boot/launcher.sh" "$BIN_DIR/nexus"
-ln -sf "$CONFIG_DIR/core/boot/launcher.sh" "$BIN_DIR/nxs"
-echo "    $BIN_DIR/nexus -> core/boot/launcher.sh"
-echo "    $BIN_DIR/nxs -> core/boot/launcher.sh"
+ln -sf "$CONFIG_DIR/core/kernel/boot/launcher.sh" "$BIN_DIR/nexus"
+ln -sf "$CONFIG_DIR/core/kernel/boot/launcher.sh" "$BIN_DIR/nxs"
+echo "    $BIN_DIR/nexus -> core/kernel/boot/launcher.sh"
+echo "    $BIN_DIR/nxs -> core/kernel/boot/launcher.sh"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"

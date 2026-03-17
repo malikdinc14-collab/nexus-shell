@@ -29,7 +29,7 @@ Nexus-Shell is **85% complete** as a composable terminal IDE. The core architect
 ### ⚠️ INCOMPLETE: Critical Features
 
 #### 1. Event Bus (Priority: HIGH)
-**Status**: Directory exists (`core/bus/`) but empty  
+**Status**: Directory exists (`core/engine/bus/`) but empty  
 **Impact**: No inter-pane communication, no reactive workflows  
 **Required for Scriptum**: Yes - needed for file dispatch, AI integration
 

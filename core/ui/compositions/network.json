@@ -1,0 +1,33 @@
+{
+    "name": "network",
+    "description": "Network analysis workstation: packet capture, diagnostics, and file transfer.",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "menu",
+                "size": 25,
+                "command": "$PARALLAX_CMD"
+            },
+            {
+                "type": "vsplit",
+                "panes": [
+                    {
+                        "id": "capture",
+                        "size": 60,
+                        "command": "termshark 2>/dev/null || echo 'Install: brew install termshark'"
+                    },
+                    {
+                        "id": "diagnostics",
+                        "command": "trip 2>/dev/null || mtr 8.8.8.8 2>/dev/null || echo 'Install: brew install trippy'"
+                    }
+                ]
+            },
+            {
+                "id": "terminal",
+                "size": 35,
+                "command": "/bin/zsh -i"
+            }
+        ]
+    }
+}

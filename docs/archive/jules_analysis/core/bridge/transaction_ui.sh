@@ -6,7 +6,7 @@
 
 # Resolve paths
 NEXUS_HOME="${NEXUS_HOME:-$HOME/.config/nexus-shell}"
-NEXUS_SCRIPTS="${NEXUS_SCRIPTS:-$NEXUS_HOME/core/boot}"
+NEXUS_SCRIPTS="${NEXUS_SCRIPTS:-$NEXUS_HOME/core/kernel/boot}"
 
 TRANS_DIR="$HOME/.parallax/transactions"
 mkdir -p "$TRANS_DIR"

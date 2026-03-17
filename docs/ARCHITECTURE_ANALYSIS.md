@@ -74,24 +74,24 @@ nexus-shell/
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `core/boot/launcher.sh` | 453 | Main station initialization |
-| `core/layout/layout_engine.sh` | 240 | Pane layout construction |
-| `core/exec/stack_manager.sh` | 262 | Tool stack management |
-| `core/exec/router.sh` | 142 | Menu output routing |
-| `core/boot/guard.sh` | 133 | Session cleanup |
-| `core/api/station_manager.sh` | 126 | Station lifecycle |
-| `core/exec/nxs-tab.sh` | 141 | Tab management |
-| `core/services/daemon_manager.sh` | 110 | Background service orchestration |
+| `core/kernel/boot/launcher.sh` | 453 | Main station initialization |
+| `core/kernel/layout/layout_engine.sh` | 240 | Pane layout construction |
+| `core/kernel/exec/stack_manager.sh` | 262 | Tool stack management |
+| `core/kernel/exec/router.sh` | 142 | Menu output routing |
+| `core/kernel/boot/guard.sh` | 133 | Session cleanup |
+| `core/engine/api/station_manager.sh` | 126 | Station lifecycle |
+| `core/kernel/exec/nxs-tab.sh` | 141 | Tab management |
+| `core/services/internal/daemon_manager.sh` | 110 | Background service orchestration |
 
 ## Core Logic (Python)
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `core/layout/processor.py` | 167 | JSON layout processing |
-| `core/bus/event_server.py` | 251 | Event bus server |
-| `core/ai/sid.py` | 141 | Sovereign Intelligence Daemon |
-| `core/state/state_engine.py` | 85 | State persistence |
-| `core/api/config_helper.py` | 67 | Configuration loading |
+| `core/kernel/layout/processor.py` | 167 | JSON layout processing |
+| `core/engine/bus/event_server.py` | 251 | Event bus server |
+| `core/engine/ai/sid.py` | 141 | Sovereign Intelligence Daemon |
+| `core/engine/state/state_engine.py` | 85 | State persistence |
+| `core/engine/api/config_helper.py` | 67 | Configuration loading |
 
 ## Interfaces
 
@@ -107,8 +107,8 @@ nexus-shell/
 - `config/profiles/*.yaml` - Workspace profiles
 - `config/keybinds/*.conf` - Keybinding configurations
 - `config/themes/*.yaml` - Theme definitions
-- `core/compositions/*.json` - Layout compositions (23 files)
-- `core/config/default_settings.yaml` - Default settings
+- `core/ui/compositions/*.json` - Layout compositions (23 files)
+- `core/engine/config/default_settings.yaml` - Default settings
 
 ## Tests
 
@@ -139,17 +139,17 @@ router.sh ────────► [commands/workspace.sh, commands/profile.s
 bin/nxs (CLI)
     │
     ▼
-core/boot/launcher.sh ─────────────────────────────────┐
+core/kernel/boot/launcher.sh ─────────────────────────────────┐
     │                                                   │
-    ├──► core/api/config_helper.py (config loading)     │
-    ├──► core/api/station_manager.sh (session mgmt)     │
-    ├──► core/layout/layout_engine.sh (pane building)   │
-    │        └──► core/layout/processor.py              │
-    ├──► core/bus/event_server.py (event bus)           │
-    ├──► core/ai/sid.py (AI daemon)                     │
-    ├──► core/boot/boot_loader.sh (boot services)       │
+    ├──► core/engine/api/config_helper.py (config loading)     │
+    ├──► core/engine/api/station_manager.sh (session mgmt)     │
+    ├──► core/kernel/layout/layout_engine.sh (pane building)   │
+    │        └──► core/kernel/layout/processor.py              │
+    ├──► core/engine/bus/event_server.py (event bus)           │
+    ├──► core/engine/ai/sid.py (AI daemon)                     │
+    ├──► core/kernel/boot/boot_loader.sh (boot services)       │
     │        └──► modules/menu/lib/core/menu_engine.py  │
-    └──► core/services/hud_service.sh (HUD)             │
+    └──► core/services/internal/hud_service.sh (HUD)             │
                                                         │
 modules/menu/ ◄─────────────────────────────────────────┘
     └──► menu_engine.py (YAML-driven menu rendering)
@@ -161,9 +161,9 @@ modules/menu/ ◄─────────────────────
 ```
 modules/
 ├── agents/     → bin/nxs-agent (Universal)
-├── menu/       → core/menus/, core/lists/
-├── mcp/        → core/api/ (Sovereign)
-├── render/     → core/view/
+├── menu/       → core/ui/menus/, core/engine/lists/
+├── mcp/        → core/engine/api/ (Sovereign)
+├── render/     → core/ui/view/
 └── web/        → external/pi-mono/
 ```
 
@@ -175,38 +175,38 @@ modules/
 
 **Purpose:** Command dispatch and user interaction entry point  
 **Files:** `bin/nxs`, `bin/nxs-agent`, `bin/nxs-chat`  
-**Dependencies:** core/boot/*  
+**Dependencies:** core/kernel/boot/*  
 **Confidence:** HIGH
 
 ## Component 2: Boot System
 
 **Purpose:** Session initialization, guards, cleanup, health checks  
 **Files:**
-- `core/boot/launcher.sh` - Main orchestrator
-- `core/boot/boot_loader.sh` - Service loading
-- `core/boot/guard.sh` - Exit handling
-- `core/boot/doctor.sh` - Health diagnostics
-- `core/boot/theme.sh` - Theme application  
-**Dependencies:** core/api/*, core/layout/*  
+- `core/kernel/boot/launcher.sh` - Main orchestrator
+- `core/kernel/boot/boot_loader.sh` - Service loading
+- `core/kernel/boot/guard.sh` - Exit handling
+- `core/kernel/boot/doctor.sh` - Health diagnostics
+- `core/kernel/boot/theme.sh` - Theme application  
+**Dependencies:** core/engine/api/*, core/kernel/layout/*  
 **Confidence:** HIGH
 
 ## Component 3: Layout Engine
 
 **Purpose:** Parse JSON compositions and construct TMUX panes  
 **Files:**
-- `core/layout/layout_engine.sh` - Shell orchestration
-- `core/layout/processor.py` - Recursive pane building
-- `core/layout/restore_layout.sh` - Session restoration
-- `core/compositions/*.json` - Layout definitions  
-**Dependencies:** tmux, core/state/*  
+- `core/kernel/layout/layout_engine.sh` - Shell orchestration
+- `core/kernel/layout/processor.py` - Recursive pane building
+- `core/kernel/layout/restore_layout.sh` - Session restoration
+- `core/ui/compositions/*.json` - Layout definitions  
+**Dependencies:** tmux, core/engine/state/*  
 **Confidence:** HIGH
 
 ## Component 4: Event Bus (Nervous System)
 
 **Purpose:** Inter-component communication via Unix sockets  
 **Files:**
-- `core/bus/event_server.py` - Async pub/sub server
-- `core/bus/nxs-event` - CLI client  
+- `core/engine/bus/event_server.py` - Async pub/sub server
+- `core/engine/bus/nxs-event` - CLI client  
 **Dependencies:** asyncio  
 **Confidence:** HIGH
 
@@ -214,9 +214,9 @@ modules/
 
 **Purpose:** AI agent coordination and daemon management  
 **Files:**
-- `core/ai/sid.py` - Sovereign Intelligence Daemon
-- `core/ai/nxs-ask.sh` - Query interface
-- `core/ai/nxs-ai-stream.sh` - Stream handling  
+- `core/engine/ai/sid.py` - Sovereign Intelligence Daemon
+- `core/engine/ai/nxs-ask.sh` - Query interface
+- `core/engine/ai/nxs-ai-stream.sh` - Stream handling  
 **Dependencies:** event_server.py, litellm, langchain  
 **Confidence:** HIGH
 
@@ -224,18 +224,18 @@ modules/
 
 **Purpose:** Tab/pane swapping without process termination  
 **Files:**
-- `core/stack/nxs-stack` - Main stack manager
-- `core/stack/nxs-stack-popup` - Popup interface
-- `core/stack/nxs-stack-status.py` - Status display  
-**Dependencies:** tmux, core/state/*  
+- `core/kernel/stack/nxs-stack` - Main stack manager
+- `core/kernel/stack/nxs-stack-popup` - Popup interface
+- `core/kernel/stack/nxs-stack-status.py` - Status display  
+**Dependencies:** tmux, core/engine/state/*  
 **Confidence:** HIGH
 
 ## Component 7: State Engine
 
 **Purpose:** Session persistence and workspace state  
 **Files:**
-- `core/state/state_engine.py` - State management
-- `core/state/state_engine.sh` - Shell wrapper
+- `core/engine/state/state_engine.py` - State management
+- `core/engine/state/state_engine.sh` - Shell wrapper
 - `data/state.json` - Persistent storage  
 **Dependencies:** json  
 **Confidence:** HIGH
@@ -246,7 +246,7 @@ modules/
 **Files:**
 - `modules/menu/lib/core/menu_engine.py` - Core engine
 - `modules/menu/lib/providers/*.py` - Data providers
-- `core/menus/*.yaml` - Menu definitions  
+- `core/ui/menus/*.yaml` - Menu definitions  
 **Dependencies:** pyyaml, fzf  
 **Confidence:** HIGH
 
@@ -254,9 +254,9 @@ modules/
 
 **Purpose:** Real-time status bar rendering  
 **Files:**
-- `core/hud/renderer.sh` - Main renderer
-- `core/hud/telemetry_aggregator.sh` - Data aggregation
-- `core/hud/modules/*` - HUD modules  
+- `core/ui/hud/renderer.sh` - Main renderer
+- `core/ui/hud/telemetry_aggregator.sh` - Data aggregation
+- `core/ui/hud/modules/*` - HUD modules  
 **Dependencies:** jq  
 **Confidence:** MEDIUM
 
@@ -264,10 +264,10 @@ modules/
 
 **Purpose:** Route menu selections to appropriate handlers  
 **Files:**
-- `core/exec/router.sh` - Main router
-- `core/exec/dispatch.sh` - Command dispatch
-- `core/exec/task_runner.sh` - Task execution  
-**Dependencies:** core/commands/*  
+- `core/kernel/exec/router.sh` - Main router
+- `core/kernel/exec/dispatch.sh` - Command dispatch
+- `core/kernel/exec/task_runner.sh` - Task execution  
+**Dependencies:** core/services/commands/*  
 **Confidence:** HIGH
 
 ## Component 11: Extension System (NEW)
@@ -276,7 +276,7 @@ modules/
 **Files:**
 - `extensions/loader.sh` - Extension manager
 - `extensions/grepai/` - grepai extension (semantic search)
-**Dependencies:** core/boot/launcher.sh, bin/nxs  
+**Dependencies:** core/kernel/boot/launcher.sh, bin/nxs  
 **Confidence:** HIGH
 
 The extension system provides:
@@ -297,7 +297,7 @@ The extension system provides:
 2. bin/nxs (dispatcher)
          │ Parses command, routes to launcher.sh
          ▼
-3. core/boot/launcher.sh
+3. core/kernel/boot/launcher.sh
          │ ├── Identity Guard (prevent recursion)
          │ ├── Path Resolution (NEXUS_HOME, PROJECT_ROOT)
          │ ├── Config Loading (config_helper.py)
@@ -351,7 +351,7 @@ The extension system provides:
 | **TMUX** | Process | Throughout | Terminal multiplexing, pane management |
 | **Neovim** | Editor | `EDITOR_CMD`, `NVIM_PIPE` | Code editing with RPC |
 | **Yazi** | File Manager | `NEXUS_FILES` | File explorer |
-| **Git** | VCS | `core/boot/conflict_detector.sh` | Branch detection, conflicts |
+| **Git** | VCS | `core/kernel/boot/conflict_detector.sh` | Branch detection, conflicts |
 | **LiteLLM** | Library | `pyproject.toml` | LLM abstraction |
 | **Textual** | Library | `pyproject.toml` | TUI framework |
 | **OptiLLM** | Service | `external/optillm/` | LLM optimization |
@@ -368,21 +368,21 @@ The extension system provides:
 ## High Confidence (Unused files with 0 references)
 
 ```
-core/bus/test_event_bus.sh         - Test script, not called
-core/boot/stop.sh                  - May be dead, launcher handles cleanup
-core/boot/onboarding.sh            - Not referenced in boot flow
-core/boot/nxs-aliases.sh           - Alias definitions, unclear usage
-core/boot/load_keybinds.sh         - Keybind loading, may be unused
-core/api/unload_brains.sh          - Agent cleanup, no references
-core/api/nxs-watch.sh              - Watch utility, no references
-core/api/nxs-kill.sh               - Kill utility, no references
-core/api/kill_agent.sh             - Agent kill, no references
-core/api/classifier.py             - Content classification, unused
-core/ai/send_context.sh            - Context sending, no references
-core/ai/pipe_error.sh              - Error piping, no references
-core/ai/nxs-ask.sh                 - Ask interface, no references
-core/ai/nxs-ai-stream.sh           - Stream utility, no references
-core/actions/nexus-*.sh            - All action handlers (5 files)
+core/engine/bus/test_event_bus.sh         - Test script, not called
+core/kernel/boot/stop.sh                  - May be dead, launcher handles cleanup
+core/kernel/boot/onboarding.sh            - Not referenced in boot flow
+core/kernel/boot/nxs-aliases.sh           - Alias definitions, unclear usage
+core/kernel/boot/load_keybinds.sh         - Keybind loading, may be unused
+core/engine/api/unload_brains.sh          - Agent cleanup, no references
+core/engine/api/nxs-watch.sh              - Watch utility, no references
+core/engine/api/nxs-kill.sh               - Kill utility, no references
+core/engine/api/kill_agent.sh             - Agent kill, no references
+core/engine/api/classifier.py             - Content classification, unused
+core/engine/ai/send_context.sh            - Context sending, no references
+core/engine/ai/pipe_error.sh              - Error piping, no references
+core/engine/ai/nxs-ask.sh                 - Ask interface, no references
+core/engine/ai/nxs-ai-stream.sh           - Stream utility, no references
+core/services/actions/nexus-*.sh            - All action handlers (5 files)
 ```
 
 ## Medium Confidence (Rarely referenced)
@@ -390,10 +390,10 @@ core/actions/nexus-*.sh            - All action handlers (5 files)
 ```
 core/mosaic_generator.py           - Mosaic generation, single use
 core/mosaic_engine.sh              - Mosaic engine, single use
-core/exec/nxs-openevolve           - External tool wrapper
-core/exec/nxs-optillm              - External tool wrapper
-core/exec/nxs-probe                - Probe utility
-core/exec/nxs-web                  - Web utility
+core/kernel/exec/nxs-openevolve           - External tool wrapper
+core/kernel/exec/nxs-optillm              - External tool wrapper
+core/kernel/exec/nxs-probe                - Probe utility
+core/kernel/exec/nxs-web                  - Web utility
 ```
 
 ---
@@ -412,21 +412,21 @@ core/exec/nxs-web                  - Web utility
 ### 3. Inconsistent Module Boundaries
 
 **Risk:** `modules/` and `core/` have overlapping responsibilities.  
-**Evidence:** Menu logic exists in both `modules/menu/` and `core/menus/`, `core/lists/`.
+**Evidence:** Menu logic exists in both `modules/menu/` and `core/ui/menus/`, `core/engine/lists/`.
 
 ### 4. Multiple State Systems
 
 **Risk:** State managed in multiple locations with different formats.  
 **Evidence:**
-- `core/state/state_engine.py` → JSON in `.nexus/state.json`
-- `core/stack/nxs-stack` → JSON in `/tmp/nexus_{user}/stacks.json`
+- `core/engine/state/state_engine.py` → JSON in `.nexus/state.json`
+- `core/kernel/stack/nxs-stack` → JSON in `/tmp/nexus_{user}/stacks.json`
 - `data/state.json` → Global state
 
 ### 5. Configuration Proliferation
 
 **Risk:** 4+ configuration layers with unclear precedence.  
 **Evidence:**
-- `core/config/default_settings.yaml`
+- `core/engine/config/default_settings.yaml`
 - `~/.config/nexus-shell/settings.yaml`
 - `.nexus.yaml` (project)
 - Environment variables
@@ -453,7 +453,7 @@ core/exec/nxs-web                  - Web utility
 
 ### 1. Duplicate workspace_manager.sh
 
-**Evidence:** Exists in both `core/lib/` and `core/workspace/`
+**Evidence:** Exists in both `core/engine/lib/` and `core/engine/workspace/`
 
 ### 2. Legacy Code Artifacts
 
@@ -487,17 +487,17 @@ core/exec/nxs-web                  - Web utility
       "description": "Chat interface"
     },
     {
-      "path": "core/boot/launcher.sh",
+      "path": "core/kernel/boot/launcher.sh",
       "type": "script",
       "description": "Main station launcher"
     },
     {
-      "path": "core/bus/event_server.py",
+      "path": "core/engine/bus/event_server.py",
       "type": "service",
       "description": "Event bus server"
     },
     {
-      "path": "core/ai/sid.py",
+      "path": "core/engine/ai/sid.py",
       "type": "daemon",
       "description": "Sovereign Intelligence Daemon"
     }
@@ -505,49 +505,49 @@ core/exec/nxs-web                  - Web utility
   "modules": [
     {
       "name": "boot",
-      "path": "core/boot/",
+      "path": "core/kernel/boot/",
       "language": "shell",
       "responsibility": "Session initialization and lifecycle"
     },
     {
       "name": "layout",
-      "path": "core/layout/",
+      "path": "core/kernel/layout/",
       "language": "shell+python",
       "responsibility": "TMUX pane construction from compositions"
     },
     {
       "name": "bus",
-      "path": "core/bus/",
+      "path": "core/engine/bus/",
       "language": "python",
       "responsibility": "Inter-component event messaging"
     },
     {
       "name": "ai",
-      "path": "core/ai/",
+      "path": "core/engine/ai/",
       "language": "python+shell",
       "responsibility": "AI integration and daemon management"
     },
     {
       "name": "stack",
-      "path": "core/stack/",
+      "path": "core/kernel/stack/",
       "language": "python",
       "responsibility": "Tab/pane stack management"
     },
     {
       "name": "state",
-      "path": "core/state/",
+      "path": "core/engine/state/",
       "language": "python",
       "responsibility": "Session persistence"
     },
     {
       "name": "api",
-      "path": "core/api/",
+      "path": "core/engine/api/",
       "language": "python+shell",
       "responsibility": "Configuration and module registry"
     },
     {
       "name": "hud",
-      "path": "core/hud/",
+      "path": "core/ui/hud/",
       "language": "shell",
       "responsibility": "Status bar rendering"
     },
@@ -575,42 +575,42 @@ core/exec/nxs-web                  - Web utility
     {
       "name": "Boot System",
       "purpose": "Session initialization, guards, cleanup",
-      "files": ["core/boot/launcher.sh", "core/boot/guard.sh", "core/boot/boot_loader.sh"],
+      "files": ["core/kernel/boot/launcher.sh", "core/kernel/boot/guard.sh", "core/kernel/boot/boot_loader.sh"],
       "dependencies": ["api", "layout"],
       "confidence": "high"
     },
     {
       "name": "Layout Engine",
       "purpose": "Parse compositions, build TMUX panes",
-      "files": ["core/layout/layout_engine.sh", "core/layout/processor.py"],
+      "files": ["core/kernel/layout/layout_engine.sh", "core/kernel/layout/processor.py"],
       "dependencies": ["state"],
       "confidence": "high"
     },
     {
       "name": "Event Bus",
       "purpose": "Inter-component pub/sub messaging",
-      "files": ["core/bus/event_server.py"],
+      "files": ["core/engine/bus/event_server.py"],
       "dependencies": [],
       "confidence": "high"
     },
     {
       "name": "AI Integration",
       "purpose": "AI agent coordination",
-      "files": ["core/ai/sid.py"],
+      "files": ["core/engine/ai/sid.py"],
       "dependencies": ["bus"],
       "confidence": "high"
     },
     {
       "name": "Stack Manager",
       "purpose": "Indestructible tab swapping",
-      "files": ["core/stack/nxs-stack"],
+      "files": ["core/kernel/stack/nxs-stack"],
       "dependencies": ["state"],
       "confidence": "high"
     },
     {
       "name": "State Engine",
       "purpose": "Session persistence",
-      "files": ["core/state/state_engine.py"],
+      "files": ["core/engine/state/state_engine.py"],
       "dependencies": [],
       "confidence": "high"
     },
@@ -624,14 +624,14 @@ core/exec/nxs-web                  - Web utility
     {
       "name": "HUD System",
       "purpose": "Real-time status rendering",
-      "files": ["core/hud/renderer.sh"],
+      "files": ["core/ui/hud/renderer.sh"],
       "dependencies": [],
       "confidence": "medium"
     },
     {
       "name": "Router",
       "purpose": "Route menu selections to handlers",
-      "files": ["core/exec/router.sh"],
+      "files": ["core/kernel/exec/router.sh"],
       "dependencies": ["commands"],
       "confidence": "high"
     },
@@ -644,31 +644,31 @@ core/exec/nxs-web                  - Web utility
     }
   ],
   "files": [
-    {"path": "core/boot/launcher.sh", "lines": 453, "type": "shell"},
-    {"path": "core/layout/layout_engine.sh", "lines": 240, "type": "shell"},
-    {"path": "core/exec/stack_manager.sh", "lines": 262, "type": "shell"},
-    {"path": "core/boot/launcher.sh", "lines": 453, "type": "shell"},
-    {"path": "core/bus/event_server.py", "lines": 251, "type": "python"},
-    {"path": "core/ai/sid.py", "lines": 141, "type": "python"},
-    {"path": "core/state/state_engine.py", "lines": 85, "type": "python"},
-    {"path": "core/layout/processor.py", "lines": 167, "type": "python"},
+    {"path": "core/kernel/boot/launcher.sh", "lines": 453, "type": "shell"},
+    {"path": "core/kernel/layout/layout_engine.sh", "lines": 240, "type": "shell"},
+    {"path": "core/kernel/exec/stack_manager.sh", "lines": 262, "type": "shell"},
+    {"path": "core/kernel/boot/launcher.sh", "lines": 453, "type": "shell"},
+    {"path": "core/engine/bus/event_server.py", "lines": 251, "type": "python"},
+    {"path": "core/engine/ai/sid.py", "lines": 141, "type": "python"},
+    {"path": "core/engine/state/state_engine.py", "lines": 85, "type": "python"},
+    {"path": "core/kernel/layout/processor.py", "lines": 167, "type": "python"},
     {"path": "modules/menu/lib/core/menu_engine.py", "lines": 287, "type": "python"},
-    {"path": "core/stack/nxs-stack", "lines": 287, "type": "python"},
+    {"path": "core/kernel/stack/nxs-stack", "lines": 287, "type": "python"},
     {"path": "extensions/loader.sh", "lines": 120, "type": "shell"},
     {"path": "extensions/grepai/bin/nxs-grepai", "lines": 95, "type": "shell"},
-    {"path": "core/search/nxs-search", "lines": 140, "type": "shell"}
+    {"path": "core/engine/search/nxs-search", "lines": 140, "type": "shell"}
   ],
   "dependencies": [
-    {"from": "bin/nxs", "to": "core/boot/launcher.sh"},
-    {"from": "core/boot/launcher.sh", "to": "core/api/config_helper.py"},
-    {"from": "core/boot/launcher.sh", "to": "core/layout/layout_engine.sh"},
-    {"from": "core/boot/launcher.sh", "to": "core/bus/event_server.py"},
-    {"from": "core/boot/launcher.sh", "to": "core/ai/sid.py"},
-    {"from": "core/layout/layout_engine.sh", "to": "core/layout/processor.py"},
-    {"from": "core/layout/layout_engine.sh", "to": "core/state/state_engine.py"},
-    {"from": "core/ai/sid.py", "to": "core/bus/event_server.py"},
-    {"from": "core/boot/boot_loader.sh", "to": "modules/menu/lib/core/menu_engine.py"},
-    {"from": "core/exec/router.sh", "to": "core/commands/workspace.sh"}
+    {"from": "bin/nxs", "to": "core/kernel/boot/launcher.sh"},
+    {"from": "core/kernel/boot/launcher.sh", "to": "core/engine/api/config_helper.py"},
+    {"from": "core/kernel/boot/launcher.sh", "to": "core/kernel/layout/layout_engine.sh"},
+    {"from": "core/kernel/boot/launcher.sh", "to": "core/engine/bus/event_server.py"},
+    {"from": "core/kernel/boot/launcher.sh", "to": "core/engine/ai/sid.py"},
+    {"from": "core/kernel/layout/layout_engine.sh", "to": "core/kernel/layout/processor.py"},
+    {"from": "core/kernel/layout/layout_engine.sh", "to": "core/engine/state/state_engine.py"},
+    {"from": "core/engine/ai/sid.py", "to": "core/engine/bus/event_server.py"},
+    {"from": "core/kernel/boot/boot_loader.sh", "to": "modules/menu/lib/core/menu_engine.py"},
+    {"from": "core/kernel/exec/router.sh", "to": "core/services/commands/workspace.sh"}
   ],
   "external_integrations": [
     {"name": "tmux", "type": "process", "purpose": "terminal multiplexing"},
@@ -683,25 +683,25 @@ core/exec/nxs-web                  - Web utility
     {"name": "named_pipes", "type": "ipc", "purpose": "neovim RPC"}
   ],
   "possible_dead_code": [
-    "core/bus/test_event_bus.sh",
-    "core/boot/stop.sh",
-    "core/boot/onboarding.sh",
-    "core/boot/nxs-aliases.sh",
-    "core/boot/load_keybinds.sh",
-    "core/api/unload_brains.sh",
-    "core/api/nxs-watch.sh",
-    "core/api/nxs-kill.sh",
-    "core/api/kill_agent.sh",
-    "core/api/classifier.py",
-    "core/ai/send_context.sh",
-    "core/ai/pipe_error.sh",
-    "core/ai/nxs-ask.sh",
-    "core/ai/nxs-ai-stream.sh",
-    "core/actions/nexus-theme.sh",
-    "core/actions/nexus-swap.sh",
-    "core/actions/nexus-focus-tree.sh",
-    "core/actions/nexus-focus-terminal.sh",
-    "core/actions/nexus-focus-editor.sh"
+    "core/engine/bus/test_event_bus.sh",
+    "core/kernel/boot/stop.sh",
+    "core/kernel/boot/onboarding.sh",
+    "core/kernel/boot/nxs-aliases.sh",
+    "core/kernel/boot/load_keybinds.sh",
+    "core/engine/api/unload_brains.sh",
+    "core/engine/api/nxs-watch.sh",
+    "core/engine/api/nxs-kill.sh",
+    "core/engine/api/kill_agent.sh",
+    "core/engine/api/classifier.py",
+    "core/engine/ai/send_context.sh",
+    "core/engine/ai/pipe_error.sh",
+    "core/engine/ai/nxs-ask.sh",
+    "core/engine/ai/nxs-ai-stream.sh",
+    "core/services/actions/nexus-theme.sh",
+    "core/services/actions/nexus-swap.sh",
+    "core/services/actions/nexus-focus-tree.sh",
+    "core/services/actions/nexus-focus-terminal.sh",
+    "core/services/actions/nexus-focus-editor.sh"
   ]
 }
 ```

@@ -61,7 +61,7 @@ No custom daemons. All communication uses three existing channels:
 **Strategy**: Two tiers — a tmux-level popup for quick file search from any pane, and Telescope inside Neovim for deep code search.
 
 #### 2.1.1 Quick File Search (tmux popup)
-**Location**: `core/search/quick_find.sh`
+**Location**: `core/engine/search/quick_find.sh`
 **Mechanism**: `tmux display-popup` launching `fzf` backed by `fd` or `find`. Selected file opens in the editor pane via nvim RPC.
 
 ```bash
@@ -76,7 +76,7 @@ tmux select-pane -t editor
 **Mechanism**: Telescope.nvim with `ripgrep` backend. Nexus provides a reference nvim config in `config/nvim/` but does not enforce it.
 
 ### 2.2 Build & Task Runner (Req-2)
-**Location**: `core/exec/task_runner.sh` (new)
+**Location**: `core/kernel/exec/task_runner.sh` (new)
 **Configuration**: Tasks defined in `.nexus.yaml`:
 
 ```yaml
@@ -119,7 +119,7 @@ set -g @resurrect-strategy-nvim 'session'
 **Mechanism**: Auto-save session on `VimLeavePre`, auto-load on startup if inside a Nexus session (`$NEXUS_STATION_ACTIVE` is set).
 
 #### 2.3.3 Nexus Wrapper
-**Location**: `core/session/persist.sh` (new)
+**Location**: `core/kernel/session/persist.sh` (new)
 **Responsibilities**:
 - On `:save` — trigger both tmux-resurrect save and nvim session save
 - On `nxs` launch — detect saved state and offer to restore
@@ -152,11 +152,11 @@ debug:
 ### 2.5 AI Agent Integration (Req-5)
 **Strategy**: Thin bridge scripts that pipe data between panes. No custom daemon.
 
-**Location**: `core/ai/` (new directory)
+**Location**: `core/engine/ai/` (new directory)
 
 #### 2.5.1 Context Passing
 ```bash
-# core/ai/send_context.sh
+# core/engine/ai/send_context.sh
 # Reads current nvim buffer and sends it to the AI pane
 BUFFER=$(nvim --server "$NVIM_PIPE" --remote-expr "getline(1, '$')" | head -200)
 tmux send-keys -t chat "$BUFFER" Enter
@@ -164,7 +164,7 @@ tmux send-keys -t chat "$BUFFER" Enter
 
 #### 2.5.2 Error Piping
 ```bash
-# core/ai/pipe_error.sh
+# core/engine/ai/pipe_error.sh
 # Sends last terminal output to the AI pane
 tmux capture-pane -t terminal -p | tail -30 > /tmp/nexus_error_context.txt
 tmux send-keys -t chat "analyze this error: $(cat /tmp/nexus_error_context.txt)" Enter
@@ -204,7 +204,7 @@ terminal:
   dim_amount: "fg=#666666"
 ```
 
-**Mechanism**: `core/boot/theme.sh` reads the YAML file, applies tmux options via `set-option`, sends nvim colorscheme via RPC, and writes yazi theme config.
+**Mechanism**: `core/kernel/boot/theme.sh` reads the YAML file, applies tmux options via `set-option`, sends nvim colorscheme via RPC, and writes yazi theme config.
 
 ## 3. File Structure (Phase 2 additions)
 ```

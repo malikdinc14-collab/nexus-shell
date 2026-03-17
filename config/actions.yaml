@@ -12,7 +12,7 @@ actions:
   focus_editor: "tmux select-pane -t editor"
   focus_chat: "tmux select-pane -t chat"
   focus_terminal: "tmux select-pane -t terminal"
-  quick_find: "$NEXUS_HOME/core/search/quick_find.sh"
+  quick_find: "$NEXUS_HOME/core/engine/search/quick_find.sh"
 
   # Shelf
   stow_pane: "nxs-shelf stow"

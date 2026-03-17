@@ -29,10 +29,10 @@ graph TD
 
 ### 1.2 Core Components
 1. **`bin/nxs`** — Session supervisor. Creates tmux session, propagates env, invokes layout engine.
-2. **`core/layout/processor.py`** — Reads JSON composition, splits panes, assigns commands.
-3. **`core/boot/pane_wrapper.sh`** — Wraps each pane command. Handles exit → shell fallback.
+2. **`core/kernel/layout/processor.py`** — Reads JSON composition, splits panes, assigns commands.
+3. **`core/kernel/boot/pane_wrapper.sh`** — Wraps each pane command. Handles exit → shell fallback.
 4. **`modules/menu/bin/nexus-menu`** — FZF loop for tool discovery and in-pane execution.
-5. **`core/boot/dispatch.sh`** — Command prompt handler (`:q`, `:help`, etc.).
+5. **`core/kernel/boot/dispatch.sh`** — Command prompt handler (`:q`, `:help`, etc.).
 6. **`config/tmux/nexus.conf`** — All keybinds and tmux styling.
 
 ## 2. Component Design
@@ -49,7 +49,7 @@ graph TD
 **Critical fix**: Line 150-157 currently uses `tmux set-environment -t` (per-session). This must change to `tmux set-environment -g` for `NEXUS_HOME`, `NEXUS_CORE`, and `NEXUS_BOOT` so that `run-shell` commands in keybinds can resolve these variables.
 
 ### 2.2 Pane Wrapper — `pane_wrapper.sh` (Req-2)
-**Location**: `core/boot/pane_wrapper.sh`
+**Location**: `core/kernel/boot/pane_wrapper.sh`
 **Responsibilities**:
 - Run the assigned command once
 - On exit (any code), drop to `/bin/zsh -i`
@@ -109,7 +109,7 @@ FZF (home context) ← stays here, never exits
 ```
 
 ### 2.5 Command Dispatch (Req-6)
-**Location**: `core/boot/dispatch.sh` + `core/api/dispatch_helper.py`
+**Location**: `core/kernel/boot/dispatch.sh` + `core/engine/api/dispatch_helper.py`
 **Chain**: `Ctrl-\ → tmux command-prompt → run-shell 'dispatch.sh <cmd>'`
 
 **Critical requirement**: `$NEXUS_HOME` must be set globally (see 2.1) because `run-shell` runs in a minimal environment that does NOT inherit per-session variables.
@@ -122,7 +122,7 @@ dispatch.sh → dispatch_helper.py → finds "q" in registry.json
 ```
 
 ### 2.6 Composition System (Req-4)
-**Location**: `compositions/*.json` + `core/layout/processor.py`
+**Location**: `compositions/*.json` + `core/kernel/layout/processor.py`
 **Schema**:
 ```json
 {

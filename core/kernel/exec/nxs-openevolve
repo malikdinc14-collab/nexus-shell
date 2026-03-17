@@ -1,0 +1,28 @@
+#!/bin/bash
+# core/exec/nxs-openevolve
+# Launcher for OpenEvolve evolutionary coding agent.
+
+# 0. Resolve Paths
+export PI_MONO_ROOT="$NEXUS_HOME/external/pi-mono"
+export OPENEVOLVE_ROOT="$NEXUS_HOME/external/openevolve"
+VENV_PATH="$OPENEVOLVE_ROOT/venv"
+
+if [[ ! -d "$OPENEVOLVE_ROOT" ]]; then
+    echo "Error: OpenEvolve repository not found at $OPENEVOLVE_ROOT"
+    exit 1
+fi
+
+cd "$OPENEVOLVE_ROOT"
+
+# Check for virtualenv
+if [[ ! -d ".venv" ]]; then
+    echo "[*] Initializing OpenEvolve Virtualenv..."
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -e .
+else
+    source .venv/bin/activate
+fi
+
+echo "[Nexus] Launching OpenEvolve: Evolutionary Coding Agent"
+python3 openevolve-run.py "$@"

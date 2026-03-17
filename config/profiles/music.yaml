@@ -1,6 +1,6 @@
 theme: nord
 composition: music
-hud_provider: core/hud/music_provider.sh
+hud_provider: core/ui/hud/music_provider.sh
 env:
   NEXUS_ROLE: "composer"
   NEXUS_AI_ENABLED: "false"

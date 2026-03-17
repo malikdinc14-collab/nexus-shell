@@ -20,23 +20,23 @@
 ## 🏗️ Layer 1: The Matrix (The Intelligence Nervous System)
 *The core logic, event bus, and bridge services that enable the "Live Shell".*
 
-### 📡 Event Bus & Mesh (`core/bus/`)
-- [ ] `core/bus/event_server.py`: Unix Domain Socket Pub/Sub.
-- [ ] `core/bus/test_event_bus.sh`: Mesh verification logic.
+### 📡 Event Bus & Mesh (`core/engine/bus/`)
+- [ ] `core/engine/bus/event_server.py`: Unix Domain Socket Pub/Sub.
+- [ ] `core/engine/bus/test_event_bus.sh`: Mesh verification logic.
 - [ ] `scripts/verify_bus.sh`: Standalone diagnostic.
 
 ### 🛡️ Governance & GAP (`core/services/`, `.gap/`)
-- [ ] `core/services/gap_service.sh`: GAP Mission polling and alignment.
-- [ ] `core/services/gap_bridge.sh`: The isolated bridge to the GAP protocol.
-- [ ] `core/exec/nxs-gap-spec.sh`: Multi-tab mission spec renderer.
+- [ ] `core/services/internal/gap_service.sh`: GAP Mission polling and alignment.
+- [ ] `core/services/internal/gap_bridge.sh`: The isolated bridge to the GAP protocol.
+- [ ] `core/kernel/exec/nxs-gap-spec.sh`: Multi-tab mission spec renderer.
 - [ ] `.gap/features/`: Active mission definitions & status gaging.
 
-### 🧠 Logic & Execution Flow (`core/boot/`, `core/exec/`)
-- [ ] `core/boot/launcher.sh`: Master boot orchestrator.
-- [ ] `core/boot/onboarding.sh` / `setup_wizard.sh`: UX initialization.
-- [ ] `core/exec/router.sh`: Global command dispatcher.
-- [ ] `core/exec/nxs-tab.sh`: Sovereign tab life-cycle management.
-- [ ] `core/exec/dap_handler.sh`: Headless Debug Adapter Protocol.
+### 🧠 Logic & Execution Flow (`core/kernel/boot/`, `core/kernel/exec/`)
+- [ ] `core/kernel/boot/launcher.sh`: Master boot orchestrator.
+- [ ] `core/kernel/boot/onboarding.sh` / `setup_wizard.sh`: UX initialization.
+- [ ] `core/kernel/exec/router.sh`: Global command dispatcher.
+- [ ] `core/kernel/exec/nxs-tab.sh`: Sovereign tab life-cycle management.
+- [ ] `core/kernel/exec/dap_handler.sh`: Headless Debug Adapter Protocol.
 
 ---
 
@@ -65,7 +65,7 @@
 *Active missions, technical debt, and planned evolution.*
 
 ### 📍 Tech Debt & Pending Invariants (Audit Findings)
-- [ ] **State Sync**: `core/state/state_engine.sh` → TODO: Cloud/Remote sync.
+- [ ] **State Sync**: `core/engine/state/state_engine.sh` → TODO: Cloud/Remote sync.
 - [ ] **Agent Zero**: `services/agent-zero/agent.py` → TODO: Message range/topic/history.
 - [ ] **Browser Integration**: `services/agent-zero/python/tools/browser_agent.py` → TODO: Timeout cleanup.
 

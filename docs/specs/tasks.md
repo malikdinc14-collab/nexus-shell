@@ -42,7 +42,7 @@
 - [ ] Add automated walkthrough generation
 
 ## Phase 8: Station Kernel & Event Bus
-- [x] Implement atomic State Store (`core/api/station_manager.sh`)
+- [x] Implement atomic State Store (`core/engine/api/station_manager.sh`)
 - [ ] Implement Unix-Socket Event Bus (`core/event_bus.sh`)
 - [x] Create `nxs-state` CLI utility (in `shell_hooks.zsh`)
 

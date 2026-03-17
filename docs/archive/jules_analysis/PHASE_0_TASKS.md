@@ -19,13 +19,13 @@
   - Define socket location (`/tmp/nexus_$USER/$PROJECT/bus.sock`)
 
 - [ ] 1.1.2: Implement Unix socket server
-  - Create `core/bus/event_server.py`
+  - Create `core/engine/bus/event_server.py`
   - Handle multiple client connections
   - Broadcast events to subscribers
   - Graceful shutdown on session end
 
 - [ ] 1.1.3: Create CLI client
-  - Create `core/bus/nxs-event` command
+  - Create `core/engine/bus/nxs-event` command
   - `nxs-event publish <type> <data>`
   - `nxs-event subscribe <type> <handler>`
   - `nxs-event list` (show active subscriptions)

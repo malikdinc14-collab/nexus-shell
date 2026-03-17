@@ -1,0 +1,11 @@
+{
+  "name": "nord",
+  "description": "Arctic, north-bluish color palette",
+  "bg": "#2e3440",
+  "fg": "#eceff4",
+  "accent": "#88c0d0",
+  "border": "blue",
+  "success": "#a3be8c",
+  "warning": "#ebcb8b",
+  "error": "#bf616a"
+}

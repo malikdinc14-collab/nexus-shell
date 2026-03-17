@@ -1,0 +1,11 @@
+{
+  "name": "nexus-cyber",
+  "description": "Cyan on dark - the default Nexus theme",
+  "bg": "#0a0e14",
+  "fg": "#00ffff",
+  "accent": "#ff00ff",
+  "border": "cyan",
+  "success": "#50fa7b",
+  "warning": "#ffb86c",
+  "error": "#ff5555"
+}

@@ -27,7 +27,7 @@ ACTIVE_PROFILE= os.environ.get("NEXUS_PROFILE", "")
 
 # Layers (Cascading Lists)
 BUILTIN_LISTS  = NEXUS_HOME / "modules" / "menu" / "lists"
-SYSTEM_LISTS   = NEXUS_HOME / "core" / "lists" # New System Layer
+SYSTEM_LISTS   = NEXUS_HOME / "core" / "engine" / "lists" # New System Layer
 USER_CONFIG    = Path(os.path.expanduser("~/.nexus"))
 USER_LISTS     = USER_CONFIG / "lists"
 PROFILE_LISTS  = USER_CONFIG / "profiles" / ACTIVE_PROFILE / "lists" if ACTIVE_PROFILE else None
