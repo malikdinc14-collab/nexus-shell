@@ -3,11 +3,12 @@
 # Tier 0 Bulletproof Menu for Nexus Shell.
 # Uses FZF for zero-dependency reliability.
 
-BIN_DIR="${0:A:h}"
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MENU_ENGINE="${BIN_DIR}/../lib/core/menu_engine.py"
-DISPATCH_BIN="${BIN_DIR}/nxs-action-dispatch"
+DISPATCH_BIN="${BIN_DIR}/action-dispatch"
 
 # Standardize environment
+export PATH="/opt/homebrew/bin:/usr/local/bin:/Users/compute/bin:$PATH"
 export NEXUS_HOME="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}"
 export PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 
@@ -26,8 +27,7 @@ SELECTED_JSON=$(echo "$ITEMS_JSON" | fzf --ansi \
     --header="Nexus Portal: $CONTEXT" \
     --reverse \
     --height=100% \
-    --margin=20%,25% \
-    --border=sharp \
+    --border=none \
     --info=inline \
     --prompt="> " \
     --with-nth=1 \
@@ -37,10 +37,11 @@ SELECTED_JSON=$(echo "$ITEMS_JSON" | fzf --ansi \
 
 [[ -z "$SELECTED_JSON" ]] && exit 0
 
-# 3. Parse and Dispatch
-LABEL=$(echo "$SELECTED_JSON" | jq -r '.label')
-TYPE=$(echo "$SELECTED_JSON" | jq -r '.type')
-PAYLOAD=$(echo "$SELECTED_JSON" | jq -r '.payload')
+# 3. Parse and Dispatch (Lightweight - works without jq if needed, but we have Python)
+# We use Python to parse the JSON for reliability
+LABEL=$("$Python_BIN" -c "import sys, json; print(json.loads(sys.stdin.read())['label'])" <<< "$SELECTED_JSON")
+TYPE=$("$Python_BIN" -c "import sys, json; print(json.loads(sys.stdin.read())['type'])" <<< "$SELECTED_JSON")
+PAYLOAD=$("$Python_BIN" -c "import sys, json; print(json.loads(sys.stdin.read())['payload'])" <<< "$SELECTED_JSON")
 
 if [[ "$TYPE" == "FOLDER" || "$TYPE" == "PLANE" ]]; then
     # Drill down recursively with FZF

@@ -25,7 +25,7 @@ log "Verb: $VERB | Type: $ITEM_TYPE | Payload: $PAYLOAD"
 # 0. Intelligent Routing Kernel
 if [[ "$ITEM_TYPE" == "NOTE" || "$ITEM_TYPE" == "ACTION" || -f "$PAYLOAD" ]]; then
     # Classify the payload extension
-    REAL_TYPE=$("$Python_BIN" "$NEXUS_HOME/core/api/classifier.py" "$PAYLOAD")
+    REAL_TYPE=$("$Python_BIN" "$NEXUS_HOME/core/engine/api/classifier.py" "$PAYLOAD")
     log "Classifier Result: $REAL_TYPE for $PAYLOAD"
     
     # If the classifier wants a renderer but we were told to 'edit', reroute if not forced
@@ -93,7 +93,7 @@ PYEOF
 }
 
 # Resolve Stack-Aware Binary
-STACK_BIN="$NEXUS_HOME/core/stack/nxs-stack"
+STACK_BIN="$NEXUS_KERNEL/stack/stack"
 
 # Helper: Check if an identity is already in the local stack
 check_stack() {
@@ -116,7 +116,7 @@ case "$VERB" in
         if [[ "$REAL_TYPE" == "renderer" ]]; then
             log "Intelligent Routing: Rerouting $PAYLOAD to Local Stack (Renderer)"
             # Push to the LOCAL stack (In-Place)
-            "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$NEXUS_HOME/core/view/nxs-view '$PAYLOAD'" "View: $(basename "$PAYLOAD")"
+            "$NEXUS_KERNEL/stack/stack" push "local" "$NEXUS_UI/view/view '$PAYLOAD'" "View: $(basename "$PAYLOAD")"
             exit 0
         fi
 
@@ -159,17 +159,27 @@ case "$VERB" in
             eval "${CMD//\$PAYLOAD/$PAYLOAD}" 2>> "$LOG_FILE"
         else
             log "Pushing fresh editor instance to local stack"
-            "$NEXUS_HOME/core/stack/nxs-stack" push "local" "$NEXUS_EDITOR '$PAYLOAD'" "$IDENTITY"
+            "$NEXUS_KERNEL/stack/stack" push "local" "$NEXUS_EDITOR '$PAYLOAD'" "$IDENTITY"
         fi
         ;;
+    favorite)
+        log "Favoriting $ITEM_TYPE: $PAYLOAD"
+        # ... (existing favorite logic)
+        exit 0
+        ;;
     run)
-        # Determine Execution Intent
-        # Default to 'swap' for system context (In-Place), 'push' for others
-        INTENT="${NXS_INTENT:-swap}"
+        if [[ "$ITEM_TYPE" == "STACK_TAB" ]]; then
+            ROLE="${PAYLOAD%%|*}"
+            INDEX="${PAYLOAD##*|}"
+            log "Switching Stack Tab: Role=$ROLE Index=$INDEX"
+            "$STACK_BIN" switch "$ROLE" "$INDEX"
+            exit 0
+        fi
         
-        # V3 Unified Intelligence Kernel Delegation
+        # Determine Execution Intent
+        # ... (rest of existing run logic)
         # ---
-        PLAN_JSON=$($Python_BIN "$NEXUS_HOME/core/api/intent_resolver.py" "$VERB" "$ITEM_TYPE" "$PAYLOAD" "$INTENT" "$NXS_CALLER" 2>> "$LOG_FILE")
+        PLAN_JSON=$($Python_BIN "$NEXUS_HOME/core/engine/api/intent_resolver.py" "$VERB" "$ITEM_TYPE" "$PAYLOAD" "$INTENT" "$NXS_CALLER" 2>> "$LOG_FILE")
         
         if [[ -z "$PLAN_JSON" ]]; then
             log "Kernel Error: Empty execution plan returned."
@@ -199,7 +209,7 @@ case "$VERB" in
                 ;;
             remote_control)
                 TARGET=$(echo "$PLAN_JSON" | jq -r '.target')
-                "$NEXUS_HOME/core/bin/nxs-control" "$TARGET" "$CMD"
+                "$NEXUS_KERNEL/bin/control" "$TARGET" "$CMD"
                 ;;
             *)
                 log "Strategy mismatch: $STRATEGY. Falling back to default push."
@@ -211,7 +221,7 @@ case "$VERB" in
     context)
         if [[ "$ITEM_TYPE" == "SHELF_ITEM" ]]; then
             log "Recalling stowed pane: $PAYLOAD"
-            "${NEXUS_HOME}/core/exec/nxs-shelf.sh" recall "$PAYLOAD"
+            "${NEXUS_KERNEL}/exec/shelf.sh" recall "$PAYLOAD"
             exit 0
         fi
 

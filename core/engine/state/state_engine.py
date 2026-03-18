@@ -62,11 +62,13 @@ class NexusStateEngine:
             target_dir.mkdir(parents=True, exist_ok=True)
             with open(target_file, 'w') as f:
                 json.dump(self.state, f, indent=4)
-        except (PermissionError, OSError):
+        except (PermissionError, OSError) as e:
             # If primary save fails, pivot to fallback forever for this session
             if target_file == self.state_file:
                 self.active_file = self.fallback_file
                 self.save()
+            else:
+                print(f"CRITICAL: State Engine failed to save to {target_file}: {e}", file=sys.stderr)
 
     def get(self, path):
         keys = path.split('.')
