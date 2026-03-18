@@ -6,11 +6,16 @@ echo "[*] Initializing Nexus Termination Sequence..."
 
 # 1. Kill Tmux Sessions
 if command -v tmux &>/dev/null; then
-    sessions=$(tmux list-sessions | grep "^nexus_" | cut -d: -f1)
+    TMUX_CMD="tmux"
+    if [[ -n "$SOCKET_LABEL" ]]; then
+        TMUX_CMD="tmux -L $SOCKET_LABEL"
+        echo "[*] Targeting socket: $SOCKET_LABEL"
+    fi
+    sessions=$($TMUX_CMD list-sessions 2>/dev/null | grep "^nexus_" | cut -d: -f1)
     if [[ -n "$sessions" ]]; then
         echo "[*] Closing Nexus Tmux Sessions..."
         for s in $sessions; do
-            tmux kill-session -t "$s" 2>/dev/null
+            $TMUX_CMD kill-session -t "$s" 2>/dev/null
         done
     fi
 fi

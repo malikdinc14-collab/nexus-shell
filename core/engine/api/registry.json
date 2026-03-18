@@ -57,7 +57,7 @@
                 "wq",
                 ":wq"
             ],
-            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py && $NEXUS_BOOT/guard.sh exit_session",
+            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py && sleep 0.8 && $NEXUS_BOOT/guard.sh exit_session",
             "description": "Freeze session and quit station",
             "category": "Exit",
             "preflight": "save_all"
@@ -67,7 +67,7 @@
                 "wqa",
                 ":wqa"
             ],
-            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py --all 2>/dev/null; $NEXUS_BOOT/guard.sh exit_session",
+            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py --all 2>/dev/null; sleep 0.8; $NEXUS_BOOT/guard.sh exit_session",
             "description": "Save all layouts and quit entire session",
             "category": "Exit",
             "preflight": "save_all"
