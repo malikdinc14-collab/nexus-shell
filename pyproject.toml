@@ -3,13 +3,11 @@ name = "nexus-shell"
 version = "2.1.0"
 description = "A modular, high-performance terminal IDE framework built on TMUX"
 authors = [
-    { name = "Samir Al-Sayad", email = "samir@example.com" }
+    { name = "Samir Alsayad", email = "samir.alsayad@tutamail.com" }
 ]
 dependencies = [
     "pyyaml",
     "requests",
-    "litellm",
-    "textual",
 ]
 
 [tool.ruff]

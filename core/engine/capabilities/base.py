@@ -39,6 +39,7 @@ class CapabilityType(Enum):
     AGENT = auto()
     RENDERER = auto()
     CHAT = auto()
+    MENU = auto()
     MULTIPLEXER = auto()   # ← NEW: terminal multiplexer backends
 
 
@@ -132,6 +133,18 @@ class ChatCapability(Capability):
     @abstractmethod
     def get_history(self) -> List[Dict[str, str]]:
         """Returns the conversation history."""
+        pass
+
+
+class MenuCapability(Capability):
+    """Abstract interface for interactive CLI menus."""
+    
+    @property
+    def capability_type(self): return CapabilityType.MENU
+
+    @abstractmethod
+    def show_menu(self, options: List[str], prompt: str = "Select:") -> Optional[str]:
+        """Displays a menu and returns the selected option."""
         pass
 
 
