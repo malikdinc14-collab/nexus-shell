@@ -17,7 +17,9 @@ from typing import Dict, Any, Optional
 import getpass
 
 class WorkspaceOrchestrator:
-    def __init__(self, nexus_home: Path, project_root: Path, socket_label: Optional[str] = None):
+    def __init__(self, nexus_home: Path, project_root: Path,
+                 socket_label: Optional[str] = None,
+                 multiplexer=None):
         self.nexus_home = nexus_home
         self.project_root = project_root
         self.socket_label = socket_label
@@ -25,6 +27,25 @@ class WorkspaceOrchestrator:
         user = getpass.getuser()
         self.log_file = Path(f"/tmp/nexus_{user}/daemon.log")
         self.env = {}
+
+        # --- Multiplexer Backend (Dependency Injection) ---
+        # Default to TmuxAdapter; pass a different MultiplexerCapability
+        # to drive Ghostty, WezTerm, iTerm2, or a NullAdapter for tests.
+        if multiplexer is not None:
+            self.mux = multiplexer
+        else:
+            try:
+                sys.path.insert(0, str(nexus_home / "core"))
+                from engine.capabilities.adapters.tmux import TmuxAdapter
+                tmux_conf = str(nexus_home / "config/tmux/nexus.conf")
+                self.mux = TmuxAdapter(
+                    socket_label=socket_label or "",
+                    conf=tmux_conf if Path(tmux_conf).exists() else ""
+                )
+                self.log("Axiom-D: TmuxAdapter initialized.")
+            except Exception as e:
+                self.log(f"Warning: Could not initialize TmuxAdapter: {e}. Falling back to run_tmux.")
+                self.mux = None
 
         # Initialize State Engine for Momentum
         sys.path.append(str(nexus_home / "core/engine/state"))
