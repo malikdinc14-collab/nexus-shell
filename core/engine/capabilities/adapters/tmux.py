@@ -154,8 +154,11 @@ class TmuxAdapter(MultiplexerCapability):
         self._run(["set-option", "-p", "-t", handle, key, value])
 
     def get_tag(self, handle: str, key: str) -> str:
-        return self._run(["display-message", "-t", handle, "-p",
-                          f"#{{@{key}}}"])
+        v = self._run(["display-message", "-t", handle, "-p", f"#{{@{key}}}"])
+        return v.strip() if v else ""
+
+    def set_title(self, handle: str, title: str) -> None:
+        self._run(["select-pane", "-t", handle, "-T", title])
 
     # ── Layout ────────────────────────────────────────────────────────────────
 

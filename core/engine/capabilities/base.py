@@ -235,6 +235,11 @@ class MultiplexerCapability(Capability):
         """Retrieves metadata previously set with set_tag."""
         pass
 
+    @abstractmethod
+    def set_title(self, handle: str, title: str) -> None:
+        """Sets the display title of the pane."""
+        pass
+
     # ── Layout ──────────────────────────────────────────────────────────────
 
     @abstractmethod

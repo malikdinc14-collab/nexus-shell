@@ -168,6 +168,9 @@ class NullAdapter(MultiplexerCapability):
     def get_tag(self, handle: str, key: str) -> str:
         return self.tags.get(handle, {}).get(key, "")
 
+    def set_title(self, handle: str, title: str) -> None:
+        self._log("set_title", handle=handle, title=title)
+
     # ── Layout ────────────────────────────────────────────────────────────────
 
     def apply_layout(self, window: str, layout: str) -> bool:

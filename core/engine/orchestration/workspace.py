@@ -194,12 +194,13 @@ class WorkspaceOrchestrator:
                 self.mux.send_keys(target_pane, "")  # no-op to ensure pane is active
                 if role_label:
                     self.mux.set_tag(target_pane, "@nexus_role", str(role_label))
+                # Pane title (display only)
+                self.mux.set_title(target_pane, str(stack_id))
             else:
                 self.run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_stack_id", str(stack_id)])
                 if role_label:
                     self.run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_role", str(role_label)])
-            # Pane title (display only)
-            self.run_tmux(["select-pane", "-t", target_pane, "-T", str(stack_id)])
+                self.run_tmux(["select-pane", "-t", target_pane, "-T", str(stack_id)])
         
         # Send Command via Wrapper
         if cmd:

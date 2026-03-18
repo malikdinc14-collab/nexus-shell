@@ -19,3 +19,14 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "B", "I"]
 ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [
+    "__pycache__", ".git", "*.egg-info",
+    "docs", "external", "node_modules",
+    "*.bak"
+]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
