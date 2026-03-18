@@ -6,8 +6,13 @@ This roadmap outlines the evolution of Nexus Shell from a terminal multiplexer i
 
 ## 🟢 Phase 1–3: Foundations (Baselined)
 - [x] **UI & Session Layer**: Guarded session handling, recursive process cleanup, and YAML-driven menus.
-- [x] **Engine Layer**: Theme engine, task registry, and dynamic RPC-driven searching (fd/ripgrep).
-- [x] **Domain Configurations**: 34+ module manifests and 15+ specialized compositions.
+- [x] **Engine Layer**:
+    - [ ] **LiteLLM AI Proxy Submodule**:
+        - Create an optional `litellm` proxy capability that sits between the AI tool (e.g. opencode, cursor) and the API.
+        - The proxy mimics the expected API (e.g. OpenAI style) but allows the user to switch models seamlessly via an interactive CLI menu.
+        - Keeps `litellm` entirely out of the core dependencies but enables instantaneous model switching without restarting the AI tools.
+    - [ ] **Extensibility Model (Python backend)**: Easy addition of tools (e.g., swapping `yazi` for `broot`).
+    - [ ] **Modular Configurations**: Per-tool configurations loaded dynamically (e.g., separate Yazi, Tmux, Git configurations in `~/.nexus`).
 
 ---
 

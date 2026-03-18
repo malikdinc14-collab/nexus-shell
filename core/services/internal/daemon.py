@@ -58,7 +58,11 @@ class TmuxAdapter(BaseContainerAdapter):
 
     def swap_containers(self, source, target):
         if source == target: return True
-        return self.run_tmux(["swap-pane", "-d", "-s", source, "-t", target], self.socket_label) is not None
+        res = self.run_tmux(["swap-pane", "-d", "-s", source, "-t", target], self.socket_label)
+        if res is None:
+            self.run_tmux(["display-message", f"GhostSwap Error: swap-pane failed for {source} -> {target}"], self.socket_label)
+            return False
+        return True
 
     def select_container(self, target):
         return self.run_tmux(["select-pane", "-t", target], self.socket_label) is not None
@@ -264,9 +268,9 @@ class NexusDaemon:
             if identity in self.state["stacks"]:
                 return identity, self.state["stacks"][identity]
         
-        # Identity-Resolution (Role Lookup) - Only as a fallback if no local container was specified
-        # (This is for portaling or remote operations without a focused pane)
-        if identity and not identity.startswith("stack_") and not initial_pane:
+        # Identity-Resolution (Role Lookup)
+        # Fallback to finding an existing stack by its Role if the pane itself lacked explicit metadata.
+        if identity and not identity.startswith("stack_"):
             sid, stack = self._get_stack_by_identity(identity)
             if sid: return sid, stack
         
