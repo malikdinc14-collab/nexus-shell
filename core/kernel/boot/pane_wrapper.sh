@@ -13,11 +13,28 @@ trap 'pkill -P $$ 2>/dev/null; exit 0' SIGTERM SIGHUP SIGINT
 
 COMMAND="$@"
 
-# Execute the command once
+# Axiom: Explicit Feedback (Negative Space)
 if [[ -n "$COMMAND" ]]; then
+    printf "\033[1;36m[Axiom] Launching Resource:\033[0m %s\n" "$COMMAND"
+    
+    # Check for empty variables (Common failure mode)
+    if [[ "$COMMAND" == *" $"* || "$COMMAND" == "$"* ]]; then
+        printf "\033[1;33m[WARNING] Command contains unexpanded variables. Environment may be sterile.\033[0m\n"
+    fi
+
+    # Attempt execution with status capture
     eval "$COMMAND"
+    EXIT_CODE=$?
+
+    if [[ $EXIT_CODE -ne 0 ]]; then
+        printf "\033[1;31m[CRITICAL] Resource terminated with exit code %d.\033[0m\n" "$EXIT_CODE"
+    else
+        printf "\033[1;32m[SUCCESS] Resource finished gracefully.\033[0m\n"
+    fi
+else
+    printf "\033[1;35m[Axiom] No command provided. Dropping to sterile shell.\033[0m\n"
 fi
 
 # Tool exited — drop to an interactive shell so the pane stays alive
-# exec replaces the wrapper process with zsh
+printf "\033[1;34m[Nexus] Dropping to interactive containment...\033[0m\n\n"
 exec /bin/zsh -i

@@ -4,7 +4,7 @@
 
 actions:
   # Window Management
-  nxs-restore: "nxs-restore"
+  restore: "restore"
   hard-reboot: "tmux kill-server"
   
   # Navigation
@@ -15,12 +15,12 @@ actions:
   quick_find: "$NEXUS_HOME/core/engine/search/quick_find.sh"
 
   # Shelf
-  stow_pane: "nxs-shelf stow"
-  recall_pane: "nxs-shelf recall"
+  stow_pane: "shelf stow"
+  recall_pane: "shelf recall"
 
   # Agents
-  switch_model: "nxs-agent-switch-model"
-  set_role: "nxs-agent-set-role"
+  switch_model: "switch-model"
+  set_role: "set-role"
 
 # Identity Mappings
 # Allows the dispatcher to find existing tabs in the stack.

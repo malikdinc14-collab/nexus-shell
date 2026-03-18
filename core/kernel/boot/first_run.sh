@@ -86,7 +86,8 @@ profile = {
     'created': datetime.now().isoformat(),
     'last_modified': datetime.now().isoformat(),
     'detected': data.get('tools', {}),
-    'roles': data.get('roles', {}),
+    'roles_detected': data.get('roles', {}),
+    'roles': {r: (t[0] if isinstance(t, list) else t) for r, t in data.get('roles', {}).items()},
     'extensions': [],
     'preferences': {
         'first_run_complete': False
@@ -104,82 +105,121 @@ with open('$PROFILE_FILE', 'w') as f:
 # Interactive role selection
 select_roles() {
     phase_header "2" "ROLE ASSIGNMENT"
-    echo -e "${DIM}Choose which tool to use for each role.${NC}"
-    echo -e "${DIM}Press Enter to accept detected value, or type a different tool name.${NC}"
+    echo -e "${DIM}Assign tools to specific system roles.${NC}"
+    echo -e "${DIM}Choose a number from the list, or enter a custom name.${NC}"
     echo ""
     
     local roles=("editor" "explorer" "chat" "terminal" "viewer" "search")
-    local -A role_defaults=(
-        ["editor"]="nvim"
-        ["explorer"]="yazi"
-        ["chat"]="opencode"
-        ["terminal"]="zellij"
-        ["viewer"]="glow"
-        ["search"]="grepai"
-    )
     
-    local -A role_descriptions=(
-        ["editor"]="Code/text editing"
-        ["explorer"]="File navigation"
-        ["chat"]="AI pair programming"
-        ["terminal"]="Terminal enhancements"
-        ["viewer"]="Content viewing"
-        ["search"]="Code search"
-    )
+    get_role_default() {
+        case "$1" in
+            editor) echo "nvim" ;;
+            explorer) echo "yazi" ;;
+            chat) echo "opencode" ;;
+            terminal) echo "zsh" ;;
+            viewer) echo "glow" ;;
+            search) echo "grepai" ;;
+        esac
+    }
     
-    # Load current profile
-    local current_roles=$(python3 -c "
+    get_role_desc() {
+        case "$1" in
+            editor) echo "Code/text editing" ;;
+            explorer) echo "File navigation" ;;
+            chat) echo "AI pair programming" ;;
+            terminal) echo "Inner Environment (e.g. zsh, bash, or multiplexer like zellij)" ;;
+            viewer) echo "Content viewing" ;;
+            search) echo "Code search" ;;
+        esac
+    }
+    
+    for role in "${roles[@]}"; do
+        local desc=$(get_role_desc "$role")
+        local default_tool=$(get_role_default "$role")
+        
+        # Load detected candidates + current choice
+        local candidates=$(python3 -c "
 import yaml
 try:
     with open('$PROFILE_FILE') as f:
         data = yaml.safe_load(f)
-    for role, tool in data.get('roles', {}).items():
-        print(f'{role}={tool}')
+    roles_map = data.get('roles_detected', data.get('roles', {}))
+    current = data.get('roles', {}).get('$role', '')
+    
+    # Filter candidates by role
+    detected_for_role = roles_map.get('$role', [])
+    if isinstance(detected_for_role, str): detected_for_role = [detected_for_role]
+    
+    options = []
+    if current: options.append(f'{current} (current)')
+    
+    # Priority for Terminal
+    if '$role' == 'terminal':
+        for sh in ['zsh', 'bash', 'sh']:
+            if sh != current: options.append(f'{sh} (raw shell)')
+            
+    if default_tool := '$default_tool':
+        if default_tool != current and f'{default_tool} (raw shell)' not in options:
+            options.append(f'{default_tool} (default)')
+            
+    for name in detected_for_role:
+        if name not in [current, '$default_tool']:
+            options.append(name)
+            
+    print('\n'.join(options))
 except: pass
 ")
-    
-    for role in "${roles[@]}"; do
-        local detected=$(echo "$current_roles" | grep "^$role=" | cut -d= -f2)
-        local default="${detected:-${role_defaults[$role]}}"
-        local desc="${role_descriptions[$role]}"
+
+        echo -e "${WHITE}Role: $role${NC}"
+        echo -e "${DIM}Description: $desc${NC}"
         
-        echo -ne "${WHITE}$role${NC} ($desc): "
-        if [[ -n "$detected" ]]; then
-            echo -ne "${GREEN}[$detected]${NC}"
-        else
-            echo -ne "${DIM}[$default]${NC}"
-        fi
-        echo -ne ": "
+        local options_arr=()
+        local count=0
+        while IFS= read -r line; do
+            [[ -n "$line" ]] || continue
+            count=$((count + 1))
+            options_arr+=("$line")
+            echo -e "  $count) $line"
+        done <<< "$candidates"
         
-        read -r user_input
+        echo -e "  m) Manual entry..."
+        echo ""
         
-        if [[ -n "$user_input" ]]; then
-            # User provided custom value
-            python3 -c "
+        local choice=""
+        local chosen_tool=""
+        
+        while [[ -z "$chosen_tool" ]]; do
+            echo -ne "${CYAN}Select [1-$count, or m]: ${NC}"
+            read -r choice
+            
+            if [[ "$choice" == "m" ]]; then
+                echo -ne "Enter custom tool name for $role: "
+                read -r chosen_tool
+            elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -le "$count" ]] && [[ "$choice" -gt 0 ]]; then
+                # Extract clean name (remove (current) or (default) suffix)
+                chosen_tool=$(echo "${options_arr[$((choice-1))]}" | sed 's/ (.*)//')
+            elif [[ -z "$choice" ]]; then
+                # Default to first option (usually current or default)
+                chosen_tool=$(echo "${options_arr[0]}" | sed 's/ (.*)//')
+            else
+                echo -e "${YELLOW}Invalid selection.${NC}"
+            fi
+        done
+        
+        # Save to profile
+        python3 -c "
 import yaml
 with open('$PROFILE_FILE') as f:
     data = yaml.safe_load(f)
-data['roles']['$role'] = '$user_input'
-data['last_modified'] = '$(date -Iseconds)'
+data['roles']['$role'] = '$chosen_tool'
 with open('$PROFILE_FILE', 'w') as f:
     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 "
-        elif [[ -z "$detected" ]]; then
-            # Use default
-            python3 -c "
-import yaml
-with open('$PROFILE_FILE') as f:
-    data = yaml.safe_load(f)
-data['roles']['$role'] = '$default'
-data['last_modified'] = '$(date -Iseconds)'
-with open('$PROFILE_FILE', 'w') as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-"
-        fi
+        echo -e "${GREEN}✓ $role set to: $chosen_tool${NC}"
+        echo ""
     done
     
-    echo ""
-    echo -e "${GREEN}✓ Role assignments saved${NC}"
+    echo -e "${GREEN}✓ All role assignments saved${NC}"
 }
 
 # Suggest and install missing extensions

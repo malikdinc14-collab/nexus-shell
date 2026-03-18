@@ -30,7 +30,7 @@ def log(msg):
 class IntentResolver:
     def __init__(self):
         self.nexus_home = Path(os.environ.get("NEXUS_HOME", Path(__file__).resolve().parents[3]))
-        self.stack_bin = self.nexus_home / "core/kernel/stack/nxs-stack"
+        self.stack_bin = self.nexus_home / "core/kernel/stack/stack"
         self.bridge = ControlBridge()
 
     def get_stack_state(self, role="local"):

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# core/bin/flight-recorder
+# High-fidelity diagnostic tool for Nexus Shell routing issues.
+
+LOG_DIR="/tmp/nexus_$(whoami)/diagnostics"
+mkdir -p "$LOG_DIR"
+FLIGHT_LOG="$LOG_DIR/flight_$(date +%Y%m%d_%H%M%S).log"
+
+log() {
+    echo "[$(date +%T)] $*" | tee -a "$FLIGHT_LOG"
+}
+
+snapshot() {
+    local label="$1"
+    echo "--- SNAPSHOT: $label ---" >> "$FLIGHT_LOG"
+    
+    echo "[ Tmux Panes ]" >> "$FLIGHT_LOG"
+    tmux list-panes -a -F "#{pane_id} | window:#{window_name} | role:#{@nexus_role} | active:#{pane_active} | focused:#{pane_at_top},#{pane_at_left} | cmd:#{pane_current_command}" >> "$FLIGHT_LOG"
+    
+    echo "[ Stack State ]" >> "$FLIGHT_LOG"
+    cat "/tmp/nexus_$(whoami)/stacks.json" 2>/dev/null >> "$FLIGHT_LOG"
+    
+    echo "[ Environment ]" >> "$FLIGHT_LOG"
+    env | grep -E "NEXUS|NXS" >> "$FLIGHT_LOG"
+    
+    echo "------------------------" >> "$FLIGHT_LOG"
+}
+
+log "Nexus Flight Recorder Initialized."
+log "Log file: $FLIGHT_LOG"
+
+log "Step 1: Capturing baseline state..."
+snapshot "Baseline"
+
+echo ""
+echo "INSTRUCTIONS:"
+echo "1. Keep this window open."
+echo "2. Go to the pane where the bug happens."
+echo "3. Press Opt+X to open the menu."
+echo "4. Do NOT select anything yet."
+read -p "Press Enter once the Menu is open..."
+
+snapshot "Menu Open"
+
+echo ""
+echo "INSTRUCTIONS:"
+echo "1. Select a module from the menu and hit Enter."
+echo "2. Wait for it to open in the 'wrong' pane."
+read -p "Press Enter once the module has opened..."
+
+snapshot "Action Completed"
+
+log "Diagnostic capture complete."
+echo ""
+echo "PLEASE PROVIDE THE CONTENT OF:"
+echo "$FLIGHT_LOG"

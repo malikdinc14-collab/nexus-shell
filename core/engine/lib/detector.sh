@@ -90,7 +90,9 @@ for manifest_path in Path(extension_dir).rglob("manifest.yaml"):
     if binary and detect_binary(binary):
         detected["tools"][name] = binary
         if role:
-            detected["roles"][role] = name
+            if role not in detected["roles"]:
+                detected["roles"][role] = []
+            detected["roles"][role].append(name)
 
 print(json.dumps(detected))
 PYTHON

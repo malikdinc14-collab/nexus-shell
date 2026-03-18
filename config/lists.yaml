@@ -40,3 +40,9 @@ models:
   icon: "🧠"
   sources:
     - { type: script, path: "$NEXUS_HOME/core/engine/api/providers/model_provider.py" }
+
+active_stacks:
+  policy: aggregate
+  icon: "📚"
+  sources:
+    - { type: script, path: "$NEXUS_HOME/modules/menu/lists/system/stacks.sh" }

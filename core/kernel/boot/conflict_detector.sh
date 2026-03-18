@@ -22,7 +22,7 @@ trigger_matrix() {
         jq '.agent.status = "blocked" | .agent.mission = "Resolve Conflicts"' /tmp/nexus_telemetry.json > "$temp_file" && mv "$temp_file" /tmp/nexus_telemetry.json
         
         # Load the specialized composition
-        nxs-switch-layout conflict-matrix
+        layout conflict-matrix
     fi
 }
 

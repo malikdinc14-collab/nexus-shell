@@ -104,7 +104,7 @@ if [[ "$setup_pi" =~ ^[Yy]$ ]]; then
         echo -e "${GREEN}[+] Pi already installed.${NC}"
     fi
 else
-    echo -e "${GRAY}Skipping AI setup. You can run 'nxs-pi-setup' later.${NC}"
+    echo -e "${GRAY}Skipping AI setup. You can run 'pi-setup' later.${NC}"
 fi
 
 # --- Finalization ---

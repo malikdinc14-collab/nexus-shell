@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# core/bin/control
+# CLI bridge to Command & Control.
+
+# Bootstrap Paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
+
+# Resolve Python
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && Python_BIN="$NEXUS_HOME/.venv/bin/python3" \
+|| Python_BIN="${Python_BIN:-python3}"
+
+# Delegate to Control Bridge
+$Python_BIN "$NEXUS_HOME/core/engine/api/control_bridge.py" "$@"

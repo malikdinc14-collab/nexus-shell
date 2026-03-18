@@ -7,8 +7,8 @@ if [[ -f "$HOME/.zshrc" ]]; then
 fi
 
 # 2. Inject Nexus Aliases & Environment
-if [[ -f "/Users/Shared/Projects/nexus-shell/core/boot/nxs-aliases.sh" ]]; then
-    source "/Users/Shared/Projects/nexus-shell/core/boot/nxs-aliases.sh"
+if [[ -f "/Users/Shared/Projects/nexus-shell/core/kernel/boot/aliases.sh" ]]; then
+    source "/Users/Shared/Projects/nexus-shell/core/kernel/boot/aliases.sh"
     # echo "   [*] Nexus Sovereign Shell Active."
 fi
 

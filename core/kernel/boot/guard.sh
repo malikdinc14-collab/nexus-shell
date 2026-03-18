@@ -9,9 +9,18 @@ log() { echo "[$(date +%H:%M:%S)] $*" >> "$LOG"; }
 
 ACTION="$1"
 
+# Resolve tmux command with socket isolation
+TMUX_CMD="tmux"
+if [[ -n "$SOCKET_LABEL" ]]; then
+    TMUX_CMD="tmux -L $SOCKET_LABEL"
+elif [[ "$SESSION_ID" == nexus_* ]]; then
+    # Fallback: derive socket label from session if we have it
+    TMUX_CMD="tmux -L ${SESSION_ID%_client_*}"
+fi
+
 # Resolve session ID.
 # CRITICAL: We must resolve the MASTER session, even if we are in a client session.
-SESSION_ID=$(tmux display-message -p '#S' 2>/dev/null)
+SESSION_ID=$($TMUX_CMD display-message -p '#S' 2>/dev/null)
 if [[ -n "$SESSION_ID" ]]; then
     # Strip client suffix if present (e.g. nexus_foo_client_123 -> nexus_foo)
     MASTER_SESSION="${SESSION_ID%_client_*}"
@@ -19,7 +28,8 @@ if [[ -n "$SESSION_ID" ]]; then
     SESSION_ID="$MASTER_SESSION"
 else
     # No client — find nexus sessions by name pattern
-    SESSION_ID=$(tmux list-sessions -F '#S' 2>/dev/null | grep '^nexus_' | head -1)
+    # We try both default and labeled sockets if we know any
+    SESSION_ID=$($TMUX_CMD list-sessions -F '#S' 2>/dev/null | grep '^nexus_' | head -1)
     log "No client context. Resolved session via list-sessions: $SESSION_ID"
 fi
 
@@ -86,12 +96,12 @@ kill_session_tree() {
 
     # 2. Collect ALL PIDs from ALL windows in this master session
     local pane_pids
-    pane_pids=$(tmux list-panes -s -t "$SESSION_ID" -F '#{pane_pid}' 2>/dev/null)
+    pane_pids=$($TMUX_CMD list-panes -s -t "$SESSION_ID" -F '#{pane_pid}' 2>/dev/null)
     kill_pids "$pane_pids"
     
     # 3. Destroy the master session (kills all client sessions automatically)
     log "Killing master tmux session $SESSION_ID"
-    tmux kill-session -t "$SESSION_ID" 2>/dev/null || true
+    $TMUX_CMD kill-session -t "$SESSION_ID" 2>/dev/null || true
     
     # 4. Final stale pipe cleanup
     rm -f "/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe" 2>/dev/null
@@ -102,7 +112,7 @@ kill_session_tree() {
 kill_window_tree() {
     log "=== guard.sh window exit ==="
     local win_id
-    win_id=$(tmux display-message -p '#{window_id}' 2>/dev/null)
+    win_id=$($TMUX_CMD display-message -p '#{window_id}' 2>/dev/null)
     
     if [[ -z "$win_id" ]]; then
         log "No active window id found, defaulting to session kill"
@@ -111,11 +121,11 @@ kill_window_tree() {
     fi
     
     local pane_pids
-    pane_pids=$(tmux list-panes -t "$win_id" -F '#{pane_pid}' 2>/dev/null)
+    pane_pids=$($TMUX_CMD list-panes -t "$win_id" -F '#{pane_pid}' 2>/dev/null)
     kill_pids "$pane_pids"
     
     log "Killing tmux window $win_id"
-    tmux kill-window -t "$win_id" 2>/dev/null || true
+    $TMUX_CMD kill-window -t "$win_id" 2>/dev/null || true
     log "=== guard.sh window complete ==="
 }
 

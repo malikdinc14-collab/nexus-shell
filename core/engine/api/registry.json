@@ -5,7 +5,7 @@
                 "build",
                 ":b"
             ],
-            "action": "$NEXUS_CORE/exec/stack_manager.sh build",
+            "action": "$NEXUS_KERNEL/exec/stack_manager.sh build",
             "description": "Show project build actions",
             "category": "System"
         },
@@ -13,7 +13,7 @@
             "names": [
                 "actions"
             ],
-            "action": "$NEXUS_CORE/exec/stack_manager.sh actions",
+            "action": "$NEXUS_KERNEL/exec/stack_manager.sh actions",
             "description": "Show project-specific actions",
             "category": "System"
         },
@@ -21,7 +21,7 @@
             "names": [
                 "beacon"
             ],
-            "action": "$NEXUS_CORE/services/beacon_overlay.sh &",
+            "action": "$NEXUS_SERVICES/beacon_overlay.sh &",
             "description": "Start the Sovereign Beacon HUD pulse",
             "category": "System"
         },
@@ -30,7 +30,7 @@
                 "profiles",
                 ":p"
             ],
-            "action": "$NEXUS_CORE/env/list_profiles.sh",
+            "action": "$NEXUS_ENGINE/env/list_profiles.sh",
             "description": "List available profiles",
             "category": "System"
         },
@@ -57,7 +57,7 @@
                 "wq",
                 ":wq"
             ],
-            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py && $NEXUS_BOOT/guard.sh exit_session",
+            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py && $NEXUS_BOOT/guard.sh exit_session",
             "description": "Freeze session and quit station",
             "category": "Exit",
             "preflight": "save_all"
@@ -67,7 +67,7 @@
                 "wqa",
                 ":wqa"
             ],
-            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py --all 2>/dev/null; $NEXUS_BOOT/guard.sh exit_session",
+            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py --all 2>/dev/null; $NEXUS_BOOT/guard.sh exit_session",
             "description": "Save all layouts and quit entire session",
             "category": "Exit",
             "preflight": "save_all"
@@ -77,7 +77,7 @@
                 "save",
                 ":save"
             ],
-            "action": "python3 $NEXUS_HOME/core/layout/save_layout.py --export",
+            "action": "python3 $NEXUS_KERNEL/layout/save_layout.py --export",
             "description": "Capture current window geometry and export to .nexus/compositions/<name>.json",
             "category": "System"
         },
@@ -104,7 +104,7 @@
                 "v",
                 ":v"
             ],
-            "action": "$NEXUS_HOME/core/lib/swap.sh",
+            "action": "$NEXUS_ENGINE/lib/swap.sh",
             "description": "Toggle Editor/Render mode",
             "category": "View"
         },
@@ -113,7 +113,7 @@
                 "g",
                 ":g"
             ],
-            "action": "$NEXUS_HOME/core/lib/tree_swap.sh",
+            "action": "$NEXUS_ENGINE/lib/tree_swap.sh",
             "description": "Toggle Tree/Git mode",
             "category": "View"
         },
@@ -122,7 +122,7 @@
                 "kill",
                 ":kill"
             ],
-            "action": "$NEXUS_CORE/api/kill_agent.sh",
+            "action": "$NEXUS_ENGINE/api/kill_agent.sh",
             "description": "Terminate active agent loops",
             "category": "AI"
         },
@@ -131,7 +131,7 @@
                 "down",
                 ":down"
             ],
-            "action": "$NEXUS_CORE/api/unload_brains.sh",
+            "action": "$NEXUS_ENGINE/api/unload_brains.sh",
             "description": "Unload all local models and backends",
             "category": "AI"
         },
@@ -230,7 +230,7 @@
                 "build",
                 ":build"
             ],
-            "action": "$NEXUS_HOME/core/exec/task_runner.sh build",
+            "action": "$NEXUS_KERNEL/exec/task_runner.sh build",
             "description": "Run build task",
             "category": "Tasks"
         },
@@ -239,7 +239,7 @@
                 "test",
                 ":test"
             ],
-            "action": "$NEXUS_HOME/core/exec/task_runner.sh test",
+            "action": "$NEXUS_KERNEL/exec/task_runner.sh test",
             "description": "Run test task",
             "category": "Tasks"
         },
@@ -248,7 +248,7 @@
                 "lint",
                 ":lint"
             ],
-            "action": "$NEXUS_HOME/core/exec/task_runner.sh lint",
+            "action": "$NEXUS_KERNEL/exec/task_runner.sh lint",
             "description": "Run lint task",
             "category": "Tasks"
         },
@@ -257,7 +257,7 @@
                 "find",
                 ":find"
             ],
-            "action": "tmux display-popup -E -w 80% -h 80% '$NEXUS_HOME/core/search/quick_find.sh'",
+            "action": "tmux display-popup -E -w 80% -h 80% '$NEXUS_ENGINE/search/quick_find.sh'",
             "description": "Find files in project",
             "category": "Search"
         },
@@ -266,7 +266,7 @@
                 "grep",
                 ":grep"
             ],
-            "action": "tmux display-popup -E -w 80% -h 80% '$NEXUS_HOME/core/search/live_grep.sh'",
+            "action": "tmux display-popup -E -w 80% -h 80% '$NEXUS_ENGINE/search/live_grep.sh'",
             "description": "Live grep across project",
             "category": "Search",
             "args": true
@@ -285,7 +285,7 @@
                 "ai",
                 ":ai"
             ],
-            "action": "$NEXUS_HOME/core/ai/send_context.sh",
+            "action": "$NEXUS_ENGINE/ai/send_context.sh",
             "description": "Send editor context to AI",
             "category": "AI"
         },
@@ -294,7 +294,7 @@
                 "ai-error",
                 ":ai-error"
             ],
-            "action": "$NEXUS_HOME/core/ai/pipe_error.sh",
+            "action": "$NEXUS_ENGINE/ai/pipe_error.sh",
             "description": "Send terminal errors to AI",
             "category": "AI"
         },
@@ -303,7 +303,7 @@
                 "theme",
                 ":theme"
             ],
-            "action": "tmux display-popup -E -w 50% -h 50% '$NEXUS_HOME/core/boot/theme.sh menu'",
+            "action": "tmux display-popup -E -w 50% -h 50% '$NEXUS_KERNEL/boot/theme.sh menu'",
             "description": "Switch theme",
             "category": "System"
         },
@@ -312,7 +312,7 @@
                 "settings",
                 ":settings"
             ],
-            "action": "tmux send-keys -t menu '$NEXUS_HOME/modules/menu/bin/nexus-menu settings' Enter",
+            "action": "tmux send-keys -t menu '$NEXUS_MENU settings' Enter",
             "description": "Open settings menu",
             "category": "System"
         },
@@ -321,7 +321,7 @@
                 "tools",
                 ":tools"
             ],
-            "action": "tmux send-keys -t menu '$NEXUS_HOME/modules/menu/bin/nexus-menu tools' Enter",
+            "action": "tmux send-keys -t menu '$NEXUS_MENU tools' Enter",
             "description": "Show installed tools",
             "category": "System"
         },
@@ -330,7 +330,7 @@
                 "run",
                 ":run"
             ],
-            "action": "$NEXUS_HOME/core/exec/task_runner.sh",
+            "action": "$NEXUS_KERNEL/exec/task_runner.sh",
             "description": "Run a named task from .nexus.yaml",
             "category": "Tasks",
             "args": true
@@ -340,7 +340,7 @@
                 "gap",
                 ":gap"
             ],
-            "action": "$NEXUS_CORE/services/gap_bridge.sh run",
+            "action": "$NEXUS_SERVICES/gap_bridge.sh run",
             "description": "Launch autonomous GAP mission",
             "category": "Sovereignty"
         },
@@ -351,7 +351,7 @@
                 "vault",
                 ":vault"
             ],
-            "action": "tmux send-keys -t menu '$NEXUS_HOME/modules/menu/bin/nexus-menu keychain' Enter",
+            "action": "tmux send-keys -t menu '$NEXUS_MENU keychain' Enter",
             "description": "Open Keychain Manager",
             "category": "Sovereignty"
         },
@@ -360,7 +360,7 @@
                 "web",
                 ":web"
             ],
-            "action": "$NEXUS_CORE/exec/nxs-web",
+            "action": "$NEXUS_KERNEL/exec/web.sh",
             "description": "Open a terminal-based web view (Carbonyl)",
             "category": "View",
             "args": true

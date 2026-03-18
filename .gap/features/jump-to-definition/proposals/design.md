@@ -9,7 +9,7 @@
 
 ## Tmux Binding
 ```tmux
-bind-key -n M-j run-shell "core/nav/jump.sh"
+bind-key -n M-j run-shell "core/kernel/nav/jump.sh"
 ```
 
 ## Nvim PRC Command

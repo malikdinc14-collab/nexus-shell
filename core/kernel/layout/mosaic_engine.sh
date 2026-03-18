@@ -4,7 +4,7 @@
 
 ACTION="${1:-start}"
 
-NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 SESSION_ID=$(tmux display-message -p '#S' 2>/dev/null)
 WINDOW_ID=$(tmux display-message -p '#I' 2>/dev/null)
 PROJECT_ROOT=$(tmux display-message -p '#{pane_current_path}')
@@ -16,10 +16,10 @@ start_mosaic() {
     echo "$last_comp" > /tmp/nexus_mosaic_prev
     
     # 2. Generate the Mosaic JSON
-    python3 "${NEXUS_HOME}/core/mosaic_generator.py"
+    python3 "${NEXUS_KERNEL}/layout/mosaic_generator.py"
     
     # 3. Switch to the dynamic composition
-    "${NEXUS_CORE}/boot/dispatch.sh" ":composition /tmp/nexus_mosaic.json"
+    "${NEXUS_BOOT}/dispatch.sh" ":composition /tmp/nexus_mosaic.json"
 }
 
 restore_layout() {
@@ -32,7 +32,7 @@ restore_layout() {
     local id=$(echo "$selection" | cut -d: -f2)
     
     # 2. Restore original layout
-    "${NEXUS_CORE}/boot/dispatch.sh" ":composition $prev_comp"
+    "${NEXUS_BOOT}/dispatch.sh" ":composition $prev_comp"
     
     # 3. Wait for layout to build then apply selection
     sleep 0.8

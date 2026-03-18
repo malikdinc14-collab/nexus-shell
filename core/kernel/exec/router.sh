@@ -55,23 +55,23 @@ IDENTITY=$(echo "$PLAN_JSON" | jq -r '.name // empty')
 case "$STRATEGY" in
     stack_switch)
         IDX=$(echo "$PLAN_JSON" | jq -r '.index')
-        "$NEXUS_HOME/core/kernel/stack/nxs-stack" switch "local" "$IDX"
+        "$NEXUS_HOME/core/kernel/stack/stack" switch "local" "$IDX"
         ;;
     stack_replace)
-        "$NEXUS_HOME/core/kernel/stack/nxs-stack" replace "$TARGET_ROLE" "$CMD" "$IDENTITY"
+        "$NEXUS_HOME/core/kernel/stack/stack" replace "$TARGET_ROLE" "$CMD" "$IDENTITY"
         ;;
     stack_push)
-        "$NEXUS_HOME/core/kernel/stack/nxs-stack" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
+        "$NEXUS_HOME/core/kernel/stack/stack" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
         ;;
     exec_local)
         eval "$CMD"
         ;;
     remote_control)
         TARGET=$(echo "$PLAN_JSON" | jq -r '.target')
-        "$NEXUS_HOME/core/kernel/bin/nxs-control" "$TARGET" "$CMD"
+        "$NEXUS_HOME/core/kernel/bin/control" "$TARGET" "$CMD"
         ;;
     *)
         # Default fallback for router is usually just executing the command in the target slot
-        "$NEXUS_HOME/core/kernel/stack/nxs-stack" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
+        "$NEXUS_HOME/core/kernel/stack/stack" push "$TARGET_ROLE" "$CMD" "$IDENTITY"
         ;;
 esac

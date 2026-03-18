@@ -116,7 +116,7 @@
 
 ### Subscribe to Event Type
 ```bash
-nxs-event subscribe FS_EVENT /path/to/handler.sh
+event subscribe FS_EVENT /path/to/handler.sh
 ```
 
 Handler receives JSON on stdin:
@@ -131,12 +131,12 @@ done
 
 ### Publish Event
 ```bash
-nxs-event publish FS_EVENT '{"action":"file_saved","path":"main.py"}'
+event publish FS_EVENT '{"action":"file_saved","path":"main.py"}'
 ```
 
 ### List Subscriptions
 ```bash
-nxs-event list
+event list
 # Output:
 # FS_EVENT: 2 subscribers
 #   - /path/to/handler1.sh (pid: 1234)
@@ -226,7 +226,7 @@ class EventBus:
 ### Client (Bash wrapper)
 
 ```bash
-# core/engine/bus/nxs-event
+# core/engine/bus/event
 #!/bin/bash
 
 SOCKET="/tmp/nexus_$(whoami)/$NEXUS_PROJECT/bus.sock"
@@ -273,7 +273,7 @@ case "$1" in
     publish) nxs_event_publish "$2" "$3" ;;
     subscribe) nxs_event_subscribe "$2" "$3" ;;
     list) nxs_event_list ;;
-    *) echo "Usage: nxs-event {publish|subscribe|list}" ;;
+    *) echo "Usage: event {publish|subscribe|list}" ;;
 esac
 ```
 
@@ -288,7 +288,7 @@ nexus_station_init() {
     # ...
     
     # Start event bus
-    python3 "$NEXUS_CORE/bus/event_server.py" &
+    python3 "$NEXUS_ENGINE/bus/event_server.py" &
     echo $! > "$STATE_DIR/bus.pid"
 }
 
@@ -304,7 +304,7 @@ nexus_station_cleanup() {
 ### File Watcher Example
 ```bash
 # Example: Watch for file changes
-nxs-event subscribe FS_EVENT - <<'EOF'
+event subscribe FS_EVENT - <<'EOF'
 #!/bin/bash
 while read -r event; do
     action=$(echo "$event" | jq -r '.data.action')
@@ -321,7 +321,7 @@ EOF
 ### Editor Integration
 ```bash
 # In nvim config
-autocmd BufWritePost * call system('nxs-event publish FS_EVENT ''{"action":"file_saved","path":"' . expand('%:p') . '"}''')
+autocmd BufWritePost * call system('event publish FS_EVENT ''{"action":"file_saved","path":"' . expand('%:p') . '"}''')
 ```
 
 ---
@@ -370,22 +370,22 @@ autocmd BufWritePost * call system('nxs-event publish FS_EVENT ''{"action":"file
 
 ### Event Filtering
 ```bash
-nxs-event subscribe FS_EVENT --filter '.data.path | endswith(".py")'
+event subscribe FS_EVENT --filter '.data.path | endswith(".py")'
 ```
 
 ### Event History
 ```bash
-nxs-event history FS_EVENT --last 10
+event history FS_EVENT --last 10
 ```
 
 ### Event Replay
 ```bash
-nxs-event replay --from "2026-01-29 10:00" --to "2026-01-29 11:00"
+event replay --from "2026-01-29 10:00" --to "2026-01-29 11:00"
 ```
 
 ### Remote Events
 ```bash
-nxs-event publish FS_EVENT --remote "user@host"
+event publish FS_EVENT --remote "user@host"
 ```
 
 ---

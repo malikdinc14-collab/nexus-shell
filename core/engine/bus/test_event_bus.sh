@@ -49,18 +49,18 @@ echo "   Socket created: $SOCKET"
 
 # Test publish
 echo "3. Testing publish..."
-"$SCRIPT_DIR/nxs-event" publish TEST_EVENT '{"message":"Hello from test"}' && echo "   ✓ Publish successful" || echo "   ✗ Publish failed"
+"$SCRIPT_DIR/event" publish TEST_EVENT '{"message":"Hello from test"}' && echo "   ✓ Publish successful" || echo "   ✗ Publish failed"
 
 # Test subscribe (in background)
 echo "4. Testing subscribe..."
-"$SCRIPT_DIR/nxs-event" subscribe TEST_EVENT - > /tmp/test_events.log 2>&1 &
+"$SCRIPT_DIR/event" subscribe TEST_EVENT - > /tmp/test_events.log 2>&1 &
 SUB_PID=$!
 sleep 1
 
 # Publish some events
 echo "5. Publishing test events..."
 for i in {1..3}; do
-    "$SCRIPT_DIR/nxs-event" publish TEST_EVENT "{\"count\":$i,\"message\":\"Test event $i\"}"
+    "$SCRIPT_DIR/event" publish TEST_EVENT "{\"count\":$i,\"message\":\"Test event $i\"}"
     sleep 0.2
 done
 
@@ -89,11 +89,11 @@ fi
 
 # Test list
 echo "7. Testing list..."
-"$SCRIPT_DIR/nxs-event" list && echo "   ✓ List successful" || echo "   ✗ List failed"
+"$SCRIPT_DIR/event" list && echo "   ✓ List successful" || echo "   ✗ List failed"
 
 # Test history
 echo "8. Testing history..."
-"$SCRIPT_DIR/nxs-event" history TEST_EVENT 5 && echo "   ✓ History successful" || echo "   ✗ History failed"
+"$SCRIPT_DIR/event" history TEST_EVENT 5 && echo "   ✓ History successful" || echo "   ✗ History failed"
 
 echo
 echo "=== Test Complete ==="

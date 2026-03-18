@@ -1,8 +1,8 @@
 # --- Nexus-Shell Identity Firewall ---
 
 # 1. Global Entry Point
-alias nxs="${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/boot/launcher.sh"
-alias nexus="${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/boot/launcher.sh"
+alias nxs="${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/kernel/boot/launcher.sh"
+alias nexus="${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/kernel/boot/launcher.sh"
 
 # 2. Contextual Activation Invariant
 if [[ "$TMUX" == *"nexus_"* ]]; then
@@ -15,7 +15,7 @@ if [[ "$TMUX" == *"nexus_"* ]]; then
     export PATH="$NEXUS_BIN:$PATH"
     
     # Enable sync hooks (if they exist)
-    if [[ -f "$NEXUS_HOME/core/boot/shell_hooks.zsh" ]]; then
-        source "$NEXUS_HOME/core/boot/shell_hooks.zsh"
+    if [[ -f "$NEXUS_HOME/core/kernel/boot/shell_hooks.zsh" ]]; then
+        source "$NEXUS_HOME/core/kernel/boot/shell_hooks.zsh"
     fi
 fi

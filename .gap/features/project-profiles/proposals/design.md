@@ -2,7 +2,7 @@
 
 ## Implementation
 1.  **Directory**: `config/profiles/`
-2.  **Variables**: Create `core/env/profile_loader.sh` to handle the logic.
+2.  **Variables**: Create `core/engine/env/profile_loader.sh` to handle the logic.
 
 ### 1. Spec (`config/profiles/swarm.yaml`)
 ```yaml

@@ -82,7 +82,7 @@ EOF
 
 # Terminal tab bindings
 cat << EOF
-bind-key -n M-t run-shell "$NEXUS_HOME/core/terminal_tabs.sh new"
-bind-key -n M-] run-shell "$NEXUS_HOME/core/terminal_tabs.sh next"
-bind-key -n M-[ run-shell "$NEXUS_HOME/core/terminal_tabs.sh prev"
+bind-key -n M-t run-shell "$NEXUS_KERNEL/exec/terminal_tabs.sh new"
+bind-key -n M-] run-shell "$NEXUS_KERNEL/exec/terminal_tabs.sh next"
+bind-key -n M-[ run-shell "$NEXUS_KERNEL/exec/terminal_tabs.sh prev"
 EOF

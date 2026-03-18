@@ -1,7 +1,7 @@
 #!/bin/bash
 # core/kernel/exec/stack_manager.sh
 # The Universal Controller for all Stacks in Nexus Shell.
-# Usage: nxs-stack <category> [initial_query]
+# Usage: stack <category> [initial_query]
 
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
@@ -255,7 +255,7 @@ esac
 # 5. Execution Logic
 # If in a tmux context, respawn or run. Else just run.
 if [[ -n "$PANE_ID" ]]; then
-tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_CORE/boot/pane_wrapper.sh ${NEXUS_HOME}/core/kernel/exec/guard.sh $CMD"
+tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_KERNEL/boot/pane_wrapper.sh ${NEXUS_HOME}/core/kernel/exec/guard.sh $CMD"
 else
 clear
 "${NEXUS_HOME}/core/kernel/exec/guard.sh" "$CMD"

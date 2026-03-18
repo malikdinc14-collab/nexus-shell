@@ -1,0 +1,18 @@
+# .nexus/lists.yaml
+
+actions:
+  name: "Launcher"
+  icon: "🚀"
+  sources:
+    - type: "system"
+      path: "launch"
+    - type: "user"
+      path: "actions"
+
+local_stack:
+  name: "Stack Tabs"
+  icon: "🗂️"
+  sources:
+    # This is a dynamic source resolved by menu_engine.py
+    - type: "dynamic"
+      path: "local_stack"

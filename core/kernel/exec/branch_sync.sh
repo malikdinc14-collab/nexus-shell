@@ -29,7 +29,7 @@ echo -e "\033[1;36m⚡ Nexus Shell: Branch Transition ($OLD_BRANCH → $NEW_BRAN
 
 # 1. Save Current State to Old Branch
 echo "  [*] Freezing current layout to $OLD_BRANCH..."
-python3 "$NEXUS_CORE/layout/save_layout.py" --all --branch "$OLD_BRANCH" >/dev/null 2>&1
+python3 "$NEXUS_KERNEL/layout/save_layout.py" --all --branch "$OLD_BRANCH" >/dev/null 2>&1
 
 # 2. Get active window slots
 WINDOWS=$(tmux list-windows -t "$SESSION_ID" -F '#{window_index}')
@@ -51,7 +51,7 @@ for WIN_IDX in $WINDOWS; do
     tmux new-window -d -t "$SESSION_ID:$WIN_IDX" -n "workspace_$WIN_IDX" -c "$PROJECT_ROOT" "/bin/zsh"
     
     # Command the Layout Engine to reconstruct the window using the new branch's saved state
-    "$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:$WIN_IDX" "__saved_session__" "$SESSION_ID" "$PROJECT_ROOT" >/dev/null 2>&1
+    "$NEXUS_KERNEL/layout/layout_engine.sh" "$SESSION_ID:$WIN_IDX" "__saved_session__" "$SESSION_ID" "$PROJECT_ROOT" >/dev/null 2>&1
 done
 
 # 5. Destroy the holding cell

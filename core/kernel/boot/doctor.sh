@@ -14,6 +14,18 @@ if [[ -f "$NEXUS_HOME/core/engine/lib/detector.sh" ]]; then
     source "$NEXUS_HOME/core/engine/lib/detector.sh"
 fi
 
+# Portable tool lookup
+get_tools_for_role() {
+    case "$1" in
+        editor) echo "nvim vim vi" ;;
+        explorer) echo "yazi ranger nnn lf" ;;
+        chat) echo "opencode gptme" ;;
+        terminal) echo "zellij" ;;
+        viewer) echo "glow bat" ;;
+        search) echo "grepai rg" ;;
+    esac
+}
+
 # 1. Environment Check
 echo -n "[*] Checking NEXUS_HOME... "
 if [[ -d "$NEXUS_HOME" ]]; then
@@ -77,19 +89,10 @@ try:
 except: pass
 " 2>/dev/null
 else
-    # Fallback detection
-    declare -A role_tools=(
-        ["editor"]="nvim vim vi"
-        ["explorer"]="yazi ranger nnn lf"
-        ["chat"]="opencode gptme"
-        ["terminal"]="zellij"
-        ["viewer"]="glow bat"
-        ["search"]="grepai rg"
-    )
-    
-    for role in "${!role_tools[@]}"; do
+    # Fallback tool list (Portable)
+    for role in editor explorer chat terminal viewer search; do
         found=""
-        for tool in ${role_tools[$role]}; do
+        for tool in $(get_tools_for_role "$role"); do
             if command -v "$tool" &>/dev/null; then
                 found="$tool"
                 break
@@ -154,7 +157,7 @@ fi
 missing_roles=()
 for role in editor explorer chat; do
     found=0
-    for tool in ${role_tools[$role]:-}; do
+    for tool in $(get_tools_for_role "$role"); do
         command -v "$tool" &>/dev/null && { found=1; break; }
     done
     [[ $found -eq 0 ]] && missing_roles+=("$role")

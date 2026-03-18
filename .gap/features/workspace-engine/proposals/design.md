@@ -19,7 +19,7 @@ Nexus will maintain a `NEXUS_WORKSPACES` environment variable containing a colon
 ```
 
 ### 2. Search Orchestration
-Update `core/search/lib/search_utils.sh`:
+Update `core/engine/search/lib/search_utils.sh`:
 - Instead of searching `.`, search `${NEXUS_ROOTS[@]}`.
 - If `NEXUS_ROOTS` is empty, default to `.`.
 

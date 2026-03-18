@@ -7,8 +7,8 @@ All notable changes to Nexus Shell will be documented in this file.
 ### Added - Extension-First Architecture
 
 **Core System:**
-- `core/lib/detector.sh` - System tool detection engine with JSON output
-- `core/boot/first_run.sh` - Interactive first-run wizard with tool detection
+- `core/engine/lib/detector.sh` - System tool detection engine with JSON output
+- `core/kernel/boot/first_run.sh` - Interactive first-run wizard with tool detection
 - Extension categories: 14 categories (editor, explorer, chat, terminal, viewer, search, devops, ai, monitor, media, database, network, git, utility)
 - 47 extension manifests for common CLI/TUI tools
 
@@ -28,8 +28,8 @@ All notable changes to Nexus Shell will be documented in this file.
 - Per-role prompts during first-run wizard
 
 **Modified:**
-- `core/boot/launcher.sh` - Added first-run check, profile loading, dynamic tool resolution
-- `core/boot/doctor.sh` - Extension-aware diagnostics with detected tools display
+- `core/kernel/boot/launcher.sh` - Added first-run check, profile loading, dynamic tool resolution
+- `core/kernel/boot/doctor.sh` - Extension-aware diagnostics with detected tools display
 - `bin/nxs` - Added profile and wizard commands
 - `config/modules.yaml` - Updated to reference profile system
 - `extensions/loader.sh` - Enhanced with category support, nested structure

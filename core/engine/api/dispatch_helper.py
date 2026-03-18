@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-import json
-import sys
-import os
 import subprocess
+import os
+import sys
+import json
+
+def run_tmux(args):
+    cmd = ["tmux"]
+    sl = os.environ.get("SOCKET_LABEL")
+    if sl:
+        cmd += ["-L", sl]
+    try:
+        return subprocess.check_output(cmd + args, stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        return ""
 
 def load_registry():
     nexus_home = os.getenv("NEXUS_HOME", os.path.expanduser("~/.config/nexus-shell"))
@@ -14,15 +24,16 @@ def load_registry():
         print(f"Error loading registry: {e}", file=sys.stderr)
         sys.exit(1)
 
+def get_master_project_name(session_name):
+    """Normalize session names by stripping _client_... suffixes."""
+    return session_name.split("_client_")[0].replace("nexus_", "")
+
 def check_dirty():
     """Check if nvim has unsaved changes. Returns False if nvim isn't running."""
     try:
         nexus_state = os.getenv("NEXUS_STATE", f"/tmp/nexus_{os.getlogin()}")
-        session_name = subprocess.check_output(
-            ["tmux", "display-message", "-p", "#S"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
-        project_name = session_name.replace("nexus_", "")
+        session_name = run_tmux(["display-message", "-p", "#S"])
+        project_name = get_master_project_name(session_name)
         pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
         
         if not os.path.exists(pipe):
@@ -40,11 +51,8 @@ def save_all():
     """Best-effort save of all nvim buffers. Must never crash."""
     try:
         nexus_state = os.getenv("NEXUS_STATE", f"/tmp/nexus_{os.getlogin()}")
-        session_name = subprocess.check_output(
-            ["tmux", "display-message", "-p", "#S"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
-        project_name = session_name.replace("nexus_", "")
+        session_name = run_tmux(["display-message", "-p", "#S"])
+        project_name = get_master_project_name(session_name)
         pipe = os.path.join(nexus_state, f"pipes/nvim_{project_name}.pipe")
         
         if os.path.exists(pipe):
@@ -109,7 +117,7 @@ def main():
     preflight = matched_cmd.get("preflight")
     if preflight == "check_dirty":
         if check_dirty():
-            subprocess.run(["tmux", "display-message", "Unsaved changes! Use :wq to save or :q! to force quit"])
+            run_tmux(["display-message", "Unsaved changes! Use :wq to save or :q! to force quit"])
             sys.exit(2)
     elif preflight == "save_all":
         save_all()
@@ -125,6 +133,12 @@ def main():
     # Execute shell action
     # Expand environment variables in action
     expanded_action = os.path.expandvars(action)
+    
+    # Axiom: Universal Socket Injection for isolated sessions
+    sl = os.environ.get("SOCKET_LABEL")
+    if sl and "tmux" in expanded_action and f"-L {sl}" not in expanded_action:
+        expanded_action = expanded_action.replace("tmux", f"tmux -L {sl}")
+
     if matched_cmd.get("args") and args:
         expanded_action += " " + " ".join(args)
         

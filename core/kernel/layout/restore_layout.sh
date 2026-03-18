@@ -114,11 +114,16 @@ done
 # Final Pass: Ensure layout is applied one last time after PTY handshakes
 tmux select-layout -t "$WINDOW_ID" "$LAYOUT_STRING" 2>/dev/null || true
 
-# --- Slot Invariant Anchoring ---
-idx=1
+# --- Stack Identity Restoration ---
+STACK_BIN="$NEXUS_HOME/core/kernel/stack/stack"
 for p in $(tmux list-panes -t "$WINDOW_ID" -F '#{pane_id}'); do
-    tmux set-option -p -t "$p" @nexus_slot "$idx"
-    ((idx++))
+    # Axiom: Initialize each pane as a Stack (Adoption)
+    # We pass the pane's title as a role hint if it's not a generic name
+    title=$(tmux display-message -p -t "$p" "#{pane_title}")
+    role_hint="local"
+    [[ "$title" != "zsh" && -n "$title" ]] && role_hint="$title"
+    
+    TMUX_PANE="$p" "$STACK_BIN" init "$role_hint" >/dev/null
 done
 
 echo "    [*] Momentum state restored."

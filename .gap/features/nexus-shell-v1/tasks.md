@@ -5,7 +5,7 @@
 - [ ] **Universal Hot-Swap Registry**: Implement the global `Alt-r` (Render) / `Ctrl-e` (Edit) dispatcher in Tmux and `user.conf`.
 
 ## Phase 2: Spec Manager Implementation (GAP Harness)
-- [ ] **Gate Engine State Machine**: Implement `core/exec/nxs-gate.sh` to track mission state in `.gap/state.json`.
+- [ ] **Gate Engine State Machine**: Implement `core/kernel/exec/nxs-gate.sh` to track mission state in `.gap/state.json`.
 - [ ] **Requirement-Prop-Task Linker**: Create the automated traceability parser as a `menu_engine` extension.
 - [ ] **Artifact Multi-Tab Dispatcher**: Update `nxs-gap-spec.sh` to support high-fidelity rendering for all 4 gates across split panes.
 

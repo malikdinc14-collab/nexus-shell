@@ -19,10 +19,10 @@ cmd_init() {
     if [[ ! -f "$bus_pid_file" ]] || ! kill -0 $(cat "$bus_pid_file" 2>/dev/null) 2>/dev/null; then
         # Find nexus core directory
         local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        local nexus_core="$(cd "$script_dir/.." && pwd)"
+        local nexus_engine="$(cd "$script_dir/.." && pwd)"
         
         # Start event bus in background
-        NEXUS_PROJECT="$project" python3 "$nexus_core/engine/bus/event_server.py" > "$pdir/bus.log" 2>&1 &
+        NEXUS_PROJECT="$project" python3 "$nexus_engine/bus/event_server.py" > "$pdir/bus.log" 2>&1 &
         echo $! > "$bus_pid_file"
         
         # Wait for socket to be created

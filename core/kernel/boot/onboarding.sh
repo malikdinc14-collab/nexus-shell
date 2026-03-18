@@ -54,5 +54,5 @@ echo -e "${CYAN}    >>> LOADING TRAINING GROUNDS...${NC}"
 sleep 1
 
 # Launch the onboarding composition in a new window
-# Note: We assume nxs-launcher --comp will handle this correctly
-tmux new-window -n "The:Ascent" "nxs-launcher --comp onboarding"
+# Note: We assume nexus --comp will handle this correctly
+tmux new-window -n "The:Ascent" "nexus --comp onboarding"

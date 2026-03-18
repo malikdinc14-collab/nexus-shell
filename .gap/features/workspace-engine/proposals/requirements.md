@@ -2,7 +2,7 @@
 
 ## Functional Requirements
 1.  **Workspace Loading**: `nxs load <file.nxs-workspace>` must parse the JSON and initialize the session with the specified roots.
-2.  **Aggregate Search**: The search core (`core/search/live_grep.sh` and `quick_find.sh`) must be updated to accept multiple paths.
+2.  **Aggregate Search**: The search core (`core/engine/search/live_grep.sh` and `quick_find.sh`) must be updated to accept multiple paths.
 3.  **Dynamic Scoping**: Users should be able to toggle "Current Folder Only" vs "Whole Workspace" search during runtime.
 4.  **LSP Multi-Client**: The Daemon Manager must trigger multiple instances of relevant LSPs for each project root detected.
 5.  **Status Line Integration**: The HUD must display which workspace is active.

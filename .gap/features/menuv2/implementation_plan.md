@@ -23,7 +23,7 @@ Update the root menu to reflect these official pillars.
 #### [MODIFY] [lists.yaml](file:///Users/Shared/Projects/nexus-shell/config/lists.yaml)
 Map the context keys to the multi-layered sources defined above.
 
-#### [NEW] [task_provider.py](file:///Users/Shared/Projects/nexus-shell/core/api/providers/task_provider.py)
+#### [NEW] [task_provider.py](file:///Users/Shared/Projects/nexus-shell/core/engine/api/providers/task_provider.py)
 A script provider that parses the local [task.md](file:///Users/samir/.gemini/antigravity/brain/ddcc162d-1179-4e23-9914-d9fc5982f9ea/task.md) and emits menu items representing active sub-tasks.
 
 ### [Component: UI Governance]

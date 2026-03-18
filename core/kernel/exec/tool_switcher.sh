@@ -13,7 +13,7 @@ ROLE=$(tmux show-option -p -t "$PANE_ID" @nexus_role | cut -d' ' -f2 | tr -d '"'
 
 if [[ -z "$ROLE" || "$ROLE" == "null" ]]; then
     # Fallback to menu if no role
-    "$NEXUS_CORE/boot/pane_wrapper.sh" "$NEXUS_HOME/modules/menu/bin/nexus-menu"
+    "$NEXUS_KERNEL/boot/pane_wrapper.sh" "$NEXUS_HOME/modules/menu/bin/nexus-menu"
     exit 0
 fi
 
@@ -59,4 +59,4 @@ case "$CHOICE" in
 esac
 
 # Swap the tool
-tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_CORE/boot/pane_wrapper.sh $CMD"
+tmux respawn-pane -k -t "$PANE_ID" "$NEXUS_KERNEL/boot/pane_wrapper.sh $CMD"

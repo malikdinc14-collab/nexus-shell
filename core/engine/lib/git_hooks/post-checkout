@@ -22,9 +22,9 @@ if [[ -z "$OLD_BRANCH" || -z "$NEW_BRANCH" || "$OLD_BRANCH" == "$NEW_BRANCH" ]];
 fi
 
 NEXUS_HOME="${NEXUS_HOME:-$HOME/.config/nexus-shell}"
-if [[ -x "$NEXUS_HOME/core/exec/branch_sync.sh" ]]; then
+if [[ -x "$NEXUS_HOME/core/kernel/exec/branch_sync.sh" ]]; then
     # Run the orchestrator in the background so it doesn't block the git command prompt
-    "$NEXUS_HOME/core/exec/branch_sync.sh" "$OLD_BRANCH" "$NEW_BRANCH" &
+    "$NEXUS_HOME/core/kernel/exec/branch_sync.sh" "$OLD_BRANCH" "$NEW_BRANCH" &
     disown
 fi
 exit 0
