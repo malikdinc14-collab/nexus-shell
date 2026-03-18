@@ -22,13 +22,6 @@ if [[ -n "$COMMAND" ]]; then
         printf "\033[1;33m[WARNING] Command contains unexpanded variables. Environment may be sterile.\033[0m\n"
     fi
 
-    # Axiom TTY-01: TUI applications require an attached terminal.
-    # During boot, panes are created detached. Give the client 1s to attach
-    # before launching TUI-class tools (OpenCode, Yazi, Neovim, etc.)
-    case "$1" in
-        opencode|yazi|nvim|vim|*opencode*) sleep 1 ;;
-    esac
-
     # Attempt execution with status capture
     eval "$COMMAND"
     EXIT_CODE=$?

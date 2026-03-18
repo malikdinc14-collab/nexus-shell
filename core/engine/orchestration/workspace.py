@@ -36,6 +36,17 @@ class WorkspaceOrchestrator:
             self.log("Warning: Could not import NexusStateEngine. Momentum disabled.")
             self.state = None
 
+        # Capability Registry
+        try:
+            sys.path.insert(0, str(nexus_home / "core"))
+            from engine.capabilities.registry import CapabilityRegistry
+            profile_path = Path(os.path.expanduser("~/.nexus/profile.yaml"))
+            self._registry = CapabilityRegistry(profile_path)
+            self.log("Axiom-D: Capability Registry initialized.")
+        except Exception as e:
+            self.log(f"Warning: Could not initialize CapabilityRegistry: {e}")
+            self._registry = None
+
     def log(self, msg: str):
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -179,6 +190,16 @@ class WorkspaceOrchestrator:
                     cmd = cmd.replace(var_pattern, str(v))
 
             self.log(f"Sending wrapped command to pane {target_pane}: {cmd}")
+            
+            # Axiom Adapter-01: Ask the registry for the best launch command.
+            # The adapter may wrap the command with delays, full paths, or flags.
+            role = config.get("id") or config.get("role")
+            if role and hasattr(self, '_registry') and self._registry:
+                adapter_cmd = self._registry.get_launch_command(role)
+                if adapter_cmd and adapter_cmd != role:
+                    self.log(f"Adapter override: '{cmd}' -> '{adapter_cmd}'")
+                    cmd = adapter_cmd
+
             wrapped = f"{self.wrapper} {cmd}"
             self.run_tmux(["send-keys", "-t", target_pane, wrapped, "ENTER"])
         

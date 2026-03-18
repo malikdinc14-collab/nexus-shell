@@ -9,6 +9,7 @@ Manages the lifecycle and discovery of capabilities and their adapters.
 from typing import Dict, List, Optional, Type
 from pathlib import Path
 from .base import Capability, CapabilityType
+from .adapters.opencode import OpenCodeAdapter
 
 class CapabilityRegistry:
     """Central registry for discovering which tool implements which capability."""
@@ -19,6 +20,14 @@ class CapabilityRegistry:
         }
         self._profile_path = profile_path
         self._role_map = self._load_role_map()
+        self._auto_register()
+
+    def _auto_register(self):
+        """Auto-register known adapters."""
+        adapters = [OpenCodeAdapter()]
+        for a in adapters:
+            if a.is_available():
+                self.register(a)
 
     def _load_role_map(self) -> Dict[str, str]:
         """Loads the role-to-tool mapping from the user's profile."""
@@ -48,6 +57,24 @@ class CapabilityRegistry:
             "search": "rg"
         }
         return fallbacks.get(role, "echo")
+
+    def get_launch_command(self, role: str) -> str:
+        """
+        Returns the best launch command for a role, using the adapter's
+        get_launch_command() if available, otherwise falling back to
+        the raw tool name.
+        """
+        cap_type_map = {
+            "chat": CapabilityType.CHAT,
+            "editor": CapabilityType.EDITOR,
+            "explorer": CapabilityType.EXPLORER,
+        }
+        cap_type = cap_type_map.get(role)
+        if cap_type:
+            best = self.get_best(cap_type)
+            if best and hasattr(best, "get_launch_command"):
+                return best.get_launch_command()
+        return self.get_tool_for_role(role)
 
     def register(self, capability: Capability):
         """Registers an adapter instance for a specific capability."""
