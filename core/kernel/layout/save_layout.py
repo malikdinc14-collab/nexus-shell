@@ -12,12 +12,28 @@ import os
 import re
 from pathlib import Path
 
+def run_tmux(args):
+    cmd = ["tmux"]
+    sl = os.environ.get("SOCKET_LABEL")
+    if sl:
+        cmd += ["-L", sl]
+    try:
+        return subprocess.check_output(cmd + args, stderr=subprocess.DEVNULL).decode().strip()
+    except Exception as e:
+        print(f"Tmux Error: {args} -> {e}", file=sys.stderr)
+        return ""
+
 # Add core/engine/state to sys.path
-sys.path.append(str(Path(__file__).parent.parent / "state"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "engine" / "state"))
 try:
     from state_engine import NexusStateEngine
 except ImportError:
-    NexusStateEngine = None
+    print("FATAL: Invariant Violated. NexusStateEngine not found in core/engine/state", file=sys.stderr)
+    sys.exit(102)
+
+if NexusStateEngine is None:
+    print("FATAL: Invariant Violated. NexusStateEngine is None after import.", file=sys.stderr)
+    sys.exit(103)
 
 def get_leaf_process(pid):
     """Recursively find the deepest child process to identify the running tool."""
@@ -68,10 +84,7 @@ def capture_moment(session_id, window_idx):
     """Freezes the current window state: structure + process map."""
     try:
         # 1. Get total window dimensions (for proportional math)
-        win_info = subprocess.check_output(
-            ["tmux", "list-windows", "-t", session_id, "-F", "#{window_index}|#{window_width}|#{window_height}|#{window_layout}"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip().split("\n")
+        win_info = run_tmux(["list-windows", "-t", session_id, "-F", "#{window_index}|#{window_width}|#{window_height}|#{window_layout}"]).split("\n")
 
         target_line = None
         for line in win_info:
@@ -85,27 +98,25 @@ def capture_moment(session_id, window_idx):
         win_w, win_h = int(win_w), int(win_h)
 
         # 2. Get detailed pane metadata in order
-        pane_info = subprocess.check_output(
-            ["tmux", "list-panes", "-t", f"{session_id}:{window_idx}", 
-             "-F", "#{pane_index}|#{pane_title}|#{pane_pid}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{@nexus_role}|#{pane_current_path}"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip().split("\n")
+        fmt = "#{pane_index}|#{pane_title}|#{pane_pid}|#{pane_width}|#{pane_height}|#{pane_left}|#{pane_top}|#{@nexus_stack_id}|#{@nexus_role}|#{pane_current_path}"
+        pane_info = run_tmux(["list-panes", "-t", f"{session_id}:{window_idx}", "-F", fmt]).split("\n")
 
         panes = []
         win_root = None
         for i, line in enumerate(pane_info):
             if not line.strip(): continue
             parts = line.split("|")
-            if len(parts) < 9: continue
-            idx, title, pid, w, h, l, t, role, cwd = parts
+            if len(parts) < 10: continue
+            idx, title, pid, w, h, l, t, sid, role, cwd = parts
             
             # Use the first pane's CWD as the window's root Context
             if i == 0: win_root = cwd
 
             panes.append({
                 "index": int(idx),
-                "title": title,
+                "id": sid if sid and sid != "null" else role,
                 "role": role,
+                "title": title,
                 "command": get_pane_command(pid),
                 "cwd": cwd,
                 "geom": {
@@ -159,15 +170,14 @@ def main():
     
     # Resolve session
     try:
-        session_id = subprocess.check_output(
-            ["tmux", "display-message", "-p", "#{session_id}"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
+        session_id = run_tmux(["display-message", "-p", "#{session_id}"])
+        if not session_id: sys.exit(1)
     except:
         sys.exit(1)
 
     # Momentum Flags
-    save_all = "--window" not in sys.argv and "--export" not in sys.argv
+    # AXIOM: Only save the CURRENT window by default to prevent "Window Bloat"
+    save_all = "--all" in sys.argv
     export_name = None
     
     if "--export" in sys.argv:
@@ -194,25 +204,16 @@ def main():
     
     windows_to_save = []
     if save_all:
-        windows_to_save = subprocess.check_output(
-            ["tmux", "list-windows", "-t", session_id, "-F", "#{window_index}"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip().split("\n")
+        windows_to_save = run_tmux(["list-windows", "-t", session_id, "-F", "#{window_index}"]).split("\n")
     elif export_name:
-        current_win = subprocess.check_output(
-            ["tmux", "display-message", "-p", "#{window_index}"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
+        current_win = run_tmux(["display-message", "-p", "#{window_index}"])
         windows_to_save = [current_win]
     else:
         try:
             win_arg_idx = sys.argv.index("--window")
             windows_to_save = [sys.argv[win_arg_idx + 1]]
         except:
-            current_win = subprocess.check_output(
-                ["tmux", "display-message", "-p", "#{window_index}"],
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
+            current_win = run_tmux(["display-message", "-p", "#{window_index}"])
             windows_to_save = [current_win]
 
     captured_count = 0
@@ -225,19 +226,25 @@ def main():
         if engine:
             engine.set(f"session.windows.{w_idx}", moment)
             for pane in moment.get("panes", []):
-                role = pane.get("role")
+                sid = pane.get("id")
                 cmd = pane.get("command")
-                if role and role != "null" and cmd:
-                    engine.set(f"ui.slots.{role}.tool", cmd)
+                if sid and sid != "null" and cmd:
+                    engine.set(f"ui.slots.{sid}.tool", cmd)
             captured_count += 1
 
         # Export if requested
-        if export_name:
+    if export_name:
             path = export_composition(moment, export_name, project_root)
-            subprocess.run(["tmux", "display-message", f"Exported layout to {path.name}"], stderr=subprocess.DEVNULL)
+            run_tmux(["display-message", f"Exported layout to {path.name}"])
 
     if captured_count > 0 and not export_name:
-        subprocess.run(["tmux", "display-message", f"Momentum: Frozen {captured_count} window(s) in State Engine"], stderr=subprocess.DEVNULL)
+        run_tmux(["display-message", f"Momentum: Frozen {captured_count} window(s) in State Engine"])
+        if engine:
+            print(f"Axiom-D: Successfully saved {captured_count} windows to {engine.active_file}")
+        else:
+            print(f"Axiom-D: Captured {captured_count} windows but State Engine was unavailable.")
+    else:
+        print(f"Axiom-D: Failed to capture any windows (count={captured_count})")
 
 if __name__ == "__main__":
     main()
