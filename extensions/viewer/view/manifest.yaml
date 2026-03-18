@@ -1,0 +1,16 @@
+name: view
+version: 1.0.0
+type: tool
+category: viewer
+description: Internal Nexus Shell viewer (polymorphic content renderer)
+author: nexus-shell
+license: MIT
+
+binary: view
+binary_candidates: [view]
+
+role: viewer
+role_priority: 50
+
+internal: true
+install: []
