@@ -16,4 +16,5 @@ newfile.txt
 *.bak
 tests/simulations/
 core/kernel/layout/*.bak
+**/.agent-zero-stub/
 
