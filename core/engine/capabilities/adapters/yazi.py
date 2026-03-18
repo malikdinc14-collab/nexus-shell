@@ -3,15 +3,33 @@ import subprocess
 from typing import List, Dict, Any, Optional
 from ..base import ExplorerCapability
 
+
 class YaziAdapter(ExplorerCapability):
     """Implementation of ExplorerCapability using the Yazi TUI."""
-    
-    def __init__(self, nexus_home: str):
+
+    # Yazi is a TUI — it needs an attached terminal before launch.
+    STARTUP_DELAY_SECS: float = 0.5
+
+    def __init__(self, nexus_home: str = ""):
         self.nexus_home = nexus_home
-        self.config_dir = os.path.join(nexus_home, "config", "yazi")
+        self.config_dir = os.path.join(nexus_home, "config", "yazi") if nexus_home else ""
+        self._bin = self._resolve_binary()
+
+    def _resolve_binary(self) -> Optional[str]:
+        try:
+            return subprocess.check_output(
+                ["which", "yazi"], stderr=subprocess.DEVNULL
+            ).decode().strip() or None
+        except Exception:
+            return None
+
+    def get_launch_command(self) -> str:
+        """Adapter-declared launch command for the orchestrator."""
+        bin_path = self._bin or "yazi"
+        return f"sleep {self.STARTUP_DELAY_SECS} && {bin_path}"
 
     def is_available(self) -> bool:
-        return subprocess.run(["which", "yazi"], capture_output=True).returncode == 0
+        return self._bin is not None
 
     def list_directory(self, path: str) -> List[Dict[str, Any]]:
         # Yazi doesn't provide a direct JSON list API easily without running the TUI.
@@ -25,7 +43,7 @@ class YaziAdapter(ExplorerCapability):
                     "is_dir": entry.is_dir(),
                     "size": entry.stat().st_size if not entry.is_dir() else None
                 })
-        except:
+        except Exception:
             pass
         return items
 

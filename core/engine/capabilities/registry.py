@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Type
 from pathlib import Path
 from .base import Capability, CapabilityType
 from .adapters.opencode import OpenCodeAdapter
+from .adapters.yazi import YaziAdapter
+from .adapters.neovim import NeovimAdapter
 
 class CapabilityRegistry:
     """Central registry for discovering which tool implements which capability."""
@@ -24,7 +26,11 @@ class CapabilityRegistry:
 
     def _auto_register(self):
         """Auto-register known adapters."""
-        adapters = [OpenCodeAdapter()]
+        adapters = [
+            OpenCodeAdapter(),
+            YaziAdapter(),
+            NeovimAdapter(),
+        ]
         for a in adapters:
             if a.is_available():
                 self.register(a)

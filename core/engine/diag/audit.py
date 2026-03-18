@@ -1,95 +1,92 @@
 #!/usr/bin/env python3
+# core/engine/diag/audit.py
+"""
+Nexus Live System Auditor (V2)
+==============================
+Uses the TmuxAdapter (MultiplexerCapability) to query physical state,
+giving us a backend-agnostic audit that works with any adapter.
+"""
 import os
 import sys
-import json
-import subprocess
 from pathlib import Path
 
-# Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.append(str(PROJECT_ROOT / "core"))
-sys.path.append(str(PROJECT_ROOT / "core/engine"))
+sys.path.insert(0, str(PROJECT_ROOT / "core"))
 
 from engine.lib.daemon_client import NexusDaemonClient
+from engine.capabilities.adapters.tmux import TmuxAdapter
 
-def run_tmux(args, socket_label=None):
-    sl = socket_label or os.environ.get("SOCKET_LABEL")
-    cmd = ["tmux"]
-    if sl:
-        if sl.startswith("/"): cmd += ["-S", sl]
-        else: cmd += ["-L", sl]
-    cmd += args
-    try:
-        res = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
-        return res.strip()
-    except:
-        return None
 
 def main():
     print("--- NEXUS LIVE SYSTEM AUDIT ---")
+
+    # 1. Semantic State (Nexus Daemon Registry)
     client = NexusDaemonClient()
-    
-    # 1. Semantic State (Nexus Registry)
     state = client.get_state()
     if state.get("status") != "ok":
         print(f"[!] Error fetching Daemon state: {state.get('message')}")
         return
-        
+
     stacks = state.get("data", {}).get("stacks", {})
     print(f"[*] Registry: {len(stacks)} stacks tracked.")
 
-    # 2. Physical State (Tmux Windows & Panes)
-    current_session = run_tmux(["display-message", "-p", "#S"])
-    if not current_session:
+    # 2. Physical State via TmuxAdapter (backend-agnostic)
+    socket_label = os.environ.get("SOCKET_LABEL", "")
+    mux = TmuxAdapter(socket_label=socket_label)
+
+    current_session_raw = mux._run(["display-message", "-p", "#S"])
+    if not current_session_raw:
         print("[!] No active tmux session detected.")
         return
-    
-    # Snapshot all panes in current session
-    fmt = "#{window_id}|#{window_name}|#{window_width}x#{window_height}|#{pane_index}|#{pane_id}|#{pane_width}x#{pane_height}|#{@nexus_stack_id}|#{@nexus_role}|#{pane_current_command}"
-    raw_panes = run_tmux(["list-panes", "-s", "-F", fmt])
-    if not raw_panes:
-        print("[!] Failed to list panes.")
-        return
+    current_session = current_session_raw.strip()
 
-    windows = {}
-    for line in raw_panes.splitlines():
-        parts = line.split("|")
-        if len(parts) < 9: continue
-        wid, wname, wgeo, pidx, pid, pgeo, sid, role, pcmd = parts
-        
-        if wid not in windows:
-            windows[wid] = {"name": wname, "geo": wgeo, "panes": []}
-            
-        windows[wid]["panes"].append({
-            "idx": pidx, "id": pid, "geo": pgeo, 
-            "sid": sid if sid and sid != "null" else None,
-            "role": role if role and role != "null" else None,
-            "cmd": pcmd
-        })
-
-    # 3. Tree View Output
     print(f"\n[*] PHYSICAL VIEW: Session '{current_session}'")
-    for wid, w in windows.items():
-        print(f" ┣━ Workspace: [{w['name']}] ({w['geo']})")
-        for p in w["panes"]:
-            ident = p["sid"] or p["role"] or "UNIDENTIFIED"
-            status = "OK" if p["sid"] else "ORPHAN"
-            # Show window-relative path: win_name.index
-            print(f" ┃   ┗━ Pane .{p['idx']} (ID: {p['id']}) ({p['geo']:8}) -> Identity: {ident:15} [CMD: {p['cmd']}] ({status})")
 
-    # 4. Semantic Drift (Registry vs Physical)
+    # Get all windows in the session
+    windows = mux.list_windows(current_session)
+
+    for win_handle in windows:
+        # Get window display name
+        win_name = mux._run(["display-message", "-t", win_handle, "-p", "#{window_name}"])
+        win_dims = mux.get_dimensions(win_handle)
+        geo_str = f"{win_dims['width']}x{win_dims['height']}"
+
+        print(f" ┣━ Workspace: [{win_name}] ({geo_str})")
+
+        # list_panes returns List[PaneInfo]
+        panes = mux.list_panes(win_handle)
+        if not panes:
+            print(" ┃   (no panes)")
+            continue
+
+        for p in panes:
+            ident = p.stack_id or p.role or "UNIDENTIFIED"
+            status = "OK" if p.stack_id else "ORPHAN"
+            geo = f"{p.width}x{p.height}"
+            print(
+                f" ┃   ┗━ Pane .{p.index} (ID: {p.handle}) "
+                f"({geo:8}) -> Identity: {ident:15} "
+                f"[CMD: {p.command}] ({status})"
+            )
+
+    # 3. Semantic Drift (Registry vs Physical)
     print("\n[*] SEMANTIC DRIFT (Nexus Registry vs Reality)")
-    expected_ids = list(stacks.keys())
-    phys_ids = [p["sid"] for w in windows.values() for p in w["panes"] if p["sid"]]
-    phys_roles = [p["role"] for w in windows.values() for p in w["panes"] if p["role"]]
-    
-    for eid in expected_ids:
+
+    all_panes = [
+        p for win in windows
+        for p in mux.list_panes(win)
+    ]
+    phys_ids = {p.stack_id for p in all_panes if p.stack_id}
+    phys_roles = {p.role for p in all_panes if p.role}
+
+    for eid in stacks.keys():
         if eid in phys_ids or eid in phys_roles:
             print(f" [OK] {eid:15} -> Verified. Physically active.")
         else:
             print(f" [!!] {eid:15} -> ZOMBIE. Registered in Daemon but MISSING PHYSICALLY.")
 
     print("\n--- END OF AUDIT ---")
+
 
 if __name__ == "__main__":
     main()

@@ -13,9 +13,30 @@ from typing import Optional
 from ..base import EditorCapability
 
 class NeovimAdapter(EditorCapability):
+    # Neovim opens in TUI mode — needs attached terminal.
+    STARTUP_DELAY_SECS: float = 0.3
+
     def __init__(self, session_name: str = None):
-        self.nexus_state = Path(f"/tmp/nexus_{os.getuser()}")
+        import os
+        self.nexus_state = Path(f"/tmp/nexus_{os.getlogin()}")
         self.session_name = session_name or self._get_tmux_session()
+        self._bin = self._resolve_binary()
+
+    def _resolve_binary(self):
+        try:
+            return subprocess.check_output(
+                ["which", "nvim"], stderr=subprocess.DEVNULL
+            ).decode().strip() or None
+        except Exception:
+            return None
+
+    def get_launch_command(self, pipe: str = "") -> str:
+        """Returns the best launch command for nvim, optionally with RPC pipe."""
+        bin_path = self._bin or "nvim"
+        cmd = f"sleep {self.STARTUP_DELAY_SECS} && {bin_path}"
+        if pipe:
+            cmd += f" --listen {pipe}"
+        return cmd
 
     def _get_tmux_session(self):
         try:
