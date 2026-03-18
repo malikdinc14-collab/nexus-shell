@@ -161,7 +161,8 @@ class WorkspaceOrchestrator:
                 data = json.load(f)
 
             # 2. Get Starting Pane
-            start_pane = self.run_tmux(["display-message", "-t", target_window, "-p", "#{pane_id}"])
+            pane_list = self.mux.list_panes(target_window) if self.mux else []
+            start_pane = pane_list[0].handle if pane_list else self.run_tmux(["display-message", "-t", target_window, "-p", "#{pane_id}"])
             if not start_pane:
                 self.log(f"Error: Could not resolve starting pane for window '{target_window}'")
                 return
@@ -187,13 +188,18 @@ class WorkspaceOrchestrator:
         role_label = config.get("role")
         
         if stack_id:
-            # Physical Identity
-            self.run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_stack_id", str(stack_id)])
+            if self.mux:
+                # ID-First via adapter (backend-agnostic)
+                self.mux.set_tag(target_pane, "@nexus_stack_id", str(stack_id))
+                self.mux.send_keys(target_pane, "")  # no-op to ensure pane is active
+                if role_label:
+                    self.mux.set_tag(target_pane, "@nexus_role", str(role_label))
+            else:
+                self.run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_stack_id", str(stack_id)])
+                if role_label:
+                    self.run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_role", str(role_label)])
+            # Pane title (display only)
             self.run_tmux(["select-pane", "-t", target_pane, "-T", str(stack_id)])
-            
-            # Legacy Metadata (Retained for secondary compatibility)
-            if role_label:
-                self.run_tmux(["set-option", "-p", "-t", target_pane, "@nexus_role", str(role_label)])
         
         # Send Command via Wrapper
         if cmd:
@@ -222,7 +228,10 @@ class WorkspaceOrchestrator:
                     cmd = adapter_cmd
 
             wrapped = f"{self.wrapper} {cmd}"
-            self.run_tmux(["send-keys", "-t", target_pane, wrapped, "ENTER"])
+            if self.mux:
+                self.mux.send_command(target_pane, wrapped)
+            else:
+                self.run_tmux(["send-keys", "-t", target_pane, wrapped, "ENTER"])
         
         # Lazy Adoption Trigger: Call stack init as 'local' to ensure unique identity
         stack_bin = self.nexus_home / "core/kernel/stack/stack"
@@ -245,36 +254,42 @@ class WorkspaceOrchestrator:
             # --- PHASE 1: ADAPTIVE SUBDIVISION ---
             # Axiom: Invariant-driven state convergence.
             expected_count = len(panes)
-            curr_panes = self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
+            curr_pane_infos = self.mux.list_panes(target_window) if self.mux else []
+            curr_panes = [p.handle for p in curr_pane_infos] if curr_pane_infos else \
+                self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
             count_delta = expected_count - len(curr_panes)
-            
+
             self.log(f"AXIOM-G: Subdivision Phase. Current: {len(curr_panes)}, Goal: {expected_count}")
-            
+
             if count_delta > 0:
-                # Need more panes
                 for i in range(count_delta):
-                    # Axiom: Atomic creation + identification
-                    # We get the new pane ID immediately to prevent "Orphan Drift"
-                    res = self.run_tmux(["split-window", "-t", target_window, "-P", "-F", "#{pane_id}"])
-                    
-                    if not res:
-                        self.log("WARNING: Split failed. Re-balancing...")
-                        self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
+                    if self.mux:
+                        res = self.mux.split(target_window, direction="h")
+                        if not res:
+                            self.mux.apply_layout(target_window, "even-horizontal")
+                            res = self.mux.split(target_window, direction="h")
+                    else:
                         res = self.run_tmux(["split-window", "-t", target_window, "-P", "-F", "#{pane_id}"])
-                        
+                        if not res:
+                            self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
+                            res = self.run_tmux(["split-window", "-t", target_window, "-P", "-F", "#{pane_id}"])
                     if res:
                         self.log(f"Created atomic pane: {res.strip()}")
                     else:
                         raise RuntimeError(f"Window too small for {expected_count} panes.")
-                    
             elif count_delta < 0:
-                # Too many panes (e.g. from a partial previous boot)
                 self.log(f"Cleaning up {-count_delta} excess panes...")
                 for i in range(-count_delta):
-                    self.run_tmux(["kill-pane", "-t", f"{target_window}.{expected_count+i}"])
+                    if self.mux:
+                        excess = curr_pane_infos[expected_count + i]
+                        self.mux.kill_pane(excess.handle)
+                    else:
+                        self.run_tmux(["kill-pane", "-t", f"{target_window}.{expected_count+i}"])
 
             # Verify physical invariant
-            actual_panes = self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
+            actual_infos = self.mux.list_panes(target_window) if self.mux else []
+            actual_panes = [p.handle for p in actual_infos] if actual_infos else \
+                self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
             if len(actual_panes) != expected_count:
                 raise RuntimeError(f"Invariant Violation: Built {len(actual_panes)}, expected {expected_count}")
 
@@ -285,8 +300,12 @@ class WorkspaceOrchestrator:
             saved_h = saved_dims.get("h", 0)
 
             # Read current window dimensions
-            cur_geo = self.run_tmux(["display-message", "-t", target_window, "-p",
-                                     "#{window_width},#{window_height}"])
+            if self.mux:
+                dims = self.mux.get_dimensions(target_window)
+                cur_geo = f"{dims['width']},{dims['height']}"
+            else:
+                cur_geo = self.run_tmux(["display-message", "-t", target_window, "-p",
+                                         "#{window_width},#{window_height}"])
             try:
                 cur_w, cur_h = (int(x) for x in cur_geo.split(","))
             except Exception:
@@ -306,20 +325,25 @@ class WorkspaceOrchestrator:
                 sy = cur_h / saved_h
                 scaled = self._scale_layout_string(layout_str, sx, sy, cur_w, cur_h)
                 remapped = self._remap_layout_string(scaled, actual_panes)
-                res = self.run_tmux(["select-layout", "-t", target_window, remapped])
-                if res is None:
+                ok = self.mux.apply_layout(target_window, remapped) if self.mux else \
+                    (self.run_tmux(["select-layout", "-t", target_window, remapped]) is not None)
+                if not ok:
                     self.log("WARNING: Scaled layout rejected. Using even-horizontal fallback.")
-                    self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
+                    (self.mux.apply_layout(target_window, "even-horizontal") if self.mux else
+                     self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"]))
                 else:
                     self.log(f"AXIOM-G2: Proportional layout applied (scale {sx:.2f}x{sy:.2f}).")
             else:
                 self.log(f"AXIOM-G2: Terminal too narrow for saved layout. Using even-horizontal.")
-                self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
+                (self.mux.apply_layout(target_window, "even-horizontal") if self.mux else
+                 self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"]))
 
             # 3. Role/Command Binding Phase
             self.log("AXIOM-G: Binding roles and executing commands.")
             # Refresh actual panes once more in case select-layout shifted them
-            actual_panes = self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
+            actual_infos = self.mux.list_panes(target_window) if self.mux else []
+            actual_panes = [p.handle for p in actual_infos] if actual_infos else \
+                self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
             
             for i, pane_cfg in enumerate(panes):
                 target_pane = actual_panes[i]
@@ -430,20 +454,33 @@ class WorkspaceOrchestrator:
             size_args = ["-p", str(size)] if isinstance(size, int) else (["-l", str(size)] if size else [])
             
             # Axiom: Elastic Splitting with Atomic Identification
-            new_pane = self.run_tmux([
-                "split-window", direction, "-b", "-d", 
-                "-t", remaining_pane, "-P", "-F", "#{pane_id}",
-                "-c", str(self.project_root)
-            ] + size_args + ["/bin/zsh"])
-            
-            if not new_pane:
-                self.log("WARNING: Recursive split failed. Re-balancing window...")
-                self.run_tmux(["select-layout", "-t", remaining_pane, "even-horizontal"])
+            split_dir = "h" if direction == "-h" else "v"
+            split_size = pane_cfg.get("size") if isinstance(pane_cfg.get("size"), int) else None
+            if self.mux:
+                new_pane = self.mux.split(
+                    remaining_pane, direction=split_dir,
+                    size=split_size, cwd=str(self.project_root)
+                )
+                if not new_pane:
+                    self.log("WARNING: Recursive split failed. Re-balancing...")
+                    self.mux.apply_layout(remaining_pane, "even-horizontal")
+                    new_pane = self.mux.split(
+                        remaining_pane, direction=split_dir,
+                        size=split_size, cwd=str(self.project_root)
+                    )
+            else:
                 new_pane = self.run_tmux([
-                    "split-window", direction, "-b", "-d", 
+                    "split-window", direction, "-b", "-d",
                     "-t", remaining_pane, "-P", "-F", "#{pane_id}",
                     "-c", str(self.project_root)
                 ] + size_args + ["/bin/zsh"])
+                if not new_pane:
+                    self.run_tmux(["select-layout", "-t", remaining_pane, "even-horizontal"])
+                    new_pane = self.run_tmux([
+                        "split-window", direction, "-b", "-d",
+                        "-t", remaining_pane, "-P", "-F", "#{pane_id}",
+                        "-c", str(self.project_root)
+                    ] + size_args + ["/bin/zsh"])
 
             if new_pane:
                 new_pane = new_pane.strip()
@@ -490,26 +527,35 @@ class WorkspaceOrchestrator:
         self.env = env
 
         for k, v in env.items():
-            self.run_tmux(["set-environment", "-g", k, v])
-            self.run_tmux(["set-environment", "-t", session, k, v])
+            if self.mux:
+                self.mux.set_env(session, k, v)
+            else:
+                self.run_tmux(["set-environment", "-g", k, v])
+                self.run_tmux(["set-environment", "-t", session, k, v])
 
     def _finalize(self, target_window: str):
         """Focus first pane and display a health toast."""
         # Focus the first (editor/files) pane
-        panes = self.run_tmux(["list-panes", "-t", target_window,
-                               "-F", "#{pane_id}|#{@nexus_stack_id}"]).splitlines()
-        if panes:
-            first_pane = panes[0].split("|")[0]
-            self.run_tmux(["select-pane", "-t", first_pane])
+        pane_infos = self.mux.list_panes(target_window) if self.mux else []
+        if pane_infos:
+            self.mux.select_pane(pane_infos[0].handle)
+        elif not self.mux:
+            raw = self.run_tmux(["list-panes", "-t", target_window,
+                                 "-F", "#{pane_id}|#{@nexus_stack_id}"]).splitlines()
+            if raw:
+                self.run_tmux(["select-pane", "-t", raw[0].split("|")[0]])
 
         # Tally identified vs orphan panes
-        identified = [p for p in panes if len(p.split("|")) > 1 and p.split("|")[1]]
-        total = len(panes)
-        ok = len(identified)
+        total = len(pane_infos)
+        ok = sum(1 for p in pane_infos if p.stack_id)
         orphans = total - ok
 
-        geo = self.run_tmux(["display-message", "-t", target_window, "-p",
-                             "#{window_width}x#{window_height}"]) or "?x?"
+        if self.mux:
+            dims = self.mux.get_dimensions(target_window)
+            geo = f"{dims['width']}x{dims['height']}"
+        else:
+            geo = self.run_tmux(["display-message", "-t", target_window, "-p",
+                                 "#{window_width}x#{window_height}"]) or "?x?"
 
         status_icon = "✓" if orphans == 0 else "⚠"
         orphan_part = f"  {orphans} Orphan(s)" if orphans > 0 else ""
