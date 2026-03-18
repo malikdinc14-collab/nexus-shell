@@ -10,3 +10,10 @@ node_modules/
 venv/
 .venv/
 
+# Ephemeral artifacts
+tmux-client-*.log
+newfile.txt
+*.bak
+tests/simulations/
+core/kernel/layout/*.bak
+
