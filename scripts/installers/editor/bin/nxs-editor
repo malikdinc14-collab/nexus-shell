@@ -3,7 +3,7 @@
 # Unified Orchestrator for the Nexus Editor Module.
 
 NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
-NEXUS_TAB="$NEXUS_HOME/core/exec/nxs-tab.sh"
+NEXUS_TAB="$NEXUS_KERNEL/exec/tabs.sh"
 RENDERER="$NEXUS_HOME/modules/editor/lib/polymorphic_render.sh"
 
 ACTION="${1}"

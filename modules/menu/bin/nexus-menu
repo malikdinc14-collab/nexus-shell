@@ -2,21 +2,26 @@
 # modules/menu/bin/nexus-menu
 # The Nexus Dashboard — Textual-powered Sovereign Menu (NXP).
 
-BIN_DIR="${0:A:h}"
-NXM_BIN="${BIN_DIR}/nxm.py"
-
-# Standardize environment
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/Users/compute/bin:$PATH"
 export NEXUS_HOME="${NEXUS_HOME:-$(cd "${BIN_DIR}/../../.." && pwd)}"
-export PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
+export MENU_ENGINE="${BIN_DIR}/../lib/core/menu_engine.py"
+
+# --- Axiom: Dependency Validation ---
+if [[ ! -f "$MENU_ENGINE" ]]; then
+    printf "\033[1;31m[CRITICAL] Menu Engine not found: %s\033[0m\n" "$MENU_ENGINE"
+    exit 1
+fi
 
 # Resolve Python Binary
 [[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && Python_BIN="$NEXUS_HOME/.venv/bin/python3" \
 || Python_BIN="${Python_BIN:-python3}"
 
-# Launch NXM
-if [[ -f "$NXM_BIN" ]]; then
-    "$Python_BIN" "$NXM_BIN" "$@"
-else
-    echo "CRITICAL: Nexus Menu Binary (nxm.py) not found at $NXM_BIN"
+if ! command -v "$Python_BIN" &> /dev/null; then
+    printf "\033[1;31m[CRITICAL] Python binary not found: %s\033[0m\n" "$Python_BIN"
     exit 1
 fi
+
+# Launch the engine in interactive mode
+printf "\033[1;32m[Axiom] Engaging Menu Engine (Interactive Mode)...\033[0m\n"
+exec "$Python_BIN" "$MENU_ENGINE" "$@" --pick

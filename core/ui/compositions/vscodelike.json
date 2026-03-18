@@ -15,7 +15,7 @@
                     {
                         "id": "menu",
                         "size": 8,
-                        "command": "$PARALLAX_CMD"
+                        "command": "$NEXUS_HOME/modules/menu/bin/nexus-menu"
                     },
                     {
                         "id": "editor",

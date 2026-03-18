@@ -571,7 +571,7 @@ class NexusMenuApp(App):
         
         with self.suspend():
             try:
-                dispatch_bin = BIN_DIR / "nxs-action-dispatch"
+                dispatch_bin = BIN_DIR / "action-dispatch"
                 subprocess.run([str(dispatch_bin), verb, e_type, payload], env=env)
             except Exception as e:
                 with open("/tmp/nexus_menu_debug.log", "a") as f:

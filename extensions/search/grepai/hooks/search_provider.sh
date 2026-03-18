@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # extensions/grepai/hooks/search_provider.sh
-# Provides semantic search capability to core/search/
+# Provides semantic search capability to core/engine/search/
 
 set -e
 

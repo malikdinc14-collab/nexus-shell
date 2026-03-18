@@ -38,7 +38,7 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$REAL_PATH")" && pwd)"
 export NEXUS_HOME="$(cd "$SCRIPT_DIR/../../" && pwd)"
 export NEXUS_CORE="$NEXUS_HOME/core"
-export NEXUS_SCRIPTS="$NEXUS_CORE/boot"
+export NEXUS_SCRIPTS="$NEXUS_KERNEL/boot"
 
 # PREPEND NEXUS BIN TO PATH (Critical for isolated modules)
 export PATH="$HOME/.nexus-shell/bin:$PATH"
@@ -111,7 +111,7 @@ export HAS_CHAT=true HAS_FILES=true
 STATION_EXISTS=$(tmux has-session -t "$SESSION_ID" 2>/dev/null && echo "yes" || echo "no")
 
 # Initialize Kernel State
-"$NEXUS_CORE/api/station_manager.sh" "$PROJECT_NAME" init
+"$NEXUS_ENGINE/api/station_manager.sh" "$PROJECT_NAME" init
 
 if [[ "$STATION_EXISTS" == "yes" ]]; then
     echo "[*] Station already exists for $PROJECT_NAME."
@@ -154,7 +154,7 @@ tmux set-environment -t "$SESSION_ID" NEXUS_CHAT "$NEXUS_CHAT"
 
 # 9. Build the Layout (Synchronous & Staggered)
 echo "[*] Building Station Architecture..."
-"$NEXUS_CORE/layout/layout_engine.sh" "$SESSION_ID:0" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
+"$NEXUS_KERNEL/layout/layout_engine.sh" "$SESSION_ID:0" "$COMPOSITION" "$SESSION_ID" "$PROJECT_ROOT"
 
 # Restore active theme from persistent state
 if [[ -x "$NEXUS_SCRIPTS/theme.sh" ]]; then

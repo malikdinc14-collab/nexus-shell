@@ -18,7 +18,7 @@ fi
 # 1. Directory handling
 if [[ -d "$FILE" ]]; then
     # Use the explorer role if it's a directory
-    EXPLORER=$(python3 "$NEXUS_HOME/core/api/module_registry.py" explorer)
+    EXPLORER=$(python3 "$NEXUS_HOME/core/engine/api/module_registry.py" explorer)
     exec eval "$EXPLORER \"$FILE\""
 fi
 

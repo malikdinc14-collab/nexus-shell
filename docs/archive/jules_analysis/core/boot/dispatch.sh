@@ -8,7 +8,7 @@ CMD="$1"
 NEXUS_HOME="${NEXUS_HOME:-$HOME/.config/nexus-shell}"
 NEXUS_BIN="$NEXUS_HOME/bin"
 NEXUS_CORE="$NEXUS_HOME/core"
-NEXUS_BOOT="$NEXUS_CORE/boot"
+NEXUS_BOOT="$NEXUS_KERNEL/boot"
 NEXUS_STATE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}"
 
 # Load tools configuration

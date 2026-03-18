@@ -7,7 +7,7 @@
             {
                 "id": "menu",
                 "size": 20,
-                "command": "$PARALLAX_CMD"
+                "command": "$NEXUS_MENU_CMD"
             },
             {
                 "type": "vsplit",

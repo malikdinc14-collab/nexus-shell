@@ -71,7 +71,7 @@ build_vscodelike() {
 SCRIPT_DIR="$(cd -P "$(dirname "$0")" && pwd)"
 export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../" && pwd)}"
 export NEXUS_CORE="${NEXUS_CORE:-$NEXUS_HOME/core}"
-export WRAPPER="$NEXUS_CORE/boot/pane_wrapper.sh"
+export WRAPPER="$NEXUS_KERNEL/boot/pane_wrapper.sh"
 export BRIDGE="$NEXUS_CORE/bridge"
 
 WINDOW_ID="$1"
@@ -91,7 +91,7 @@ if [[ -f "$COMP_JSON" ]]; then
     
     # Ensure all required environment variables are exported for the Python processor
     # These may have been set by launcher.sh but need to be explicitly exported
-    export WRAPPER="${WRAPPER:-$NEXUS_CORE/boot/pane_wrapper.sh}"
+    export WRAPPER="${WRAPPER:-$NEXUS_KERNEL/boot/pane_wrapper.sh}"
     export PARALLAX_CMD="${PARALLAX_CMD:-echo 'Parallax not configured'}"
     export EDITOR_CMD="${EDITOR_CMD:-nvim}"
     export NEXUS_FILES="${NEXUS_FILES:-yazi}"

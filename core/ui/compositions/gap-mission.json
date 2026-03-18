@@ -15,11 +15,11 @@
                         "direction": "vertical",
                         "panes": [
                             {
-                                "command": "nxs-gap-spec.sh",
+                                "command": "gap-spec.sh",
                                 "size": "40%"
                             },
                             {
-                                "command": "nxs-pi-gap.sh",
+                                "command": "pi-gap.sh",
                                 "size": "60%"
                             }
                         ],

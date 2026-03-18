@@ -23,7 +23,7 @@ items:
 
   - label: "🛡️ GAP Mission Chat (Pi)"
     type: "ACTION"
-    payload: "tmux select-pane -t chat && tmux send-keys '$NEXUS_HOME/core/engine/ai/nxs-pi-gap.sh' Enter"
+    payload: "tmux select-pane -t chat && tmux send-keys '$NEXUS_HOME/core/engine/ai/pi-gap.sh' Enter"
 
   - label: "🚀 Launch GAP Mission Control"
     type: "ACTION"

@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 import json
 
-# Add core/api to path
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "core/api"))
+# Add core/engine/api to path
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "core/engine/api"))
 from intent_resolver import IntentResolver
 
 def test_resolver():

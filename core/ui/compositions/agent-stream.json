@@ -24,7 +24,7 @@
                         "id": "thought_stream",
                         "size": 60,
                         "title": "💭 AGENT STREAM",
-                        "command": "$NEXUS_CORE/services/nxs-stream.sh"
+                        "command": "$NEXUS_CORE/services/stream.sh"
                     }
                 ]
             }

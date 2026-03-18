@@ -5,4 +5,4 @@
 # @description: Select a color theme for Nexus
 # @icon: palette
 
-"${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/boot/theme.sh" menu
+"${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/kernel/boot/theme.sh" menu

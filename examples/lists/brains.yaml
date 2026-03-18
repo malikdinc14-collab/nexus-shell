@@ -28,4 +28,4 @@ items:
 
   - label: "📉 Unload All Brains"
     type: ACTION
-    payload: "$NEXUS_HOME/core/api/unload_brains.sh"
+    payload: "$NEXUS_HOME/core/engine/api/unload_brains.sh"

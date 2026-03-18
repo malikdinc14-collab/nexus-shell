@@ -288,7 +288,7 @@ nexus_station_init() {
     # ...
     
     # Start event bus
-    python3 "$NEXUS_CORE/bus/event_server.py" &
+    python3 "$NEXUS_ENGINE/bus/event_server.py" &
     echo $! > "$STATE_DIR/bus.pid"
 }
 

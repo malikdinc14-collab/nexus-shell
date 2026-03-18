@@ -38,7 +38,7 @@ extensions/
 ├── explorer/           # yazi, nnn, ranger, lf
 ├── chat/               # opencode, gptme
 ├── terminal/           # zellij
-├── viewer/             # glow, bat, nxs-view
+├── viewer/             # glow, bat, view
 ├── search/             # grepai, television, ripgrep
 ├── devops/             # k9s, lazydocker, lazygit, dive
 ├── ai/                 # optillm, openevolve
@@ -58,7 +58,7 @@ extensions/
 | **Explorer** | yazi ✓, nnn, ranger, lf |
 | **Chat** | opencode ✓, gptme |
 | **Terminal** | zellij |
-| **Viewer** | glow, bat ✓, nxs-view |
+| **Viewer** | glow, bat ✓, view |
 | **Search** | grepai, television, ripgrep ✓ |
 | **DevOps** | k9s, lazydocker, lazygit ✓, dive, process-compose |
 | **AI** | optillm, openevolve |

@@ -13,7 +13,7 @@ from importlib.machinery import SourceFileLoader
 with patch("subprocess.check_output") as mock_check:
     mock_check.return_value = b"test_session"
     
-    # Add core/stack to path to import nxs-stack
+    # Add core/kernel/stack to path to import nxs-stack
     nexus_home = Path(__file__).parent.parent.parent
     sys.path.append(str(nexus_home / "core" / "stack"))
 

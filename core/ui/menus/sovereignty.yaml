@@ -21,7 +21,7 @@ items:
 
   - label: "💾 Save All Windows"
     type: "ACTION"
-    payload: "python3 $NEXUS_CORE/layout/save_layout.py --all && echo 'Full Session Saved!'"
+    payload: "python3 $NEXUS_KERNEL/layout/save_layout.py --all && echo 'Full Session Saved!'"
 
   - label: "🔄 Restore Layout"
     type: "ACTION"
