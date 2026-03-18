@@ -10,7 +10,7 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Optional
-from ..base import EditorCapability
+from ...base import EditorCapability
 
 class NeovimAdapter(EditorCapability):
     # Neovim opens in TUI mode — needs attached terminal.

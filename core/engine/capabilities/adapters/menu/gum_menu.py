@@ -2,13 +2,15 @@ import os
 import subprocess
 import shutil
 from typing import List, Optional
-from ..base import MenuCapability
+from ...base import MenuCapability
 
 class GumMenuAdapter(MenuCapability):
     """Implementation of MenuCapability using the bash 'gum' tool."""
 
     @property
-    def capability_type(self): return "menu"
+    def capability_type(self):
+        from ...base import CapabilityType
+        return CapabilityType.MENU
 
     @property
     def capability_id(self): return "gum"

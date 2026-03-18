@@ -9,11 +9,11 @@ Manages the lifecycle and discovery of capabilities and their adapters.
 from typing import Dict, List, Optional, Type
 from pathlib import Path
 from .base import Capability, CapabilityType
-from .adapters.opencode import OpenCodeAdapter
-from .adapters.yazi import YaziAdapter
-from .adapters.neovim import NeovimAdapter
-from .adapters.gum_menu import GumMenuAdapter
-from .adapters.textual_menu import TextualMenuAdapter
+from .adapters.agent.opencode import OpenCodeAdapter
+from .adapters.explorer.yazi import YaziAdapter
+from .adapters.editor.neovim import NeovimAdapter
+from .adapters.menu.gum_menu import GumMenuAdapter
+from .adapters.menu.textual_menu import TextualMenuAdapter
 
 class CapabilityRegistry:
     """Central registry for discovering which tool implements which capability."""

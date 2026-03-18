@@ -1,6 +1,6 @@
 import importlib.util
 from typing import List, Optional
-from ..base import MenuCapability
+from ...base import MenuCapability
 
 class TextualMenuAdapter(MenuCapability):
     """
@@ -9,7 +9,9 @@ class TextualMenuAdapter(MenuCapability):
     """
 
     @property
-    def capability_type(self): return "menu"
+    def capability_type(self):
+        from ...base import CapabilityType
+        return CapabilityType.MENU
 
     @property
     def capability_id(self): return "textual"

@@ -19,7 +19,7 @@ Invariants enforced by this adapter:
 import os
 import subprocess
 from typing import List, Optional, Dict
-from ..base import MultiplexerCapability, PaneInfo, CapabilityType
+from ...base import MultiplexerCapability, PaneInfo, CapabilityType
 
 
 class TmuxAdapter(MultiplexerCapability):

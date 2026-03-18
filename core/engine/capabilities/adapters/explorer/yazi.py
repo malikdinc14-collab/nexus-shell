@@ -1,7 +1,7 @@
 import os
 import subprocess
 from typing import List, Dict, Any, Optional
-from ..base import ExplorerCapability
+from ...base import ExplorerCapability
 
 
 class YaziAdapter(ExplorerCapability):

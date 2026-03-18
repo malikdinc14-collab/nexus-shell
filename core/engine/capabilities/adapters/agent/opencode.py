@@ -16,7 +16,7 @@ correct decisions without hardcoding tool names in kernel scripts.
 import subprocess
 from pathlib import Path
 from typing import Optional, List, Dict
-from ..base import ChatCapability
+from ...base import ChatCapability
 
 
 class OpenCodeAdapter(ChatCapability):
@@ -47,7 +47,7 @@ class OpenCodeAdapter(ChatCapability):
 
     @property
     def capability_type(self):
-        from ..base import CapabilityType
+        from ...base import CapabilityType
         return CapabilityType.CHAT
 
     def is_available(self) -> bool:

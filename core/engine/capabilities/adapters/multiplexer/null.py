@@ -18,7 +18,7 @@ Usage:
 """
 
 from typing import List, Optional, Dict, Any
-from ..base import MultiplexerCapability, PaneInfo, CapabilityType
+from ...base import MultiplexerCapability, PaneInfo, CapabilityType
 
 
 class NullAdapter(MultiplexerCapability):

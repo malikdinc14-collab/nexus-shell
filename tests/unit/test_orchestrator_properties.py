@@ -42,7 +42,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "core"))
 sys.path.insert(0, str(PROJECT_ROOT / "core/engine/state"))
 
-from engine.capabilities.adapters.null import NullAdapter
+from engine.capabilities.adapters.multiplexer.null import NullAdapter
 from engine.orchestration.workspace import WorkspaceOrchestrator
 
 
