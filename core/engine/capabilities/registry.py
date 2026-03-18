@@ -12,7 +12,7 @@ from .base import Capability, CapabilityType
 from .adapters.opencode import OpenCodeAdapter
 from .adapters.yazi import YaziAdapter
 from .adapters.neovim import NeovimAdapter
-from .adapters.gum import GumMenuAdapter
+from .adapters.gum_menu import GumMenuAdapter
 from .adapters.textual_menu import TextualMenuAdapter
 
 class CapabilityRegistry:
