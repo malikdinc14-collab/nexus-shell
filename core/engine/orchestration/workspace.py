@@ -236,15 +236,42 @@ class WorkspaceOrchestrator:
             if len(actual_panes) != expected_count:
                 raise RuntimeError(f"Invariant Violation: Built {len(actual_panes)}, expected {expected_count}")
 
-            # 2. Geometry Alignment Phase
-            if layout_str:
-                self.log("AXIOM-G: Applying remapped high-fidelity layout string.")
-                remapped = self._remap_layout_string(layout_str, actual_panes)
+            # 2. Geometry Scaling Phase (Proportional Restoration)
+            # Axiom G-02: Layout must be scaled to current terminal, not blindly restored.
+            saved_dims = snapshot.get("dimensions", {})
+            saved_w = saved_dims.get("w", 0)
+            saved_h = saved_dims.get("h", 0)
+
+            # Read current window dimensions
+            cur_geo = self.run_tmux(["display-message", "-t", target_window, "-p",
+                                     "#{window_width},#{window_height}"])
+            try:
+                cur_w, cur_h = (int(x) for x in cur_geo.split(","))
+            except Exception:
+                cur_w, cur_h = 80, 24
+
+            self.log(f"AXIOM-G2: Saved={saved_w}x{saved_h}, Current={cur_w}x{cur_h}")
+
+            # Only attempt layout string restore if terminal is large enough to
+            # accommodate all panes with a minimum 10-column, 4-row floor.
+            MIN_PANE_W, MIN_PANE_H = 10, 4
+            min_required_w = MIN_PANE_W * expected_count
+            min_required_h = MIN_PANE_H * 2  # rough estimate for vsplit rows
+
+            if layout_str and saved_w > 0 and cur_w >= min_required_w and cur_h >= min_required_h:
+                # Scale layout string dimensions proportionally
+                sx = cur_w / saved_w
+                sy = cur_h / saved_h
+                scaled = self._scale_layout_string(layout_str, sx, sy, cur_w, cur_h)
+                remapped = self._remap_layout_string(scaled, actual_panes)
                 res = self.run_tmux(["select-layout", "-t", target_window, remapped])
                 if res is None:
-                    self.log("WARNING: Layout application failed. Falling back to even-horizontal.")
+                    self.log("WARNING: Scaled layout rejected. Using even-horizontal fallback.")
                     self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
+                else:
+                    self.log(f"AXIOM-G2: Proportional layout applied (scale {sx:.2f}x{sy:.2f}).")
             else:
+                self.log(f"AXIOM-G2: Terminal too narrow for saved layout. Using even-horizontal.")
                 self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
 
             # 3. Role/Command Binding Phase
@@ -264,6 +291,45 @@ class WorkspaceOrchestrator:
             self.log(f"ERROR: Momentum restoration failed: {e}")
             import traceback
             self.log(traceback.format_exc())
+
+    def _scale_layout_string(self, layout_str: str, sx: float, sy: float,
+                             cur_w: int, cur_h: int) -> str:
+        """
+        Scales all numeric dimension/position tokens in a tmux layout string
+        proportionally. Tmux layout format:
+          checksum,WxH,X,Y[{...}|[...]] for branches
+          checksum,WxH,X,Y,ID          for leaves
+        We strip the checksum; _remap_layout_string will recalculate it.
+        """
+        import re
+
+        # Strip checksum prefix (everything before first comma)
+        try:
+            _, body = layout_str.split(",", 1)
+        except ValueError:
+            return layout_str
+
+        # Scale every WxH,X,Y group. Pattern captures: width, height, x, y
+        # and an optional pane ID (digit sequence) at the end of a leaf segment.
+        def scale_token(m):
+            w = max(1, int(round(int(m.group(1)) * sx)))
+            h = max(1, int(round(int(m.group(2)) * sy)))
+            x = max(0, int(round(int(m.group(3)) * sx)))
+            y = max(0, int(round(int(m.group(4)) * sy)))
+            # clamp root width/height to current dims
+            w = min(w, cur_w)
+            h = min(h, cur_h)
+            suffix = f",{m.group(5)}" if m.group(5) else ""
+            return f"{w}x{h},{x},{y}{suffix}"
+
+        scaled_body = re.sub(
+            r"(\d+)x(\d+),(\d+),(\d+)(?:,(\d+))?",
+            scale_token,
+            body
+        )
+
+        # Return without checksum; _remap_layout_string will add the correct one.
+        return f"0000,{scaled_body}"
 
     def _remap_layout_string(self, layout_str: str, new_panes: list) -> str:
         """
@@ -386,7 +452,25 @@ class WorkspaceOrchestrator:
             self.run_tmux(["set-environment", "-t", session, k, v])
 
     def _finalize(self, target_window: str):
-        # Default focus to first pane (usually editor/files)
-        panes = self.run_tmux(["list-panes", "-t", target_window, "-F", "#{pane_id}"]).splitlines()
+        """Focus first pane and display a health toast."""
+        # Focus the first (editor/files) pane
+        panes = self.run_tmux(["list-panes", "-t", target_window,
+                               "-F", "#{pane_id}|#{@nexus_stack_id}"]).splitlines()
         if panes:
-            self.run_tmux(["select-pane", "-t", panes[0]])
+            first_pane = panes[0].split("|")[0]
+            self.run_tmux(["select-pane", "-t", first_pane])
+
+        # Tally identified vs orphan panes
+        identified = [p for p in panes if len(p.split("|")) > 1 and p.split("|")[1]]
+        total = len(panes)
+        ok = len(identified)
+        orphans = total - ok
+
+        geo = self.run_tmux(["display-message", "-t", target_window, "-p",
+                             "#{window_width}x#{window_height}"]) or "?x?"
+
+        status_icon = "✓" if orphans == 0 else "⚠"
+        orphan_part = f"  {orphans} Orphan(s)" if orphans > 0 else ""
+        toast = f"{status_icon} {ok}/{total} panes bound  |  {target_window}  |  {geo}{orphan_part}"
+        self.run_tmux(["display-message", "-t", target_window, toast])
+        self.log(f"AXIOM-BOOT: {toast}")
