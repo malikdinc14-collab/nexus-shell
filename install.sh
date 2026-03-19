@@ -19,43 +19,63 @@ echo ""
 # === Step 0: Check dependencies ===
 echo "[0/6] Checking dependencies..."
 
+# Detect OS
+OS_TYPE="unknown"
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    OS_TYPE="linux"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    OS_TYPE="macos"
+fi
+
 # Initialize submodules if present
 if [[ -d "$NEXUS_HOME/.git" ]]; then
     echo "    Initializing submodules..."
     git -C "$NEXUS_HOME" submodule update --init --recursive
 fi
 
-# Install/Update Parallax from submodule
+# Install/Update Parallax from submodule (Optional)
 if [[ -d "$NEXUS_HOME/modules/parallax" ]]; then
     echo "    Updating Parallax components..."
     (cd "$NEXUS_HOME/modules/parallax" && ./install.sh --dev)
 else
     if ! command -v parallax &>/dev/null && [[ ! -f "$HOME/.parallax/bin/parallax" ]]; then
-        echo ""
-        echo "    ERROR: Parallax is required but not installed."
-        echo ""
-        echo "    Install Parallax first:"
-        echo "      git clone https://github.com/samir-alsayad/parallax.git"
-        echo "      cd parallax && ./install.sh"
-        echo ""
-        exit 1
+        echo "    Note: Parallax not found (Legacy features disabled)."
+    else
+        echo "    Parallax: OK"
     fi
 fi
-echo "    Parallax: OK"
 
 # Check for tmux
 if ! command -v tmux &>/dev/null; then
-    echo "    ERROR: tmux is required. Install with: brew install tmux"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        echo "    ERROR: tmux is required. Install with: brew install tmux"
+    else
+        echo "    ERROR: tmux is required. Install with: sudo apt-get install tmux"
+    fi
     exit 1
 fi
 echo "    tmux: OK"
 
 # Check for fzf
 if ! command -v fzf &>/dev/null; then
-    echo "    ERROR: fzf is required. Install with: brew install fzf"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        echo "    ERROR: fzf is required. Install with: brew install fzf"
+    else
+        echo "    ERROR: fzf is required. Install with: sudo apt-get install fzf"
+    fi
     exit 1
 fi
 echo "    fzf: OK"
+
+# Check for zsh (Nexus default shell)
+if ! command -v zsh &>/dev/null; then
+    echo "    WARNING: zsh is the default Nexus shell but was not found."
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        echo "    Install with: brew install zsh"
+    else
+        echo "    Install with: sudo apt-get install zsh"
+    fi
+fi
 
 # === Step 1: Ask about tool installation ===
 echo ""

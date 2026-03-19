@@ -14,7 +14,7 @@
                 "panes": [
                     {
                         "id": "menu",
-                        "size": 8,
+                        "size": "8",
                         "command": "$NEXUS_HOME/modules/menu/bin/nexus-menu"
                     },
                     {
@@ -23,8 +23,8 @@
                     },
                     {
                         "id": "terminal",
-                        "size": 12,
-                        "command": "/bin/zsh -i"
+                        "size": "10",
+                        "command": "${SHELL:-/bin/bash} -i"
                     }
                 ]
             },

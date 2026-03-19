@@ -58,9 +58,13 @@ class TmuxAdapter(BaseContainerAdapter):
 
     def swap_containers(self, source, target):
         if source == target: return True
+        self.run_tmux(["display-message", "-p", f"Axiom-D: Swapping {source} <-> {target}"], self.socket_label)
         res = self.run_tmux(["swap-pane", "-d", "-s", source, "-t", target], self.socket_label)
         if res is None:
-            self.run_tmux(["display-message", f"GhostSwap Error: swap-pane failed for {source} -> {target}"], self.socket_label)
+            err_msg = f"GhostSwap Error: swap-pane failed for {source} -> {target}"
+            self.run_tmux(["display-message", err_msg], self.socket_label)
+            # Log to stdout/stderr for daemon log visibility
+            print(f"[{datetime.now()}] [TmuxAdapter] {err_msg}", file=sys.stderr)
             return False
         return True
 

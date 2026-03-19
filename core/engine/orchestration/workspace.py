@@ -452,7 +452,13 @@ class WorkspaceOrchestrator:
         for i in range(len(panes) - 1):
             pane_cfg = panes[i]
             size = pane_cfg.get("size")
-            size_args = ["-p", str(size)] if isinstance(size, int) else (["-l", str(size)] if size else [])
+            
+            # Use modern tmux `-l [size]%` syntax which natively prevents
+            # size missing errors and elegantly clamps to minimums dynamically.
+            if isinstance(size, int):
+                size_args = ["-l", f"{size}%"]
+            else:
+                size_args = ["-l", str(size)] if size else []
             
             # Axiom: Elastic Splitting with Atomic Identification
             split_dir = "h" if direction == "-h" else "v"

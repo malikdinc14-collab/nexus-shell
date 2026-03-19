@@ -240,6 +240,14 @@ except: print('no')
     fi
 fi
 
+# Detect Default Shell (Axiom: Deterministic Fallback)
+if command -v zsh &>/dev/null; then
+    NEXUS_SHELL="$(command -v zsh)"
+else
+    NEXUS_SHELL="$(command -v bash)"
+fi
+export NEXUS_SHELL
+
 echo -e "\033[1;36m[*] INITIALIZING STATION: $PROJECT_NAME\033[0m"
 echo "    Layout: $COMPOSITION"
 echo "    Session: $SESSION_ID"
@@ -284,7 +292,7 @@ if [[ "$STATION_EXISTS" == "yes" ]]; then
              exit 112
         fi
         echo "    [*] Opening new window slot: $WINDOW_IDX"
-        tmux -L "$SOCKET_LABEL" new-window -d -t "$SESSION_ID" -k -t "$WINDOW_IDX" -n "workspace_$WINDOW_IDX" -c "$PROJECT_ROOT" "/bin/zsh"
+        tmux -L "$SOCKET_LABEL" new-window -d -t "$SESSION_ID" -k -t "$WINDOW_IDX" -n "workspace_$WINDOW_IDX" -c "$PROJECT_ROOT" "$NEXUS_SHELL"
     fi
     
     # Generate client session
@@ -315,7 +323,7 @@ else
     
     # Create the root session and window 0
     # Use -L for socket isolation and capture all stderr for diagnosis
-    TMUX_ERR=$(tmux -L "$SOCKET_LABEL" -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace_0" -c "$PROJECT_ROOT" -x "$COLS" -y "$LINES" "/bin/zsh" 2>&1) || {
+    TMUX_ERR=$(tmux -L "$SOCKET_LABEL" -f "$TMUX_CONF" new-session -d -s "$SESSION_ID" -n "workspace_0" -c "$PROJECT_ROOT" -x "$COLS" -y "$LINES" "$NEXUS_SHELL" 2>&1) || {
         echo -e "\033[1;31m[!] CRITICAL: Tmux failed to initialize session '$SESSION_ID'\033[0m" >&2
         echo "    Reason: $TMUX_ERR" >&2
         echo "    Socket Label: $SOCKET_LABEL" >&2
@@ -343,7 +351,7 @@ except: pass
             for W_IDX in $SAVED_WINDOWS; do
                 if [[ "$W_IDX" != "0" ]]; then
                     echo "    [*] Recreating window slot $W_IDX..."
-                    tmux -L "$SOCKET_LABEL" new-window -d -t "$SESSION_ID:$W_IDX" -n "workspace_$W_IDX" -c "$PROJECT_ROOT" "/bin/zsh"
+                    tmux -L "$SOCKET_LABEL" new-window -d -t "$SESSION_ID:$W_IDX" -n "workspace_$W_IDX" -c "$PROJECT_ROOT" "$NEXUS_SHELL"
                 fi
             done
         fi

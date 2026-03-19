@@ -31,7 +31,7 @@ pkill -f "follower_bridge.sh" 2>/dev/null
 # 3. Cleanup state/pipes
 echo "[*] Purging Ephemeral State..."
 rm -rf /tmp/nexus_* 2>/dev/null
-rm -f /tmp/nexus_telemetry.json 2>/dev/null
+rm -f "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json" 2>/dev/null
 
 # 4. Final check for survivors
 # This handles cases where scripts were renamed or processes are stuck

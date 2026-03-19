@@ -2,7 +2,7 @@
 # core/ui/hud/telemetry_aggregator.sh
 # Aggregates system, workspace, and agent state into a single JSON file.
 
-TELEMETRY_FILE="/tmp/nexus_telemetry.json"
+TELEMETRY_FILE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 
 # Atomic mktemp helper
 safe_mktemp() {

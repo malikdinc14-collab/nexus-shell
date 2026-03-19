@@ -27,8 +27,8 @@ apply_profile() {
 
     echo -e "${CYAN}[*] Applying Keybind Profile: $name...${NC}"
     
-    # Update symlink
-    ln -sf "$file" "$ACTIVE_CONF"
+    # Update symlink (using a relative path for portability across host systems)
+    ln -sf "${name}.conf" "$ACTIVE_CONF"
     
     # Unbind all existing bindings (optional but safer to avoid ghosts)
     # We don't do a full unbind-all to avoid killing core tmux binds,

@@ -28,10 +28,10 @@ right = []
 
 [opener]
 edit = [
-    { run = 'zsh "${NEXUS_HOME:-$HOME/.config/nexus-shell}/lib/yazi_open.sh" "$@"', block = false, desc = "Open in Editor" }
+    { run = 'zsh "${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/engine/lib/yazi_open.sh" "$@"', block = false, desc = "Open in Editor" }
 ]
 nexus_open = [
-    { run = 'zsh "${NEXUS_HOME:-$HOME/.config/nexus-shell}/lib/yazi_open.sh" "$@"', block = false, desc = "Nexus Open" }
+    { run = 'zsh "${NEXUS_HOME:-$HOME/.config/nexus-shell}/core/engine/lib/yazi_open.sh" "$@"', block = false, desc = "Nexus Open" }
 ]
 
 [open]

@@ -2,7 +2,7 @@
 # core/services/internal/gap_service.sh
 # Background service to poll GAP status and mission data.
 
-TELEMETRY_FILE="/tmp/nexus_telemetry.json"
+TELEMETRY_FILE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 GAP_BRIDGE="${NEXUS_HOME}/core/services/internal/gap_bridge.sh"
 
 while true; do

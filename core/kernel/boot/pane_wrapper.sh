@@ -5,6 +5,7 @@
 
 # 1. Zero-Entropy Path Resolution
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export NEXUS_HOME="${NEXUS_HOME:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 export NEXUS_SCRIPTS="$SCRIPT_DIR"
 export ZDOTDIR="$NEXUS_HOME/config/zsh"
 
@@ -36,5 +37,7 @@ else
 fi
 
 # Tool exited — drop to an interactive shell so the pane stays alive
+# Invariant: prefer zsh, then bash, then POSIX sh. Never hardcode a path.
 printf "\033[1;34m[Nexus] Dropping to interactive containment...\033[0m\n\n"
-exec /bin/zsh -i
+FALLBACK_SHELL="$(command -v zsh 2>/dev/null || command -v bash 2>/dev/null || echo /bin/sh)"
+exec "$FALLBACK_SHELL" -i

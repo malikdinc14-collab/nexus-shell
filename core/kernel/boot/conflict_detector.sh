@@ -19,7 +19,7 @@ trigger_matrix() {
         local tmp_dir="/tmp/nexus_$(whoami)"
         mkdir -p "$tmp_dir/tmp"
         local temp_file=$(mktemp "$tmp_dir/tmp/conflict_status.XXXXXX")
-        jq '.agent.status = "blocked" | .agent.mission = "Resolve Conflicts"' /tmp/nexus_telemetry.json > "$temp_file" && mv "$temp_file" /tmp/nexus_telemetry.json
+        jq '.agent.status = "blocked" | .agent.mission = "Resolve Conflicts"' "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json" > "$temp_file" && mv "$temp_file" "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
         
         # Load the specialized composition
         layout conflict-matrix

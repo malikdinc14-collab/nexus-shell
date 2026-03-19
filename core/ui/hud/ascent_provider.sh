@@ -2,7 +2,7 @@
 # core/ui/hud/ascent_provider.sh
 # Extension for the Ascent Workspace to inject Level/XP into telemetry.
 
-TELEMETRY_FILE="/tmp/nexus_telemetry.json"
+TELEMETRY_FILE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 ASCENT_STATE="/tmp/nexus_$(whoami)/ascent/progress.json"
 
 while true; do

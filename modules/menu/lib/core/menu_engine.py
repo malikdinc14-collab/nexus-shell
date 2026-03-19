@@ -297,7 +297,11 @@ def load_lists_config() -> dict:
                 pass
     return config
 def get_adapter():
-    """Resolve the picker adapter based on profile preferences."""
+    """Resolve the picker adapter from the Capability Registry."""
+    sys.path.append(str(NEXUS_HOME))
+    from core.engine.capabilities.registry import REGISTRY
+    from core.engine.capabilities.base import CapabilityType
+    
     profile_path = Path(os.path.expanduser("~/.nexus/profile.yaml"))
     provider = "fzf"
     
@@ -305,22 +309,18 @@ def get_adapter():
         try:
             with open(profile_path) as f:
                 data = yaml.safe_load(f) or {}
-                provider = data.get("preferences", {}).get("menu_provider", "fzf")
+                provider = data.get("preferences", {}).get("menu_provider", "textual")
         except:
             pass
-
-    sys.path.append(str(NEXUS_HOME / "core" / "engine" / "lib"))
-    
-    if provider == "gum":
-        from menu.adapters.gum import GumAdapter
-        return GumAdapter()
-    elif provider == "textual":
-        # Fallback to fzf for now if textual adapter isn't implemented
-        from menu.adapters.fzf import FzfAdapter
-        return FzfAdapter()
-    else:
-        from menu.adapters.fzf import FzfAdapter
-        return FzfAdapter()
+            
+    # Try to get the specific requested one
+    capabilities = REGISTRY.list_all(CapabilityType.MENU)
+    for cap in capabilities:
+        if cap.capability_id == provider and cap.is_available():
+            return cap
+            
+    # Fallback to the best available
+    return REGISTRY.get_best(CapabilityType.MENU)
 
 def resolve_sources(context: str, config: dict) -> list:
     """Resolve a context into a list of normalized source dictionaries."""

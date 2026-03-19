@@ -147,6 +147,14 @@ class MenuCapability(Capability):
         """Displays a menu and returns the selected option."""
         pass
 
+    @abstractmethod
+    def pick(self, context: str, items_json: List[str]) -> Optional[str]:
+        """
+        Takes context string and a list of JSON-string items.
+        Returns the selected JSON-string or None.
+        """
+        pass
+
 
 class MultiplexerCapability(Capability):
     """

@@ -2,7 +2,7 @@
 # core/ui/hud/renderer.sh
 # Renders the 1-line HUD strip using ANSI colors.
 
-TELEMETRY_FILE="/tmp/nexus_telemetry.json"
+TELEMETRY_FILE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 
 # Color tokens (to be integrated with nxs-theme later)
 BLUE='\033[0;34m'
@@ -15,11 +15,16 @@ DIM='\033[2m'
 NC='\033[0m'
 
 while true; do
+        if [ ! -f "$TELEMETRY_FILE" ]; then
+            sleep 0.5
+            continue
+        fi
+
         # 1. Core State
-        workspace=$(jq -r '.env.workspace' "$TELEMETRY_FILE")
-        profile=$(jq -r '.env.profile' "$TELEMETRY_FILE")
-        locality=$(jq -r '.env.locality' "$TELEMETRY_FILE")
-        branch=$(jq -r '.env.git_branch' "$TELEMETRY_FILE")
+        workspace=$(jq -r '.env.workspace' "$TELEMETRY_FILE" 2>/dev/null)
+        profile=$(jq -r '.env.profile' "$TELEMETRY_FILE" 2>/dev/null)
+        locality=$(jq -r '.env.locality' "$TELEMETRY_FILE" 2>/dev/null)
+        branch=$(jq -r '.env.git_branch' "$TELEMETRY_FILE" 2>/dev/null)
 
         # 2. Render Modules Dynamically
         module_info=""

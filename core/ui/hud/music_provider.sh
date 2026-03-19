@@ -2,7 +2,7 @@
 # core/ui/hud/music_provider.sh
 # Mocks music telemetry for the HUD (BPM, Tracking, CPU)
 
-TELEMETRY_FILE="/tmp/nexus_telemetry.json"
+TELEMETRY_FILE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 
 while true; do
     # Mocking BPM and active channel

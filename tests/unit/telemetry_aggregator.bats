@@ -50,21 +50,21 @@ INNER_EOF
     export NEXUS_WORKSPACE_NAME="mock_workspace"
     export NEXUS_PROFILE="mock_profile"
 
-    rm -f /tmp/nexus_telemetry.json
+    rm -f "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 }
 
 teardown() {
     rm -rf "$BATS_TMPDIR"
-    rm -f /tmp/nexus_telemetry.json
+    rm -f "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 }
 
 @test "telemetry_aggregator initializes file and performs atomic writes" {
     timeout 2s bash "$NEXUS_HOME/core/hud/telemetry_aggregator.sh" || true
 
-    [ -f /tmp/nexus_telemetry.json ]
+    [ -f "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json" ]
 
-    grep "mock_jq .env.workspace = \"mock_workspace\" /tmp/nexus_telemetry.json" "$BATS_TMPDIR/calls.log"
-    grep "mock_mv " "$BATS_TMPDIR/calls.log" | grep "/tmp/nexus_telemetry.json"
+    grep "mock_jq .env.workspace = \"mock_workspace\" "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"" "$BATS_TMPDIR/calls.log"
+    grep "mock_mv " "$BATS_TMPDIR/calls.log" | grep ""${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json""
 }
 
 @test "telemetry_aggregator correctly detects Learner Level and Git Branch" {
@@ -73,6 +73,6 @@ teardown() {
 
     timeout 2s bash "$NEXUS_HOME/core/hud/telemetry_aggregator.sh" || true
 
-    grep "mock_jq .env.level = \"5\" /tmp/nexus_telemetry.json" "$BATS_TMPDIR/calls.log"
-    grep "mock_jq .env.git_branch = \"feature/test-branch\" /tmp/nexus_telemetry.json" "$BATS_TMPDIR/calls.log"
+    grep "mock_jq .env.level = \"5\" "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"" "$BATS_TMPDIR/calls.log"
+    grep "mock_jq .env.git_branch = \"feature/test-branch\" "${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"" "$BATS_TMPDIR/calls.log"
 }

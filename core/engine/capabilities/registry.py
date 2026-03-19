@@ -14,6 +14,7 @@ from .adapters.explorer.yazi import YaziAdapter
 from .adapters.editor.neovim import NeovimAdapter
 from .adapters.menu.gum_menu import GumMenuAdapter
 from .adapters.menu.textual_menu import TextualMenuAdapter
+from .adapters.menu.fzf_menu import FzfMenuAdapter
 
 class CapabilityRegistry:
     """Central registry for discovering which tool implements which capability."""
@@ -32,41 +33,86 @@ class CapabilityRegistry:
             OpenCodeAdapter(),
             YaziAdapter(),
             NeovimAdapter(),
-            GumMenuAdapter(),
             TextualMenuAdapter(),
+            FzfMenuAdapter(),
+            GumMenuAdapter(),
         ]
         for a in adapters:
             if a.is_available():
                 self.register(a)
 
     def _load_role_map(self) -> Dict[str, str]:
-        """Loads the role-to-tool mapping from the user's profile."""
+        """Loads the role-to-tool mapping from the user's profile.
+        
+        Invariant: The returned map only contains roles whose tools are
+        currently available in the system PATH. Stale profile entries
+        (tools installed at profile-write time but since removed, or
+        tools not yet installed) are silently dropped so downstream
+        tiered fallbacks can take over.
+        """
         if not self._profile_path or not self._profile_path.exists():
             return {}
         try:
             import yaml
+            import shutil
             with open(self._profile_path) as f:
                 data = yaml.safe_load(f) or {}
-                return data.get("roles", {})
+            raw_roles = data.get("roles", {})
+            # Re-validate: only keep roles whose tool actually exists right now
+            return {
+                role: tool
+                for role, tool in raw_roles.items()
+                if shutil.which(tool)
+            }
         except:
             return {}
 
+    def _find_first_available(self, tools: List[str]) -> Optional[str]:
+        """Returns the first tool in the list that exists in the system PATH."""
+        import shutil
+        for tool in tools:
+            path = shutil.which(tool)
+            if path:
+                return path
+        return None
+
     def get_tool_for_role(self, role: str) -> str:
         """The Python-equivalent of the legacy Bash get_tool_for_role."""
-        # 1. Check Profile Map
+        # 1. Check Profile Map (Verify availability)
+        import shutil
         if role in self._role_map:
-            return self._role_map[role]
+            tool = self._role_map[role]
+            # If the tool is an absolute path or in PATH, use it.
+            path = shutil.which(tool)
+            if path:
+                return path
+            # Otherwise, log warning and fall through to tiers
         
-        # 2. Fallbacks
+        # 2. Tiered Fallbacks with Discovery
         fallbacks = {
-            "editor": "nvim",
-            "explorer": "yazi",
-            "chat": "opencode",
-            "terminal": "zsh",
-            "viewer": "cat",
-            "search": "rg"
+            "editor": ["nvim", "vim", "vi", "nano", "micro"],
+            "explorer": ["yazi", "ranger", "mc", "ls"],
+            "chat": ["opencode", "aider", "bash"],
+            "terminal": ["zsh", "bash", "sh"],
+            "viewer": ["glow", "bat", "cat"],
+            "search": ["rg", "grep"]
         }
-        return fallbacks.get(role, "echo")
+        
+        options = fallbacks.get(role, [])
+        found = self._find_first_available(options)
+        if found:
+            return found
+            
+        # 3. Absolute Last Resort
+        defaults = {
+            "editor": "/usr/bin/vim",
+            "explorer": "/bin/ls",
+            "chat": "/bin/bash",
+            "terminal": "/usr/bin/zsh",
+            "viewer": "/bin/cat",
+            "search": "/usr/bin/grep"
+        }
+        return defaults.get(role, "echo")
 
     def get_launch_command(self, role: str) -> str:
         """
@@ -78,13 +124,19 @@ class CapabilityRegistry:
             "chat": CapabilityType.CHAT,
             "editor": CapabilityType.EDITOR,
             "explorer": CapabilityType.EXPLORER,
+            "menu": CapabilityType.MENU,
         }
         cap_type = cap_type_map.get(role)
         if cap_type:
             best = self.get_best(cap_type)
             if best and hasattr(best, "get_launch_command"):
                 return best.get_launch_command()
-        return self.get_tool_for_role(role)
+        
+        # Invariant: If there is no specific capability adapter with specialized
+        # socket logic, we defer to the raw command defined in the layout JSON.
+        # Returning a generic fallback tool here (like 'echo' or 'zsh') would
+        # silently destroy custom commands like 'npm run dev' or 'htop'.
+        return None
 
     def register(self, capability: Capability):
         """Registers an adapter instance for a specific capability."""

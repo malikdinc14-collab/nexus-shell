@@ -54,7 +54,7 @@ fi
 
 # 4. Prompt the user via tmux popup
 # --- SIGNAL HUD: SAFETY BLOCKED ---
-TELEMETRY_FILE="/tmp/nexus_telemetry.json"
+TELEMETRY_FILE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}/telemetry.json"
 PREV_STATUS=$(jq -r '.agent.status' "$TELEMETRY_FILE" 2>/dev/null || echo "idle")
 python3 -c "import json, os; data = json.load(open('$TELEMETRY_FILE')) if os.path.exists('$TELEMETRY_FILE') else {}; data.setdefault('agent', {})['status'] = 'safety_blocked'; data.setdefault('agent', {})['mission'] = 'Decision Required: $MATCHED_PATTERN'; json.dump(data, open('$TELEMETRY_FILE', 'w'))"
 

@@ -14,8 +14,11 @@ if [[ "$TMUX" == *"nexus_"* ]]; then
     # Prepend tools to PATH locally
     export PATH="$NEXUS_BIN:$PATH"
     
-    # Enable sync hooks (if they exist)
-    if [[ -f "$NEXUS_HOME/core/kernel/boot/shell_hooks.zsh" ]]; then
+    # Enable sync hooks (Universal POSIX fallback)
+    if [[ -f "$NEXUS_HOME/core/kernel/boot/shell_hooks.sh" ]]; then
+        source "$NEXUS_HOME/core/kernel/boot/shell_hooks.sh"
+    elif [[ -f "$NEXUS_HOME/core/kernel/boot/shell_hooks.zsh" ]]; then
+        # Backwards compatibility for zsh-only setups
         source "$NEXUS_HOME/core/kernel/boot/shell_hooks.zsh"
     fi
 fi

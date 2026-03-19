@@ -1,11 +1,12 @@
-import os
 import subprocess
+import json
+import sys
 import shutil
 from typing import List, Optional
 from ...base import MenuCapability
 
-class GumMenuAdapter(MenuCapability):
-    """Implementation of MenuCapability using the bash 'gum' tool."""
+class FzfMenuAdapter(MenuCapability):
+    """Implementation of MenuCapability using the 'fzf' command-line fuzzy finder."""
 
     @property
     def capability_type(self):
@@ -13,27 +14,38 @@ class GumMenuAdapter(MenuCapability):
         return CapabilityType.MENU
 
     @property
-    def capability_id(self): return "gum"
+    def capability_id(self): return "fzf"
 
     def is_available(self) -> bool:
-        return shutil.which("gum") is not None
+        return shutil.which("fzf") is not None
 
     def show_menu(self, options: List[str], prompt: str = "Select:") -> Optional[str]:
         if not options:
             return None
             
+        import tempfile
+        import os
+        
         try:
-            # Gum requires a TTY to render interactively. 
-            # We open /dev/tty so it can take over the terminal even if called via a script
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                f.write("\n".join(options))
+                temp_name = f.name
+                
+            fzf_cmd = f"fzf --prompt='{prompt} ' < {temp_name}"
+            
             with open("/dev/tty", "r") as tty:
-                result = subprocess.run(
-                    ["gum", "choose", "--header", prompt] + options,
+                process = subprocess.run(
+                    fzf_cmd,
+                    shell=True,
                     stdin=tty,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
                     text=True
                 )
-            if result.returncode == 0:
-                answer = result.stdout.strip()
+            
+            os.unlink(temp_name)
+            
+            if process.returncode == 0:
+                answer = process.stdout.strip()
                 return answer if answer else None
             return None
         except Exception:
@@ -44,27 +56,19 @@ class GumMenuAdapter(MenuCapability):
             return None
             
         import tempfile
-        import json
-        import sys
-        
-        try:
-            parsed_items = [json.loads(line) for line in items_json if line.strip()]
-        except json.JSONDecodeError:
-            return None
-            
-        labels = [item.get("label", "Unknown") for item in parsed_items]
-        labels_str = "\n".join(labels)
+        import os
         
         try:
             with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-                f.write(labels_str)
+                f.write("\n".join(items_json))
                 temp_name = f.name
-            
-            gum_cmd = f"gum filter < {temp_name} --placeholder='Nexus Pulse: {context}...' --indicator='→' --match.foreground='#00FFFF'"
+                
+            # Formatting for the engine JSON/TSV hybrid
+            fzf_cmd = f"fzf --ansi --header='Nexus Pulse: {context}' --reverse --height=100% --border=none --info=inline --prompt='> ' --with-nth=1 --delimiter='\\t' < {temp_name}"
             
             with open("/dev/tty", "r") as tty:
                 process = subprocess.run(
-                    gum_cmd,
+                    fzf_cmd,
                     shell=True,
                     stdin=tty,
                     stdout=subprocess.PIPE,
@@ -74,12 +78,9 @@ class GumMenuAdapter(MenuCapability):
             os.unlink(temp_name)
             
             if process.returncode == 0:
-                selected_label = process.stdout.strip()
-                for line in items_json:
-                    if json.loads(line).get("label") == selected_label:
-                        return line
+                selected_line = process.stdout.strip()
+                return selected_line
             return None
         except Exception as e:
-            print(f"Error in GumMenuAdapter: {e}", file=sys.stderr)
+            print(f"Error in FzfMenuAdapter: {e}", file=sys.stderr)
             return None
-
