@@ -270,6 +270,14 @@ class WorkspaceOrchestrator:
 
             if count_delta > 0:
                 for i in range(count_delta):
+                    # Redistribute space BEFORE each split to prevent "no space" errors
+                    # at small window sizes (e.g. 80x24 pre-attach default)
+                    if i > 0:
+                        if self.mux:
+                            self.mux.apply_layout(target_window, "even-horizontal")
+                        else:
+                            self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
+
                     if self.mux:
                         res = self.mux.split(target_window, direction="h")
                         if not res:
@@ -300,50 +308,23 @@ class WorkspaceOrchestrator:
             if len(actual_panes) != expected_count:
                 raise RuntimeError(f"Invariant Violation: Built {len(actual_panes)}, expected {expected_count}")
 
-            # 2. Geometry Scaling Phase (Proportional Restoration)
-            # Axiom G-02: Layout must be scaled to current terminal, not blindly restored.
-            saved_dims = snapshot.get("dimensions", {})
-            saved_w = saved_dims.get("w", 0)
-            saved_h = saved_dims.get("h", 0)
-
-            # Read current window dimensions
-            if self.mux:
-                dims = self.mux.get_dimensions(target_window)
-                cur_geo = f"{dims['width']},{dims['height']}"
-            else:
-                cur_geo = self.run_tmux(["display-message", "-t", target_window, "-p",
-                                         "#{window_width},#{window_height}"])
-            try:
-                cur_w, cur_h = (int(x) for x in cur_geo.split(","))
-            except Exception:
-                cur_w, cur_h = 80, 24
-
-            self.log(f"AXIOM-G2: Saved={saved_w}x{saved_h}, Current={cur_w}x{cur_h}")
-
-            # Only attempt layout string restore if terminal is large enough to
-            # accommodate all panes with a minimum 10-column, 4-row floor.
-            MIN_PANE_W, MIN_PANE_H = 10, 4
-            min_required_w = MIN_PANE_W * expected_count
-            min_required_h = MIN_PANE_H * 2  # rough estimate for vsplit rows
-
-            if layout_str and saved_w > 0 and cur_w >= min_required_w and cur_h >= min_required_h:
-                # Scale layout string dimensions proportionally
-                sx = cur_w / saved_w
-                sy = cur_h / saved_h
-                scaled = self._scale_layout_string(layout_str, sx, sy, cur_w, cur_h)
-                remapped = self._remap_layout_string(scaled, actual_panes)
-                ok = self.mux.apply_layout(target_window, remapped) if self.mux else \
-                    (self.run_tmux(["select-layout", "-t", target_window, remapped]) is not None)
-                if not ok:
-                    self.log("WARNING: Scaled layout rejected. Using even-horizontal fallback.")
-                    (self.mux.apply_layout(target_window, "even-horizontal") if self.mux else
-                     self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"]))
+            # 2. Deferred Layout Restoration
+            # Axiom G-02: Layout string must be applied AFTER client attaches
+            # at real terminal dimensions — not at the pre-attach 80x24 default.
+            if layout_str:
+                remapped = self._remap_layout_string(layout_str, actual_panes)
+                self._defer_layout_apply(target_window, remapped)
+                # Temporary even-horizontal so panes are usable during bind phase
+                if self.mux:
+                    self.mux.apply_layout(target_window, "even-horizontal")
                 else:
-                    self.log(f"AXIOM-G2: Proportional layout applied (scale {sx:.2f}x{sy:.2f}).")
+                    self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
             else:
-                self.log(f"AXIOM-G2: Terminal too narrow for saved layout. Using even-horizontal.")
-                (self.mux.apply_layout(target_window, "even-horizontal") if self.mux else
-                 self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"]))
+                self.log("AXIOM-G2: No layout string saved. Using even-horizontal.")
+                if self.mux:
+                    self.mux.apply_layout(target_window, "even-horizontal")
+                else:
+                    self.run_tmux(["select-layout", "-t", target_window, "even-horizontal"])
 
             # 3. Role/Command Binding Phase
             self.log("AXIOM-G: Binding roles and executing commands.")
@@ -364,6 +345,31 @@ class WorkspaceOrchestrator:
             self.log(f"ERROR: Momentum restoration failed: {e}")
             import traceback
             self.log(traceback.format_exc())
+
+    def _defer_layout_apply(self, target_window: str, layout_str: str):
+        """
+        Writes the remapped layout string to a temp script for bin/nxs to
+        apply AFTER resizing the tmux window to real terminal dimensions.
+
+        Why not apply here: the daemon runs pre-attach when the window is
+        80x24.  The layout string was saved at real dimensions (e.g. 149x41).
+        bin/nxs knows the real terminal size and resizes the window before
+        executing this script.
+        """
+        import getpass
+        user = getpass.getuser()
+        hook_script = Path(f"/tmp/nexus_{user}/momentum_layout.sh")
+        hook_script.parent.mkdir(parents=True, exist_ok=True)
+
+        sl_flag = f"-L {self.socket_label}" if self.socket_label else ""
+        hook_script.write_text(
+            f"#!/bin/sh\n"
+            f"tmux {sl_flag} select-layout -t '{target_window}' '{layout_str}'\n"
+            f"rm -f '{hook_script}'\n"
+        )
+        hook_script.chmod(0o755)
+
+        self.log(f"AXIOM-G2: Layout script written -> {hook_script}")
 
     def _scale_layout_string(self, layout_str: str, sx: float, sy: float,
                              cur_w: int, cur_h: int) -> str:

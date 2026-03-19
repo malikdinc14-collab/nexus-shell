@@ -422,6 +422,16 @@ echo "[*] Constructing Workspace: $COMPOSITION in Slot $WINDOW_IDX..."
 sleep 0.2 # Brief sync to ensure tmux session is fully registered
 "$Python_BIN" "$NEXUS_ENGINE/lib/daemon_client.py" boot_layout "{\"name\": \"$COMPOSITION\", \"window\": \"$SESSION_ID:$WINDOW_IDX\", \"project_root\": \"$PROJECT_ROOT\", \"socket_label\": \"$SOCKET_LABEL\"}"
 
+# Momentum Layout: apply saved layout AFTER attach resizes window to real terminal
+# attach-session is blocking — background process waits for resize, then applies
+MOMENTUM_SCRIPT="/tmp/nexus_$(whoami)/momentum_layout.sh"
+if [[ -f "$MOMENTUM_SCRIPT" ]]; then
+    (
+        sleep 0.5
+        bash "$MOMENTUM_SCRIPT" 2>/dev/null
+    ) &
+fi
+
 # Success Handover
 echo -e "\033[1;32m[*] Station Solidified. Attaching...\033[0m"
 export NEXUS_STATION_ACTIVE=1
