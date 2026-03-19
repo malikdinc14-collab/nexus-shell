@@ -35,7 +35,7 @@ class NexusStateEngine:
                     self.state = json.load(f)
                     self.active_file = self.state_file
                     return
-        except (PermissionError, OSError):
+        except (PermissionError, OSError, json.JSONDecodeError):
             pass
             
         try:
