@@ -38,7 +38,7 @@ class IntentResolver:
         try:
             res = subprocess.check_output([str(self.stack_bin), "list", role], stderr=subprocess.DEVNULL)
             return json.loads(res.decode())
-        except:
+        except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError, OSError):
             return {}
 
     def resolve(self, verb, item_type, payload, intent="push", caller="terminal"):
@@ -135,6 +135,63 @@ class IntentResolver:
         # 7. Fallback: RAW or Unknown
         plan["cmd"] = f"echo {payload}"
         return plan
+
+    def to_plan(self, verb, item_type, payload, intent="push", caller="terminal"):
+        """
+        Context-aware planning: resolve() with live stack state and nvim bridge,
+        then convert the result dict into a typed ExecutionPlan.
+
+        This is the preferred entry point for new code.
+        resolve() is kept for backward-compatible CLI / bash callers.
+        """
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from orchestration.planner import WorkflowPlanner, WorkflowStep, OpType, ExecutionPlan
+
+        plan_dict = self.resolve(verb, item_type, payload, intent, caller)
+        strategy  = plan_dict.get("strategy", "stack_push")
+        cmd       = plan_dict.get("cmd") or ""
+        name      = plan_dict.get("name") or item_type.lower()
+        role      = plan_dict.get("role", "local")
+        target    = plan_dict.get("target", "")
+
+        if strategy == "stack_switch":
+            step = WorkflowStep(
+                op=OpType.FOCUS,
+                capability="Multiplexer",
+                params={"pane_id": plan_dict.get("index", ""), "role": role},
+                strategy=strategy,
+            )
+        elif strategy == "remote_control":
+            step = WorkflowStep(
+                op=OpType.EDIT,
+                capability="Editor",
+                params={"path": payload, "command": cmd, "target": target},
+                strategy=strategy,
+            )
+        elif strategy == "exec_local":
+            step = WorkflowStep(
+                op=OpType.EXECUTE,
+                capability="Executor",
+                params={"command": cmd},
+                strategy="exec_local",
+            )
+        else:
+            # stack_push / stack_replace — spawn via multiplexer
+            step = WorkflowStep(
+                op=OpType.SPAWN,
+                capability="Multiplexer",
+                params={"command": cmd, "name": name, "role": role},
+                strategy=strategy,
+            )
+
+        return ExecutionPlan(
+            intent=f"{verb} {item_type}",
+            steps=[step],
+            metadata=plan_dict,
+        )
+
 
 if __name__ == "__main__":
     # Flexible CLI: 

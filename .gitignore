@@ -17,4 +17,4 @@ newfile.txt
 tests/simulations/
 core/kernel/layout/*.bak
 **/.agent-zero-stub/
-
+**/.zcompdump

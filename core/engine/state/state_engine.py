@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+SCHEMA_VERSION = 1
+
+
 class NexusStateEngine:
     def __init__(self, project_root=None):
         self.project_root = Path(project_root or os.getcwd()).resolve()
@@ -41,11 +44,12 @@ class NexusStateEngine:
                     self.state = json.load(f)
                     self.active_file = self.fallback_file
                     return
-        except:
+        except (PermissionError, OSError, json.JSONDecodeError):
             pass
             
         # Initial State if no file found or accessible
         self.state = {
+            "schema_version": SCHEMA_VERSION,
             "project": {"name": self.project_root.name, "path": str(self.project_root)},
             "ui": {"slots": {}, "stacks": {}},
             "context": {"last_opened_files": []}
@@ -88,11 +92,14 @@ class NexusStateEngine:
                 curr[k] = {}
             curr = curr[k]
         
-        # Automatic type conversion for common strings
+        # Automatic type conversion for unambiguous string scalars only
         if isinstance(value, str):
-            if value.lower() == 'true': value = True
-            elif value.lower() == 'false': value = False
-            elif value.isdigit(): value = int(value)
+            if value.lower() == 'true':
+                value = True
+            elif value.lower() == 'false':
+                value = False
+            elif value.isdigit() and not value.startswith(('/', '~', '.')):
+                value = int(value)
             
         curr[keys[-1]] = value
         self.save()
