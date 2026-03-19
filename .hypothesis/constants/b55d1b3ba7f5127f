@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/editor/neovim.py
+# hypothesis_version: 6.151.9
+
+[0.3, '#S', '--remote-send', '--server', '-p', 'display-message', 'nexus_', 'nexus_default', 'nvim', 'tmux', 'which']

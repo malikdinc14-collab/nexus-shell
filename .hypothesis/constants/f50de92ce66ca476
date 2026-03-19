@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/state/state_engine.py
+# hypothesis_version: 6.151.9
+
+['.', '.nexus', '__main__', 'context', 'false', 'get', 'last_opened_files', 'last_save', 'layout', 'name', 'path', 'project', 'r', 'session', 'session.layout', 'set', 'slots', 'stacks', 'state.json', 'storage', 'true', 'ui', 'w']

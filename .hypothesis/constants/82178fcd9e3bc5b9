@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/explorer/yazi.py
+# hypothesis_version: 6.151.9
+
+[0.5, 'config', 'is_dir', 'name', 'path', 'size', 'which', 'yazi']

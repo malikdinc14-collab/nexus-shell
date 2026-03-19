@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/api/control_bridge.py
+# hypothesis_version: 6.151.9
+
+['#S', '--remote-send', '--server', '-F', '-a', '-p', '-t', ':', '<CR>', 'Enter', 'NEXUS_HOME', 'NEXUS_STATE', '__main__', 'display-message', 'editor', 'list-panes', 'nexus_', 'nexus_default', 'nvim', 'send-keys', 'tmux']

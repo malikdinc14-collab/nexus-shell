@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/menu/gum_menu.py
+# hypothesis_version: 6.151.9
+
+['--header', '/dev/tty', 'Select:', 'Unknown', 'choose', 'gum', 'label', 'r', 'w']

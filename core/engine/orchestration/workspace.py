@@ -113,6 +113,25 @@ class WorkspaceOrchestrator:
             self.log(f"AXIOM-E: Tmux Command Failed!\nCMD: {' '.join(cmd+args)}\nERROR: {err_msg}")
             return ""
 
+    def _resolve_composition(self, layout_name: str) -> Optional[Dict[str, Any]]:
+        """Resolves layout name to JSON data."""
+        paths = [
+            self.nexus_home / f"core/ui/compositions/{layout_name}.json",
+            self.project_root / f".nexus/compositions/{layout_name}.json"
+        ]
+        
+        comp_json = None
+        for p in paths:
+            if p.exists():
+                comp_json = p
+                break
+        
+        if not comp_json:
+            return None
+
+        with open(comp_json) as f:
+            return json.load(f)
+
     def apply_composition(self, layout_name: str, target_window: str):
         """Resolves and applies a named JSON composition."""
         try:
@@ -141,24 +160,11 @@ class WorkspaceOrchestrator:
                     self._finalize(target_window)
                     return
             
-            # 1. Resolve JSON Path
-            paths = [
-                self.nexus_home / f"core/ui/compositions/{layout_name}.json",
-                self.project_root / f".nexus/compositions/{layout_name}.json"
-            ]
-            
-            comp_json = None
-            for p in paths:
-                if p.exists():
-                    comp_json = p
-                    break
-            
-            if not comp_json:
+            # 1. Resolve JSON data
+            data = self._resolve_composition(layout_name)
+            if not data:
                 self.log(f"Error: Composition '{layout_name}' not found.")
                 return
-
-            with open(comp_json) as f:
-                data = json.load(f)
 
             # 2. Get Starting Pane
             pane_list = self.mux.list_panes(target_window) if self.mux else []

@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/menu/fzf_menu.py
+# hypothesis_version: 6.151.9
+
+['/dev/tty', 'Select:', 'fzf', 'r', 'w']

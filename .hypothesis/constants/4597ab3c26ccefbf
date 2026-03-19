@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/api/intent_resolver.py
+# hypothesis_version: 6.151.9
+
+[':debug', ':focus', ':profile', ':workspace', 'ACTION', 'AGENT', 'DOC', 'Invalid arguments', 'MODEL', 'N/A', 'NEXUS_EDITOR', 'NEXUS_HOME', 'NOTE', 'PLACE', 'PROJECT', 'ROLE', '__main__', 'a', 'chat', 'cmd', 'editor', 'error', 'exec_local', 'index', 'list', 'local', 'menu', 'name', 'nvim', 'payload', 'push', 'remote_control', 'replace', 'role', 'run', 'stack_push', 'stack_replace', 'stack_switch', 'strategy', 'swap', 'tabs', 'target', 'terminal', '|']

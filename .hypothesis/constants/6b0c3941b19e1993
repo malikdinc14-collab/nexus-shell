@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/multiplexer/null.py
+# hypothesis_version: 6.151.9
+
+[193, 220, '<none>', '@nexus_role', '@nexus_stack_id', '[NullAdapter State]', 'apply_layout', 'attach', 'create_session', 'create_window', 'cwd', 'h', 'height', 'kill_pane', 'kill_session', 'method', 'null_session:0', 'select_pane', 'send_command', 'send_keys', 'set_env', 'set_tag', 'set_title', 'split', 'width']

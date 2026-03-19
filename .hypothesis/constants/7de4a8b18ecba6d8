@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/api/module_registry.py
+# hypothesis_version: 6.151.9
+
+["'", '.nexus', 'NEXUS_HOME', 'PROJECT_ROOT', '__main__', 'cat', 'chat', 'config', 'editor', 'explorer', 'ls -la', 'modules.yaml', 'r', 'roles', 'terminal', 'vi', 'viewer', 'zsh']

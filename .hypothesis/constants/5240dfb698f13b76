@@ -1,0 +1,4 @@
+# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/agent/opencode.py
+# hypothesis_version: 6.151.9
+
+[1.5, 'min_height', 'min_width', 'opencode', 'startup_delay', 'which']
