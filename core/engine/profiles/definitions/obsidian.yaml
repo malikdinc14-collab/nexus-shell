@@ -1,0 +1,8 @@
+name: obsidian
+description: "Note-taking — navigator left, editor center, preview right"
+composition: obsidian
+theme: catppuccin
+hud:
+  modules: [tabs, word_count, daily_note_date, clock]
+  refresh_ms: 5000
+env: {}

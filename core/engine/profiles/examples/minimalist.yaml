@@ -1,0 +1,8 @@
+name: minimalist
+description: "Clean, distraction-free coding"
+composition: focused
+theme: catppuccin
+hud:
+  modules: [tabs, clock]
+  refresh_ms: 5000
+env: {}

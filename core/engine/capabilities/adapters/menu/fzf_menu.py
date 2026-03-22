@@ -3,10 +3,17 @@ import json
 import sys
 import shutil
 from typing import List, Optional
-from ...base import MenuCapability
+from ...base import MenuCapability, AdapterManifest, CapabilityType
 
 class FzfMenuAdapter(MenuCapability):
     """Implementation of MenuCapability using the 'fzf' command-line fuzzy finder."""
+
+    manifest = AdapterManifest(
+        name="fzf",
+        capability_type=CapabilityType.MENU,
+        binary="fzf",
+        priority=100,
+    )
 
     @property
     def capability_type(self):

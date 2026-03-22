@@ -6,15 +6,16 @@ Nexus Capability Registry (V3)
 Manages the lifecycle and discovery of capabilities and their adapters.
 """
 
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Tuple, Type
 from pathlib import Path
-from .base import Capability, CapabilityType
+from .base import Capability, CapabilityType, AdapterManifest
 from .adapters.agent.opencode import OpenCodeAdapter
 from .adapters.explorer.yazi import YaziAdapter
 from .adapters.editor.neovim import NeovimAdapter
 from .adapters.menu.gum_menu import GumMenuAdapter
 from .adapters.menu.textual_menu import TextualMenuAdapter
 from .adapters.menu.fzf_menu import FzfMenuAdapter
+from .adapters.menu.null_menu import NullMenuAdapter
 
 class CapabilityRegistry:
     """Central registry for discovering which tool implements which capability."""
@@ -28,7 +29,12 @@ class CapabilityRegistry:
         self._auto_register()
 
     def _auto_register(self):
-        """Auto-register known adapters."""
+        """Auto-register known adapters.
+
+        NullMenuAdapter is always registered last as the lowest-priority
+        fallback for MENU capability. It guarantees that get_best(MENU)
+        never returns None.
+        """
         adapters = [
             OpenCodeAdapter(),
             YaziAdapter(),
@@ -40,6 +46,9 @@ class CapabilityRegistry:
         for a in adapters:
             if a.is_available():
                 self.register(a)
+
+        # Always register NullMenuAdapter as last-resort fallback
+        self.register(NullMenuAdapter())
 
     def _load_role_map(self) -> Dict[str, str]:
         """Loads the role-to-tool mapping from the user's profile.
@@ -143,13 +152,32 @@ class CapabilityRegistry:
         self._capabilities[capability.capability_type].append(capability)
 
     def get_best(self, cap_type: CapabilityType) -> Optional[Capability]:
-        """Returns the most appropriate available capability provider."""
+        """Returns the highest-priority available capability provider.
+
+        When adapters declare a manifest, they are sorted by
+        manifest.priority (highest first). Adapters without a manifest
+        are treated as priority 0 and appear after all manifested ones.
+        """
         available = [c for c in self._capabilities[cap_type] if c.is_available()]
-        return available[0] if available else None
+        if not available:
+            return None
+        available.sort(
+            key=lambda c: c.manifest.priority if c.manifest else 0,
+            reverse=True,
+        )
+        return available[0]
 
     def list_all(self, cap_type: CapabilityType) -> List[Capability]:
         """Lists all registered providers for a type."""
         return self._capabilities.get(cap_type, [])
+
+    def list_all_with_manifests(
+        self, cap_type: CapabilityType
+    ) -> List[Tuple[Capability, Optional[AdapterManifest]]]:
+        """Returns all registered adapters for a type paired with their manifest."""
+        return [
+            (c, c.manifest) for c in self._capabilities.get(cap_type, [])
+        ]
 
 # Global Registry Instance
 REGISTRY = CapabilityRegistry()

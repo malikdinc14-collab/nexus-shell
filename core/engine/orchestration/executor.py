@@ -76,7 +76,11 @@ class ExecutionCoordinator:
                 return self._handle_focus(index, step)
 
             elif step.op == OpType.RENDER:
-                return self._handle_render(index, step)
+                # RENDERER capability removed — render falls back to stdout
+                output = step.params.get("path") or step.params.get("content", "")
+                if output:
+                    print(output)
+                return ExecutionResult(success=True, step_index=index)
 
             elif step.op == OpType.WAIT:
                 # Placeholder — future: block until event bus emits signal
@@ -179,21 +183,5 @@ class ExecutionCoordinator:
         mux.select_pane(pane_id)
         return ExecutionResult(True, step_index=index)
 
-    def _handle_render(self, index: int, step: WorkflowStep) -> ExecutionResult:
-        """Render/display content. Falls back to stdout if no renderer registered."""
-        cap = REGISTRY.get_best(CapabilityType.RENDERER)
-
-        if not cap:
-            # Graceful fallback: print path or content to stdout
-            output = step.params.get("path") or step.params.get("content", "")
-            if output:
-                print(output)
-            return ExecutionResult(True, step_index=index)
-
-        # Renderer capability exists — use it via generic trigger_action
-        path    = step.params.get("path", "")
-        content = step.params.get("content", "")
-        payload = path or content
-        success = cap.is_available()  # placeholder until RendererCapability ABC is defined
-        logger.debug(f"[Executor] Renderer available={success}, payload={payload!r}")
-        return ExecutionResult(success, index, "" if success else "renderer not available")
+    # _handle_render removed — RENDERER capability type was deleted.
+    # Render ops now inline to stdout in _execute_step.

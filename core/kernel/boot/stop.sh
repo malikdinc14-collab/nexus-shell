@@ -23,7 +23,6 @@ fi
 # 2. Kill Background Services
 echo "[*] Reaping Background Daemons..."
 pkill -f "telemetry_aggregator.sh" 2>/dev/null
-pkill -f "event_server.py" 2>/dev/null
 pkill -f "daemon.py" 2>/dev/null
 pkill -f "sid.py" 2>/dev/null
 pkill -f "follower_bridge.sh" 2>/dev/null

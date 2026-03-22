@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "core/engine/api"))
 sys.path.insert(0, str(PROJECT_ROOT / "core"))
 
-from nexus_ctl import parse_legacy, main, execute_plan
+from intent_resolver_legacy import parse_legacy, main, execute_plan
 
 
 # ── parse_legacy ──────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ GOOD_PLAN = {"strategy": "stack_push", "role": "editor",
 
 class TestMainArgParsing:
     def _run(self, argv, plan=GOOD_PLAN):
-        with patch("nexus_ctl.IntentResolver") as MockResolver:
+        with patch("intent_resolver_legacy.IntentResolver") as MockResolver:
             MockResolver.return_value.resolve.return_value = plan
             return main(argv)
 
@@ -80,27 +80,27 @@ class TestMainArgParsing:
         assert rc == 0
 
     def test_no_args_returns_nonzero(self):
-        with patch("nexus_ctl.IntentResolver"):
+        with patch("intent_resolver_legacy.IntentResolver"):
             with pytest.raises(SystemExit) as exc_info:
                 main([])
         assert exc_info.value.code != 0
 
     def test_intent_flag_passed_to_resolver(self):
-        with patch("nexus_ctl.IntentResolver") as MockResolver:
+        with patch("intent_resolver_legacy.IntentResolver") as MockResolver:
             MockResolver.return_value.resolve.return_value = GOOD_PLAN
             main(["ROLE", "editor", "--intent", "replace"])
             args = MockResolver.return_value.resolve.call_args
             assert "replace" in args[0]
 
     def test_caller_flag_passed_to_resolver(self):
-        with patch("nexus_ctl.IntentResolver") as MockResolver:
+        with patch("intent_resolver_legacy.IntentResolver") as MockResolver:
             MockResolver.return_value.resolve.return_value = GOOD_PLAN
             main(["ROLE", "editor", "--caller", "menu"])
             args = MockResolver.return_value.resolve.call_args
             assert "menu" in args[0]
 
     def test_resolver_exception_outputs_json_error(self, capsys):
-        with patch("nexus_ctl.IntentResolver") as MockResolver:
+        with patch("intent_resolver_legacy.IntentResolver") as MockResolver:
             MockResolver.return_value.resolve.side_effect = RuntimeError("oops")
             rc = main(["ROLE", "editor"])
         assert rc == 1
@@ -108,7 +108,7 @@ class TestMainArgParsing:
         assert "error" in out
 
     def test_empty_plan_outputs_json_error(self, capsys):
-        with patch("nexus_ctl.IntentResolver") as MockResolver:
+        with patch("intent_resolver_legacy.IntentResolver") as MockResolver:
             MockResolver.return_value.resolve.return_value = {}
             rc = main(["ROLE", "editor"])
         assert rc == 1

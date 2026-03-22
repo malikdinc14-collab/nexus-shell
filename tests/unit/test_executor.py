@@ -312,22 +312,19 @@ class TestHandleFocus:
 # ── RENDER handler ────────────────────────────────────────────────────────────
 
 class TestHandleRender:
-    def test_no_renderer_falls_back_to_stdout(self, capsys):
+    def test_render_falls_back_to_stdout(self, capsys):
         coord = ExecutionCoordinator()
-        with patch("engine.orchestration.executor.REGISTRY") as mock_reg:
-            mock_reg.get_best.return_value = None
-            step = render_step("README.md")
-            result = coord._handle_render(0, step)
+        step = render_step("README.md")
+        result = coord._execute_step(0, step)
         assert result.success
         captured = capsys.readouterr()
         assert "README.md" in captured.out
 
-    def test_no_renderer_with_content_param(self, capsys):
+    def test_render_with_content_param(self, capsys):
         coord = ExecutionCoordinator()
         step = WorkflowStep(op=OpType.RENDER, capability="Renderer",
                             params={"content": "hello world"})
-        with patch("engine.orchestration.executor.REGISTRY") as mock_reg:
-            mock_reg.get_best.return_value = None
-            coord._handle_render(0, step)
+        result = coord._execute_step(0, step)
+        assert result.success
         captured = capsys.readouterr()
         assert "hello world" in captured.out

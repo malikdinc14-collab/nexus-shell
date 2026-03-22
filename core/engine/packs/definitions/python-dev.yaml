@@ -1,0 +1,86 @@
+name: python-dev
+version: "1.0.0"
+description: "Full-featured Python development environment with testing, linting, and REPL support"
+
+markers:
+  - pyproject.toml
+  - setup.py
+  - requirements.txt
+  - "*.py"
+
+capabilities:
+  - capability_type: editor
+    adapter: neovim
+    required: true
+  - capability_type: explorer
+    adapter: yazi
+    required: false
+
+compositions:
+  - vscodelike
+  - simple
+
+hud_modules:
+  - id: git_branch
+    label: "Branch"
+    resolver: git_branch
+    position: left
+    color: "#a6e3a1"
+  - id: test_status
+    label: "Tests"
+    resolver: test_status
+    position: right
+    color: "#f38ba8"
+  - id: python_version
+    label: "Python"
+    resolver: python_version
+    position: right
+    color: "#89b4fa"
+  - id: virtualenv
+    label: "Venv"
+    resolver: virtualenv
+    position: right
+    color: "#f9e2af"
+
+commands:
+  - id: pack.python-dev.run-tests
+    label: "Run Tests"
+    command: "pytest"
+    icon: "flask"
+    description: "Run the full pytest suite"
+  - id: pack.python-dev.lint
+    label: "Lint"
+    command: "ruff check ."
+    icon: "search"
+    description: "Run ruff linter on the project"
+  - id: pack.python-dev.format
+    label: "Format"
+    command: "ruff format ."
+    icon: "paintbrush"
+    description: "Auto-format with ruff"
+  - id: pack.python-dev.repl
+    label: "REPL"
+    command: "ipython"
+    icon: "terminal"
+    description: "Open an IPython interactive session"
+  - id: pack.python-dev.debug
+    label: "Debug"
+    command: "python -m pdb"
+    icon: "bug"
+    description: "Launch the Python debugger"
+
+connectors:
+  - name: test-on-save
+    trigger: "editor.save:*.py"
+    action: "pytest --tb=short -q"
+
+keybinds:
+  "Alt+r": "pack.python-dev.run-tests"
+
+env_vars:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+tools:
+  executor: ipython
+  linter: ruff
+  formatter: ruff

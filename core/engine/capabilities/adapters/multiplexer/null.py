@@ -18,7 +18,7 @@ Usage:
 """
 
 from typing import List, Optional, Dict, Any
-from ...base import MultiplexerCapability, PaneInfo, CapabilityType
+from ...base import MultiplexerCapability, PaneInfo, CapabilityType, AdapterManifest
 
 
 class NullAdapter(MultiplexerCapability):
@@ -26,6 +26,12 @@ class NullAdapter(MultiplexerCapability):
     A fully in-memory MultiplexerCapability that never spawns a process.
     All state lives in Python dictionaries.
     """
+
+    manifest = AdapterManifest(
+        name="null-multiplexer",
+        capability_type=CapabilityType.MULTIPLEXER,
+        priority=0,
+    )
 
     def __init__(self, initial_pane_count: int = 1):
         # Simulate the session having one pane already (like a real tmux window)

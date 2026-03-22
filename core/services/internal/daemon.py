@@ -181,12 +181,6 @@ class NexusDaemon:
         return WindowAdapter()
 
     def _ensure_sub_services(self):
-        bus_py = NEXUS_HOME / "core/engine/bus/event_server.py"
-        bus_log = f"/tmp/nexus_{USER}/bus_global.log"
-        if bus_py.exists():
-            self.log("Starting Event Bus...")
-            subprocess.Popen([sys.executable, str(bus_py)], stdout=open(bus_log, "a"), stderr=subprocess.STDOUT, preexec_fn=os.setpgrp)
-
         sid_py = NEXUS_HOME / "core/engine/ai/sid.py"
         sid_log = f"/tmp/nexus_{USER}/sid_global.log"
         if sid_py.exists():

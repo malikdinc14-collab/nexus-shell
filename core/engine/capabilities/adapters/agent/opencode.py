@@ -16,13 +16,20 @@ correct decisions without hardcoding tool names in kernel scripts.
 import subprocess
 from pathlib import Path
 from typing import Optional, List, Dict
-from ...base import ChatCapability
+from ...base import ChatCapability, AdapterManifest, CapabilityType
 
 
 class OpenCodeAdapter(ChatCapability):
     """
     Adapter for the OpenCode AI agent TUI.
     """
+
+    manifest = AdapterManifest(
+        name="opencode",
+        capability_type=CapabilityType.CHAT,
+        binary="opencode",
+        priority=100,
+    )
 
     # Invariant: OpenCode requires an attached TTY before launch.
     # Declare the minimum startup delay (seconds) needed after pane creation.

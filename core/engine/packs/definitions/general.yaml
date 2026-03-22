@@ -1,0 +1,72 @@
+name: general
+version: "1.0.0"
+description: "Default general-purpose environment used as fallback when no domain-specific pack matches"
+
+markers: []
+
+capabilities:
+  - capability_type: editor
+    adapter: neovim
+    required: true
+  - capability_type: explorer
+    adapter: yazi
+    required: false
+
+compositions:
+  - simple
+  - vscodelike
+  - quad
+
+hud_modules:
+  - id: git_branch
+    label: "Branch"
+    resolver: git_branch
+    position: left
+    color: "#a6e3a1"
+  - id: clock
+    label: "Clock"
+    resolver: clock
+    position: right
+    color: "#cdd6f4"
+  - id: tabs
+    label: "Tabs"
+    resolver: tabs
+    position: left
+    color: "#89b4fa"
+
+commands:
+  - id: pack.general.terminal
+    label: "Terminal"
+    command: "zsh"
+    icon: "terminal"
+    description: "Open a new shell session"
+  - id: pack.general.files
+    label: "Files"
+    command: "yazi"
+    icon: "folder"
+    description: "Browse files with yazi"
+  - id: pack.general.git
+    label: "Git"
+    command: "lazygit"
+    icon: "git-branch"
+    description: "Interactive git interface"
+  - id: pack.general.processes
+    label: "Processes"
+    command: "btop"
+    icon: "activity"
+    description: "System resource monitor"
+  - id: pack.general.search
+    label: "Search"
+    command: "rg"
+    icon: "search"
+    description: "Ripgrep full-text search"
+
+connectors: []
+
+keybinds: {}
+
+env_vars: {}
+
+tools:
+  shell: zsh
+  git: lazygit

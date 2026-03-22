@@ -1,0 +1,56 @@
+kind: project
+name: nexus-shell
+version: 0.1.0
+description: "nexus-shell \u2014 powered by GAP (software-engineering)"
+extends:
+- protocol: software-engineering
+flow:
+- step: idea
+  name: Conceptual Alignment
+  template: idea
+  artifact: .gap/idea.md
+  gate: true
+  description: Define the core concept, problem, and key values.
+- step: requirements
+  name: Requirements & Analysis
+  template: requirements
+  artifact: .gap/requirements.md
+  gate: true
+  description: Define the problem, user stories, and measurable success criteria.
+- step: design
+  name: Structural Design
+  template: design
+  artifact: .gap/design.md
+  gate: true
+  needs:
+  - requirements
+  description: Architecture, Data Models, and Interface Contracts.
+- step: tasks
+  name: Logical Task Decomposition
+  template: task
+  artifact: .gap/tasks.md
+  gate: true
+  needs:
+  - design
+  description: Phased action plan traceable to design.
+- step: plan
+  name: Execution Policy
+  template: plan
+  artifact: .gap/plan.md
+  gate: true
+  needs:
+  - tasks
+  description: Supervisor-defined execution venues (locality) and model assignment.
+- step: implementation
+  name: Implementation
+  artifact: src/*
+  gate: false
+  needs:
+  - plan
+  description: Code generation and implementation.
+templates:
+  idea: templates/idea.md
+  requirements: templates/requirements.md
+  design: templates/design.md
+  task: templates/task.md
+  plan: templates/plan.md

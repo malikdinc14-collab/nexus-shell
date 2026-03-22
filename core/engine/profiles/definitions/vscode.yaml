@@ -1,0 +1,8 @@
+name: vscode
+description: "VSCode-like layout — explorer left, editor center, terminal bottom"
+composition: vscodelike
+theme: catppuccin
+hud:
+  modules: [tabs, git_branch, test_status, file_path, clock]
+  refresh_ms: 3000
+env: {}

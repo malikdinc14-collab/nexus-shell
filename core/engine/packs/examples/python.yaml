@@ -1,0 +1,19 @@
+name: python
+version: "1.0.0"
+description: "Python development pack"
+markers: [pyproject.toml, setup.py, requirements.txt]
+tools:
+  executor: ipython
+connectors:
+  - name: test-on-save
+    trigger: {type: fs.file.saved, filter: {pattern: "*.py"}}
+    action: {shell: "pytest --tb=short -q"}
+menu_nodes:
+  - id: pack.python.run-tests
+    label: "Run Tests"
+    type: action
+    command: "pytest"
+  - id: pack.python.repl
+    label: "Open REPL"
+    type: action
+    command: "ipython"

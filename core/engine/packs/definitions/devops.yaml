@@ -1,0 +1,78 @@
+name: devops
+version: "1.0.0"
+description: "Infrastructure and DevOps environment with Docker, Kubernetes, Terraform, and CI/CD tooling"
+
+markers:
+  - Dockerfile
+  - docker-compose.yml
+  - k8s/
+  - terraform/
+  - .github/workflows/
+
+capabilities:
+  - capability_type: editor
+    adapter: neovim
+    required: true
+  - capability_type: explorer
+    adapter: yazi
+    required: false
+
+compositions:
+  - devops
+  - quad
+
+hud_modules:
+  - id: docker_status
+    label: "Docker"
+    resolver: docker_status
+    position: right
+    color: "#89b4fa"
+  - id: cluster_health
+    label: "Cluster"
+    resolver: cluster_health
+    position: right
+    color: "#a6e3a1"
+  - id: deploy_status
+    label: "Deploy"
+    resolver: deploy_status
+    position: right
+    color: "#f9e2af"
+
+commands:
+  - id: pack.devops.containers
+    label: "Containers"
+    command: "lazydocker"
+    icon: "box"
+    description: "Interactive Docker container management"
+  - id: pack.devops.k8s
+    label: "Kubernetes"
+    command: "k9s"
+    icon: "cloud"
+    description: "Interactive Kubernetes cluster explorer"
+  - id: pack.devops.ssh-tunnel
+    label: "SSH Tunnel"
+    command: "ssh-tunnel"
+    icon: "lock"
+    description: "Establish SSH tunnel to remote host"
+  - id: pack.devops.logs
+    label: "Logs"
+    command: "docker logs -f"
+    icon: "scroll"
+    description: "Follow Docker container logs"
+  - id: pack.devops.deploy
+    label: "Deploy"
+    command: "deploy"
+    icon: "rocket"
+    description: "Trigger deployment pipeline"
+
+connectors:
+  - name: notify-on-deploy
+    trigger: "deploy.complete:*"
+    action: "notify deployment finished"
+
+keybinds:
+  "Alt+d": "pack.devops.containers"
+
+tools:
+  docker: lazydocker
+  kubernetes: k9s

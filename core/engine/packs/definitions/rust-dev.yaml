@@ -1,0 +1,86 @@
+name: rust-dev
+version: "1.0.0"
+description: "Complete Rust development environment with cargo integration, clippy, and documentation"
+
+markers:
+  - Cargo.toml
+  - "*.rs"
+
+capabilities:
+  - capability_type: editor
+    adapter: neovim
+    required: true
+  - capability_type: explorer
+    adapter: yazi
+    required: false
+
+compositions:
+  - vscodelike
+  - simple
+
+hud_modules:
+  - id: git_branch
+    label: "Branch"
+    resolver: git_branch
+    position: left
+    color: "#a6e3a1"
+  - id: cargo_status
+    label: "Cargo"
+    resolver: cargo_status
+    position: right
+    color: "#fab387"
+  - id: test_results
+    label: "Tests"
+    resolver: test_results
+    position: right
+    color: "#f38ba8"
+  - id: clippy_warnings
+    label: "Clippy"
+    resolver: clippy_warnings
+    position: right
+    color: "#f9e2af"
+
+commands:
+  - id: pack.rust-dev.build
+    label: "Build"
+    command: "cargo build"
+    icon: "hammer"
+    description: "Compile the current crate"
+  - id: pack.rust-dev.test
+    label: "Test"
+    command: "cargo test"
+    icon: "flask"
+    description: "Run cargo test suite"
+  - id: pack.rust-dev.check
+    label: "Check"
+    command: "cargo check"
+    icon: "check"
+    description: "Fast type-check without codegen"
+  - id: pack.rust-dev.clippy
+    label: "Clippy"
+    command: "cargo clippy"
+    icon: "search"
+    description: "Run clippy lint analysis"
+  - id: pack.rust-dev.run
+    label: "Run"
+    command: "cargo run"
+    icon: "play"
+    description: "Build and run the binary"
+  - id: pack.rust-dev.doc
+    label: "Docs"
+    command: "cargo doc --open"
+    icon: "book"
+    description: "Generate and open documentation"
+
+connectors:
+  - name: check-on-save
+    trigger: "editor.save:*.rs"
+    action: "cargo check"
+
+keybinds:
+  "Alt+r": "pack.rust-dev.test"
+  "Alt+b": "pack.rust-dev.build"
+
+tools:
+  executor: cargo
+  linter: clippy

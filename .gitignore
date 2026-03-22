@@ -21,3 +21,5 @@ core/kernel/layout/*.bak
 **/.zsh_history
 .nexus/session_state.json
 .hypothesis/
+templates
+Plans/

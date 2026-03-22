@@ -1,7 +1,7 @@
 import os
 import subprocess
 from typing import List, Dict, Any, Optional
-from ...base import ExplorerCapability
+from ...base import ExplorerCapability, AdapterManifest, CapabilityType
 
 
 class YaziAdapter(ExplorerCapability):
@@ -9,6 +9,13 @@ class YaziAdapter(ExplorerCapability):
 
     # Yazi is a TUI — it needs an attached terminal before launch.
     STARTUP_DELAY_SECS: float = 0.5
+
+    manifest = AdapterManifest(
+        name="yazi",
+        capability_type=CapabilityType.EXPLORER,
+        binary="yazi",
+        priority=100,
+    )
 
     def __init__(self, nexus_home: str = ""):
         self.nexus_home = nexus_home

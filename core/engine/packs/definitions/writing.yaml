@@ -1,0 +1,69 @@
+name: writing
+version: "1.0.0"
+description: "Prose writing environment inspired by Obsidian, with markdown preview, word count, and export"
+
+markers:
+  - "*.md"
+  - vault/
+  - .obsidian/
+  - manuscript/
+
+capabilities:
+  - capability_type: editor
+    adapter: neovim
+    required: true
+
+compositions:
+  - writer
+  - simple
+
+hud_modules:
+  - id: word_count
+    label: "Words"
+    resolver: word_count
+    position: right
+    color: "#cdd6f4"
+  - id: chapter_progress
+    label: "Progress"
+    resolver: chapter_progress
+    position: right
+    color: "#a6e3a1"
+  - id: daily_note_date
+    label: "Date"
+    resolver: daily_note_date
+    position: left
+    color: "#89b4fa"
+
+commands:
+  - id: pack.writing.preview
+    label: "Preview"
+    command: "glow"
+    icon: "eye"
+    description: "Render markdown with glow"
+  - id: pack.writing.export-pdf
+    label: "Export PDF"
+    command: "pandoc -o output.pdf"
+    icon: "file"
+    description: "Export current document to PDF via pandoc"
+  - id: pack.writing.search-notes
+    label: "Search Notes"
+    command: "rg --type md"
+    icon: "search"
+    description: "Full-text search across all markdown files"
+  - id: pack.writing.new-daily
+    label: "New Daily Note"
+    command: "create today's note"
+    icon: "calendar"
+    description: "Create a daily note for today"
+
+connectors:
+  - name: export-on-save
+    trigger: "editor.save:*.md"
+    action: "pandoc preview"
+
+env_vars:
+  NEXUS_PROSE_MODE: "1"
+
+tools:
+  renderer: glow
+  exporter: pandoc

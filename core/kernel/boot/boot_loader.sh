@@ -17,9 +17,16 @@ log() { echo "[$(date +%T)] [Boot] $*" >> "$LOG_FILE"; }
 case "$ACTION" in
     start)
         log "Starting boot sequence..."
-        # 1. Discover boot items using the menu engine
-        # We use the CLI engine directly to avoid TUI hangs.
-        BOOT_ITEMS=$(python3 "$NEXUS_HOME/modules/menu/lib/core/menu_engine.py" --context boot 2>/dev/null)
+        # 1. Discover boot items via the Command Graph CLI
+        PYTHONPATH="$NEXUS_HOME/core" BOOT_ITEMS=$(python3 -m engine.cli.nexus_ctl menu open 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for item in data.get('items', []):
+        if item.get('type') == 'action' and item.get('scope') == 'boot':
+            print(json.dumps(item))
+except: pass
+" 2>/dev/null)
         
         if [[ -z "$BOOT_ITEMS" || "$BOOT_ITEMS" == *"Empty:"* ]]; then
             log "No boot items found."

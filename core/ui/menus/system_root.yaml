@@ -1,0 +1,148 @@
+# System-generated root menu tree for the Command Graph
+# Merges with user/pack/profile nodes at runtime
+
+- id: compositions
+  label: "Compositions"
+  type: group
+  icon: "layout"
+  children:
+    - id: compositions.current
+      label: "(active composition)"
+      type: live_source
+      resolver: "nexus.live.current_composition"
+      timeout_ms: 1000
+
+- id: profiles
+  label: "Profiles"
+  type: group
+  icon: "user"
+  children:
+    - id: profiles.current
+      label: "(active profile)"
+      type: live_source
+      resolver: "nexus.live.current_profile"
+      timeout_ms: 1000
+
+- id: packs
+  label: "Packs"
+  type: group
+  icon: "package"
+  children:
+    - id: packs.suggested
+      label: "Suggested for this project"
+      type: live_source
+      resolver: "nexus.live.suggested_packs"
+      timeout_ms: 3000
+    - id: packs.enabled
+      label: "Currently enabled"
+      type: live_source
+      resolver: "nexus.live.enabled_packs"
+      timeout_ms: 1000
+
+- id: actions
+  label: "Actions"
+  type: group
+  icon: "zap"
+  children:
+    - id: actions.save-workspace
+      label: "Save Workspace"
+      type: action
+      action_kind: shell
+      command: "nexus-ctl workspace save"
+    - id: actions.restore-workspace
+      label: "Restore Workspace..."
+      type: action
+      action_kind: shell
+      command: "nexus-ctl workspace restore"
+    - id: actions.reload-config
+      label: "Reload Config"
+      type: action
+      action_kind: internal
+      command: "nexus-ctl config reload"
+    - id: actions.scripts
+      label: "Scripts"
+      type: group
+      children: []
+
+- id: settings
+  label: "Settings"
+  type: group
+  icon: "gear"
+  children:
+    - id: settings.keymap
+      label: "Keybindings"
+      type: setting
+      config_file: "keymap.conf"
+      tags: [keys, bindings, shortcuts]
+    - id: settings.theme
+      label: "Theme"
+      type: setting
+      config_file: "theme.yaml"
+      tags: [colors, appearance]
+    - id: settings.hud
+      label: "HUD Modules"
+      type: setting
+      config_file: "hud.yaml"
+      tags: [status, telemetry]
+    - id: settings.adapters
+      label: "Default Adapters"
+      type: setting
+      config_file: "adapters.yaml"
+      tags: [tools, defaults]
+    - id: settings.connectors
+      label: "Connectors"
+      type: setting
+      config_file: "connectors.yaml"
+      tags: [wiring, events, automation]
+    - id: settings.workspace
+      label: "Workspace Config"
+      type: setting
+      config_file: ".nexus/workspace.yaml"
+      tags: [project, workspace]
+    - id: settings.tab-bar
+      label: "Tab Bar"
+      type: setting
+      config_file: "tabbar.yaml"
+      tags: [tabs, display, pane]
+
+- id: live
+  label: "Live"
+  type: group
+  icon: "radio"
+  children:
+    - id: live.tabs
+      label: "Active Tabs"
+      type: live_source
+      resolver: "nexus.live.active_tabs"
+      timeout_ms: 1000
+    - id: live.processes
+      label: "Running Processes"
+      type: live_source
+      resolver: "nexus.live.processes"
+      timeout_ms: 2000
+    - id: live.ports
+      label: "Open Ports"
+      type: live_source
+      resolver: "nexus.live.ports"
+      timeout_ms: 3000
+    - id: live.git
+      label: "Git Status"
+      type: live_source
+      resolver: "nexus.live.git_status"
+      timeout_ms: 2000
+    - id: live.connectors
+      label: "Active Connectors"
+      type: live_source
+      resolver: "nexus.live.connectors"
+      timeout_ms: 1000
+    - id: live.agents
+      label: "AI Agent Status"
+      type: live_source
+      resolver: "nexus.live.agent_status"
+      timeout_ms: 3000
+
+- id: custom
+  label: "Custom"
+  type: group
+  icon: "puzzle"
+  children: []

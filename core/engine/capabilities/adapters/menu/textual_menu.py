@@ -4,7 +4,7 @@ import json
 import importlib.util
 from typing import List, Optional
 
-from ...base import MenuCapability
+from ...base import MenuCapability, AdapterManifest, CapabilityType
 
 # We conditionally import Textual later inside the methods to keep it an optional dependency.
 # The adapter will return False for is_available() if textual is missing.
@@ -14,6 +14,12 @@ class TextualMenuAdapter(MenuCapability):
     Implementation of MenuCapability using the 'textual' Python library.
     This adapter dynamically checks for textual so it remains an optional dependency.
     """
+
+    manifest = AdapterManifest(
+        name="textual",
+        capability_type=CapabilityType.MENU,
+        priority=60,
+    )
 
     @property
     def capability_type(self):

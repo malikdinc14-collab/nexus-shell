@@ -7,6 +7,7 @@ Simple IPC client to communicate with nxs-d via Unix Socket.
 """
 
 import os
+import sys
 import json
 import socket
 from pathlib import Path

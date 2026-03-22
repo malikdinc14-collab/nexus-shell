@@ -1,0 +1,8 @@
+name: dashboard
+description: "Multi-pane monitoring, everything visible"
+composition: quad
+theme: catppuccin
+hud:
+  modules: [tabs, git_branch, cpu, memory, clock, processes]
+  refresh_ms: 2000
+env: {}

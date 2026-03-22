@@ -14,32 +14,6 @@ cmd_init() {
     mkdir -p "$pdir/pipes"
     [[ ! -f "$pdir/state.json" ]] && echo "{}" > "$pdir/state.json"
     
-    # Start event bus if not already running
-    local bus_pid_file="$pdir/bus.pid"
-    if [[ ! -f "$bus_pid_file" ]] || ! kill -0 $(cat "$bus_pid_file" 2>/dev/null) 2>/dev/null; then
-        # Find nexus core directory
-        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        local nexus_engine="$(cd "$script_dir/.." && pwd)"
-        
-        # Start event bus in background
-        NEXUS_PROJECT="$project" python3 "$nexus_engine/bus/event_server.py" > "$pdir/bus.log" 2>&1 &
-        echo $! > "$bus_pid_file"
-        
-        # Wait for socket to be created
-        local socket="$pdir/bus.sock"
-        local timeout=5
-        while [[ ! -S "$socket" ]] && [[ $timeout -gt 0 ]]; do
-            sleep 0.2
-            ((timeout--))
-        done
-        
-        if [[ -S "$socket" ]]; then
-            echo "[Station] Event bus started (pid: $(cat "$bus_pid_file"))" >&2
-        else
-            echo "[Station] Warning: Event bus failed to start" >&2
-        fi
-    fi
-    
     echo "$pdir"
 }
 
@@ -91,24 +65,7 @@ except Exception as e:
 cmd_cleanup() {
     local project="$1"
     local pdir="$NEXUS_STATE_ROOT/$project"
-    
-    # Stop event bus
-    local bus_pid_file="$pdir/bus.pid"
-    if [[ -f "$bus_pid_file" ]]; then
-        local pid=$(cat "$bus_pid_file")
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "[Station] Stopping event bus (pid: $pid)" >&2
-            kill "$pid" 2>/dev/null
-            sleep 0.5
-            # Force kill if still running
-            kill -9 "$pid" 2>/dev/null || true
-        fi
-        rm -f "$bus_pid_file"
-    fi
-    
-    # Remove socket
-    rm -f "$pdir/bus.sock"
-    
+
     echo "[Station] Cleanup complete" >&2
 }
 

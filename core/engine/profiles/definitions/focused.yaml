@@ -1,0 +1,8 @@
+name: focused
+description: "Single dominant pane, minimal HUD"
+composition: minimal
+theme: catppuccin
+hud:
+  modules: [tabs, clock]
+  refresh_ms: 10000
+env: {}

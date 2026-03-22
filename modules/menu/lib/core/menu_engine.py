@@ -187,8 +187,11 @@ def render_tool_selector(role: str) -> list:
             
     if not tools:
         # Fallback to current only
-        from module_registry import resolve_role
-        current = resolve_role(role)
+        try:
+            from module_registry import resolve_role
+            current = resolve_role(role)
+        except ImportError:
+            current = role
         tools = [{"label": f"Current: {current}", "cmd": current}]
 
     for t in tools:

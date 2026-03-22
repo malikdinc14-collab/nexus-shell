@@ -19,7 +19,7 @@ Invariants enforced by this adapter:
 import os
 import subprocess
 from typing import List, Optional, Dict
-from ...base import MultiplexerCapability, PaneInfo, CapabilityType
+from ...base import MultiplexerCapability, PaneInfo, CapabilityType, AdapterManifest
 
 
 class TmuxAdapter(MultiplexerCapability):
@@ -27,6 +27,13 @@ class TmuxAdapter(MultiplexerCapability):
     Drives tmux through subprocess. All commands go through _run().
     socket_label isolates this session from other tmux servers.
     """
+
+    manifest = AdapterManifest(
+        name="tmux",
+        capability_type=CapabilityType.MULTIPLEXER,
+        binary="tmux",
+        priority=100,
+    )
 
     def __init__(self, socket_label: str = "", conf: str = ""):
         self.socket_label = socket_label

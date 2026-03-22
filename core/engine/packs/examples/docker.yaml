@@ -1,0 +1,15 @@
+name: docker
+version: "1.0.0"
+description: "Docker development pack"
+markers: [Dockerfile, docker-compose.yaml, docker-compose.yml]
+tools:
+  executor: docker
+menu_nodes:
+  - id: pack.docker.compose-up
+    label: "Compose Up"
+    type: action
+    command: "docker compose up -d"
+  - id: pack.docker.compose-down
+    label: "Compose Down"
+    type: action
+    command: "docker compose down"

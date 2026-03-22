@@ -1,0 +1,11 @@
+name: devops
+description: "Monitoring-heavy layout for infrastructure work"
+composition: devops
+theme: solarized-dark
+hud:
+  modules: [tabs, mesh, dock, clock]
+  refresh_ms: 2000
+keybind_overrides:
+  Alt+k: "kubectl get pods"
+env:
+  KUBECONFIG: "~/.kube/config"

@@ -37,15 +37,41 @@ class CapabilityType(Enum):
     EXPLORER = auto()
     EXECUTOR = auto()
     AGENT = auto()
-    RENDERER = auto()
     CHAT = auto()
     MENU = auto()
     MULTIPLEXER = auto()   # ← NEW: terminal multiplexer backends
 
 
+@dataclass
+class AdapterManifest:
+    """
+    Declarative metadata for a capability adapter.
+
+    Every adapter can optionally declare a manifest so the registry
+    can rank, filter, and introspect adapters without instantiating
+    or calling into them.
+    """
+    name: str                          # "neovim", "yazi", "fzf", etc.
+    capability_type: CapabilityType
+    priority: int = 100                # Higher = preferred
+    native_multiplicity: bool = False  # Can this tool manage its own tabs?
+    binary: str = ""                   # Binary name for availability check
+    binary_candidates: List[str] = field(default_factory=list)
+    install_hint: Optional[str] = None
+    mcp_enabled: bool = False
+
+    def is_available(self) -> bool:
+        """Returns True if at least one candidate binary is on PATH."""
+        import shutil
+        candidates = ([self.binary] + self.binary_candidates) if self.binary else self.binary_candidates
+        return any(shutil.which(b) for b in candidates) if candidates else True
+
+
 class Capability(ABC):
     """Base class for all system capabilities."""
-    
+
+    manifest: Optional[AdapterManifest] = None
+
     @property
     @abstractmethod
     def capability_type(self) -> CapabilityType:
@@ -105,7 +131,7 @@ class ExecutorCapability(Capability):
     def capability_type(self): return CapabilityType.EXECUTOR
 
     @abstractmethod
-    def spawn(self, command: str, cwd: str = None, env: Dict[str, str] = None) -> str:
+    def spawn(self, command: str, cwd: Optional[str] = None, env: Optional[Dict[str, str]] = None) -> str:
         """Spawns a process and returns a handle/ID."""
         pass
 

@@ -1,0 +1,19 @@
+name: rust
+version: "1.0.0"
+description: "Rust development pack"
+markers: [Cargo.toml]
+tools:
+  executor: cargo
+connectors:
+  - name: build-on-save
+    trigger: {type: fs.file.saved, filter: {pattern: "*.rs"}}
+    action: {shell: "cargo check"}
+menu_nodes:
+  - id: pack.rust.build
+    label: "Cargo Build"
+    type: action
+    command: "cargo build"
+  - id: pack.rust.test
+    label: "Cargo Test"
+    type: action
+    command: "cargo test"

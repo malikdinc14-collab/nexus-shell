@@ -1,0 +1,24 @@
+{
+    "name": "obsidian",
+    "description": "Obsidian-like — file navigator left, editor center, preview right",
+    "layout": {
+        "type": "hsplit",
+        "panes": [
+            {
+                "id": "navigator",
+                "size": 20,
+                "command": "YAZI_CONFIG_HOME=\"$NEXUS_HOME/config/yazi\" $NEXUS_FILES '$PROJECT_ROOT'"
+            },
+            {
+                "id": "editor",
+                "size": 50,
+                "command": "$EDITOR_CMD"
+            },
+            {
+                "id": "preview",
+                "size": 30,
+                "command": "glow -p 2>/dev/null || echo 'Install: brew install glow'"
+            }
+        ]
+    }
+}

@@ -97,15 +97,14 @@ LABEL=$(echo "$selection" | cut -d'|' -f1 | cut -d':' -f2 | xargs)
 case "$TYPE" in
     FILE)
         if [[ "$key" == "shift-enter" ]]; then
-            # RENDER
-            "$NEXUS_HOME/modules/editor/bin/nxs-editor" open-render "$VALUE"
+            # RENDER — open in read-only/preview mode
+            PYTHONPATH="$NEXUS_HOME/core" python3 -m engine.cli.nexus_ctl capability open editor -- --view "$VALUE"
         elif [[ "$key" == "ctrl-e" ]]; then
-            # BRIEF AI (Send file context to Pi)
-            # We use a helper to brief the agent
-            "$NEXUS_HOME/core/engine/ai/nxs-pi-gap.sh" "$VALUE"
+            # BRIEF AI (Send file context to agent)
+            "$NEXUS_HOME/core/engine/ai/pi-gap.sh" "$VALUE"
         else
-            # EDIT (Default)
-            "$NEXUS_HOME/modules/editor/bin/nxs-editor" open-edit "$VALUE"
+            # EDIT (Default) — open in editor via capability system
+            PYTHONPATH="$NEXUS_HOME/core" python3 -m engine.cli.nexus_ctl capability open editor -- "$VALUE"
         fi
         ;;
     CMD)
@@ -115,7 +114,8 @@ case "$TYPE" in
         tmux new-window -n "Nexus:$LABEL" "nxs-launcher --comp $LABEL"
         ;;
     KEY)
-        "$NEXUS_HOME/core/kernel/exec/keys.sh" "$LABEL"
+        # Apply keybind profile via config handler
+        PYTHONPATH="$NEXUS_HOME/core" python3 -m engine.cli.nexus_ctl config keymap "$LABEL"
         ;;
     THEME)
         "$NEXUS_HOME/core/kernel/boot/theme.sh" "$LABEL"

@@ -2,10 +2,17 @@ import os
 import subprocess
 import shutil
 from typing import List, Optional
-from ...base import MenuCapability
+from ...base import MenuCapability, AdapterManifest, CapabilityType
 
 class GumMenuAdapter(MenuCapability):
     """Implementation of MenuCapability using the bash 'gum' tool."""
+
+    manifest = AdapterManifest(
+        name="gum",
+        capability_type=CapabilityType.MENU,
+        binary="gum",
+        priority=80,
+    )
 
     @property
     def capability_type(self):
