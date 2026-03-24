@@ -1,15 +1,16 @@
-#!/usr/bin/env python3
 """
 Launch Nexus Shell with the Textual Surface.
 
 Usage:
     python -m engine.surfaces.launch [session_name] [--cwd /path]
+    python -m engine.surfaces.launch --composition vscodelike
 
 This starts Nexus Shell inside a single terminal window using the
 Textual TUI framework. No tmux required.
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -33,8 +34,8 @@ def main() -> None:
         help="Working directory for the workspace",
     )
     parser.add_argument(
-        "--pack", default="",
-        help="Pack to activate (e.g., python-dev, rust-dev)",
+        "--composition", "-c", default="",
+        help="Composition name or path (e.g., vscodelike)",
     )
     args = parser.parse_args()
 
@@ -42,13 +43,38 @@ def main() -> None:
     from engine.core import NexusCore
 
     surface = TextualSurface()
-    core = NexusCore(surface, workspace_dir=args.cwd or os.getcwd())
+    cwd = args.cwd or os.getcwd()
+    core = NexusCore(surface, workspace_dir=cwd)
 
     # Initialize workspace
-    session = core.create_workspace(args.session, cwd=args.cwd)
+    session = core.create_workspace(args.session, cwd=cwd)
 
-    # Create initial pane with a shell
-    surface.create_container(session, command=os.environ.get("SHELL", "/bin/sh"))
+    if args.composition:
+        # Load composition from file or by name
+        comp_path = args.composition
+        if not os.path.isfile(comp_path):
+            # Try standard compositions directory
+            nexus_home = os.environ.get("NEXUS_HOME", "")
+            for search_dir in [
+                os.path.join(nexus_home, "core/ui/compositions"),
+                os.path.join(CORE_DIR, "ui/compositions"),
+            ]:
+                candidate = os.path.join(search_dir, f"{comp_path}.json")
+                if os.path.isfile(candidate):
+                    comp_path = candidate
+                    break
+
+        if os.path.isfile(comp_path):
+            with open(comp_path) as f:
+                comp = json.load(f)
+            layout = comp.get("layout", comp)
+            surface.apply_layout(session, layout)
+        else:
+            print(f"Composition not found: {args.composition}", file=sys.stderr)
+            surface.create_container(session, command=os.environ.get("SHELL", "/bin/sh"))
+    else:
+        # Default: single shell pane
+        surface.create_container(session, command=os.environ.get("SHELL", "/bin/sh"))
 
     # Start the Textual event loop (blocks)
     surface.run()

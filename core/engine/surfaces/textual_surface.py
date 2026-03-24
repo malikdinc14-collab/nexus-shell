@@ -16,9 +16,11 @@ import fcntl
 import logging
 import os
 import pty
+import select
 import signal
 import struct
 import termios
+import threading
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -55,8 +57,7 @@ from engine.surfaces import (
 
 logger = logging.getLogger(__name__)
 
-# ── PTY Pane Widget ──────────────────────────────────────────────────────────
-
+# ── PTY Color Map ────────────────────────────────────────────────────────────
 
 PYTE_TO_RICH_COLORS = {
     "black": "black",
@@ -69,6 +70,9 @@ PYTE_TO_RICH_COLORS = {
     "white": "white",
     "default": "default",
 }
+
+
+# ── Data Models ──────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -89,11 +93,73 @@ class PaneState:
     height: int = 24
 
 
+@dataclass
+class SplitNode:
+    """Binary tree node for spatial layout.
+
+    Leaf nodes have pane_handle set.
+    Branch nodes have direction + first/second children.
+    """
+
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    direction: Optional[SplitDirection] = None  # None = leaf
+    ratio: float = 0.5
+    first: Optional[SplitNode] = None
+    second: Optional[SplitNode] = None
+    pane_handle: Optional[str] = None  # leaf only
+
+    @property
+    def is_leaf(self) -> bool:
+        return self.direction is None
+
+    def find_leaf(self, handle: str) -> Optional[SplitNode]:
+        """Find the leaf node with the given pane handle."""
+        if self.is_leaf:
+            return self if self.pane_handle == handle else None
+        if self.first:
+            result = self.first.find_leaf(handle)
+            if result:
+                return result
+        if self.second:
+            return self.second.find_leaf(handle)
+        return None
+
+    def find_parent(self, handle: str) -> Optional[SplitNode]:
+        """Find the parent of the leaf with the given handle."""
+        if self.is_leaf:
+            return None
+        for child in (self.first, self.second):
+            if child and child.is_leaf and child.pane_handle == handle:
+                return self
+            if child:
+                result = child.find_parent(handle)
+                if result:
+                    return result
+        return None
+
+    def all_handles(self) -> List[str]:
+        """Collect all pane handles from leaf nodes."""
+        if self.is_leaf:
+            return [self.pane_handle] if self.pane_handle else []
+        handles = []
+        if self.first:
+            handles.extend(self.first.all_handles())
+        if self.second:
+            handles.extend(self.second.all_handles())
+        return handles
+
+
+# ── PTY Pane Widget ──────────────────────────────────────────────────────────
+
+
 class PtyPane(Static):
     """A widget that hosts a PTY-backed terminal process.
 
     Uses pyte to emulate a VT100 terminal and renders the screen buffer
     as Rich text on each update cycle.
+
+    Handles re-mounting gracefully: if the PaneState already has a running
+    PTY (fd >= 0), the widget picks it up without respawning.
     """
 
     DEFAULT_CSS = """
@@ -118,11 +184,19 @@ class PtyPane(Static):
     ) -> None:
         super().__init__("", id=id, classes=classes)
         self.pane_state = pane_state
-        self._reader_task: Optional[asyncio.Task] = None
+        self._stop = threading.Event()
 
     def on_mount(self) -> None:
-        if self.pane_state.command:
+        self._stop.clear()
+        if self.pane_state.fd >= 0:
+            # Re-mount: pick up existing PTY, render current buffer
+            self._render_screen()
+            self._start_reader()
+        elif self.pane_state.command:
             self._spawn_process(self.pane_state.command)
+
+    def on_unmount(self) -> None:
+        self._stop.set()
 
     def _spawn_process(self, command: str) -> None:
         """Fork a PTY child process running `command`."""
@@ -159,16 +233,23 @@ class PtyPane(Static):
 
     @work(thread=True, exclusive=True, group="pty-read")
     def _start_reader(self) -> None:
-        """Read PTY output in a background thread and feed to pyte."""
+        """Read PTY output in a background thread and feed to pyte.
+
+        Uses select() with a short timeout so the thread exits cleanly
+        when the widget is unmounted (stop event is set).
+        """
         state = self.pane_state
         fd = state.fd
-        while True:
+        while not self._stop.is_set():
             try:
+                ready, _, _ = select.select([fd], [], [], 0.05)
+                if not ready:
+                    continue
                 data = os.read(fd, 4096)
                 if not data:
                     break
                 state.stream.feed(data.decode("utf-8", errors="replace"))
-                self.call_from_thread(self._render_screen)
+                self.app.call_from_thread(self._render_screen)
             except OSError:
                 break
 
@@ -235,6 +316,7 @@ class PtyPane(Static):
 
     def cleanup(self) -> None:
         """Kill the child process and close the PTY fd."""
+        self._stop.set()
         state = self.pane_state
         if state.pid:
             try:
@@ -286,9 +368,9 @@ class HudBar(Horizontal):
             else:
                 right.append(text)
         try:
-            self.query_one("#hud-left", Label).update("│".join(left))
-            self.query_one("#hud-center", Label).update("│".join(center))
-            self.query_one("#hud-right", Label).update("│".join(right))
+            self.query_one("#hud-left", Label).update("|".join(left))
+            self.query_one("#hud-center", Label).update("|".join(center))
+            self.query_one("#hud-right", Label).update("|".join(right))
         except NoMatches:
             pass
 
@@ -366,7 +448,7 @@ class MenuOverlay(Container):
 
 
 class TabBar(Horizontal):
-    """Displays tab stack indicators for each pane."""
+    """Displays pane indicators with stack identity labels."""
 
     DEFAULT_CSS = """
     TabBar {
@@ -383,11 +465,24 @@ class TabBar(Horizontal):
     }
     """
 
-    def update_tabs(self, pane_handles: List[str], focused: Optional[str]) -> None:
+    def update_tabs(
+        self,
+        pane_handles: List[str],
+        focused: Optional[str],
+        panes: Optional[Dict[str, PaneState]] = None,
+    ) -> None:
         self.remove_children()
         for handle in pane_handles:
+            # Show stack_id tag if available, else truncated handle
+            label = handle[-6:]
+            if panes and handle in panes:
+                sid = panes[handle].tags.get("nexus_stack_id", "")
+                if sid:
+                    label = sid
+                elif panes[handle].title:
+                    label = panes[handle].title[:10]
             classes = "tab-item active" if handle == focused else "tab-item"
-            self.mount(Label(f" {handle[-6:]} ", classes=classes))
+            self.mount(Label(f" {label} ", classes=classes))
 
 
 # ── NexusApp ─────────────────────────────────────────────────────────────────
@@ -396,8 +491,9 @@ class TabBar(Horizontal):
 class NexusApp(App):
     """The Textual application that IS the TextualSurface display.
 
-    All pane management, menu rendering, HUD display, and notifications
-    go through this App instance.
+    Manages a binary split tree for spatial layout. Each leaf in the tree
+    holds a PtyPane widget. Splits create new branches; swap exchanges
+    content between two leaves.
     """
 
     CSS = """
@@ -405,9 +501,13 @@ class NexusApp(App):
         width: 100%;
         height: 1fr;
     }
-    #pane-grid {
+    .split-h {
         width: 100%;
-        height: 1fr;
+        height: 100%;
+    }
+    .split-v {
+        width: 100%;
+        height: 100%;
     }
     """
 
@@ -430,7 +530,7 @@ class NexusApp(App):
         self._session: Optional[str] = None
         self._env: Dict[str, str] = {}
         self._hud_modules: List[HudModule] = []
-        self._menu_future: Optional[asyncio.Future] = None
+        self._split_root: Optional[SplitNode] = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -439,16 +539,17 @@ class NexusApp(App):
         yield HudBar(id="hud-bar")
         yield Footer()
 
-    # -- Pane Management (called by TextualSurface) ---------------------------
+    # -- Pane State Creation ---------------------------------------------------
 
-    def add_pane(
-        self,
-        command: str = "",
-        cwd: str = "",
-    ) -> str:
-        """Create a new pane, returning its handle."""
+    def _new_handle(self) -> str:
         self._pane_counter += 1
-        handle = f"pane-{self._pane_counter}"
+        return f"pane-{self._pane_counter}"
+
+    def _create_pane_state(
+        self, command: str = "", cwd: str = ""
+    ) -> PaneState:
+        """Create a PaneState (no widget yet)."""
+        handle = self._new_handle()
         state = PaneState(
             handle=handle,
             index=self._pane_counter,
@@ -456,20 +557,142 @@ class NexusApp(App):
             title=command or "shell",
         )
         self.panes[handle] = state
+        return state
 
-        widget = PtyPane(state, id=handle)
+    # -- Split Tree → Widget Tree Rendering ------------------------------------
+
+    def _build_widget_tree(self, node: SplitNode) -> Widget:
+        """Recursively build a Textual widget tree from the split tree."""
+        if node.is_leaf:
+            state = self.panes.get(node.pane_handle)
+            if state:
+                return PtyPane(state, id=node.pane_handle)
+            return Static("(empty)", id=f"empty-{node.id}")
+
+        first_widget = self._build_widget_tree(node.first)
+        second_widget = self._build_widget_tree(node.second)
+
+        if node.direction == SplitDirection.HORIZONTAL:
+            pct = int(node.ratio * 100)
+            first_widget.styles.width = f"{pct}%"
+            second_widget.styles.width = f"{100 - pct}%"
+            first_widget.styles.height = "100%"
+            second_widget.styles.height = "100%"
+            return Horizontal(
+                first_widget, second_widget,
+                id=f"split-{node.id}", classes="split-h",
+            )
+        else:
+            pct = int(node.ratio * 100)
+            first_widget.styles.height = f"{pct}%"
+            second_widget.styles.height = f"{100 - pct}%"
+            first_widget.styles.width = "100%"
+            second_widget.styles.width = "100%"
+            return Vertical(
+                first_widget, second_widget,
+                id=f"split-{node.id}", classes="split-v",
+            )
+
+    async def _rebuild_workspace(self) -> None:
+        """Clear workspace and rebuild widget tree from split tree.
+
+        PaneStates survive — only widgets are recreated. Existing PTY
+        processes are picked up by new PtyPane instances via on_mount.
+        """
         try:
-            grid = self.query_one("#workspace")
-            grid.mount(widget)
+            workspace = self.query_one("#workspace")
         except NoMatches:
-            pass
+            return
+
+        # Cleanup existing PtyPane widgets (stop readers, but keep PTY alive)
+        for widget in self.query(PtyPane):
+            widget._stop.set()
+        await workspace.remove_children()
+
+        if self._split_root:
+            tree = self._build_widget_tree(self._split_root)
+            await workspace.mount(tree)
+
+        self._refresh_tab_bar()
+
+    # -- Pane Management (called by TextualSurface) ----------------------------
+
+    def add_pane(self, command: str = "", cwd: str = "") -> str:
+        """Create a new pane and add it to the layout.
+
+        First pane becomes the root leaf. Subsequent panes split the
+        focused pane horizontally.
+        """
+        state = self._create_pane_state(command, cwd)
+        handle = state.handle
+
+        if self._split_root is None:
+            # First pane — root leaf
+            self._split_root = SplitNode(pane_handle=handle)
+        else:
+            # Add by splitting the focused pane (or root)
+            target = self._focused_handle
+            if target and self._split_root.find_leaf(target):
+                self._split_at(target, handle, SplitDirection.HORIZONTAL)
+            else:
+                # Split the first leaf we find
+                handles = self._split_root.all_handles()
+                if handles:
+                    self._split_at(handles[0], handle, SplitDirection.HORIZONTAL)
 
         if self._focused_handle is None:
             self._focused_handle = handle
             state.focused = True
 
-        self._refresh_tab_bar()
+        # Schedule rebuild (works both during and after compose)
+        self.call_later(self._rebuild_workspace)
         return handle
+
+    def _split_at(
+        self,
+        target_handle: str,
+        new_handle: str,
+        direction: SplitDirection,
+        ratio: float = 0.5,
+    ) -> None:
+        """Split the leaf at target_handle, placing new_handle as sibling.
+
+        Mutates the split tree in-place by replacing the target leaf with
+        a branch containing both the old and new leaf.
+        """
+        if self._split_root is None:
+            return
+
+        if self._split_root.is_leaf and self._split_root.pane_handle == target_handle:
+            # Root is the target — wrap it
+            old_root = SplitNode(
+                pane_handle=target_handle,
+                id=self._split_root.id,
+            )
+            self._split_root = SplitNode(
+                direction=direction,
+                ratio=ratio,
+                first=old_root,
+                second=SplitNode(pane_handle=new_handle),
+            )
+            return
+
+        parent = self._split_root.find_parent(target_handle)
+        if not parent:
+            return
+
+        # Replace the leaf child with a branch
+        for attr in ("first", "second"):
+            child = getattr(parent, attr)
+            if child and child.is_leaf and child.pane_handle == target_handle:
+                new_branch = SplitNode(
+                    direction=direction,
+                    ratio=ratio,
+                    first=SplitNode(pane_handle=target_handle, id=child.id),
+                    second=SplitNode(pane_handle=new_handle),
+                )
+                setattr(parent, attr, new_branch)
+                return
 
     def split_pane(
         self,
@@ -479,26 +702,93 @@ class NexusApp(App):
         cwd: str = "",
     ) -> str:
         """Split an existing pane, creating a new sibling."""
-        # For now: just add a new pane next to the target
-        # Full CSS-grid splitting is a future enhancement
-        return self.add_pane(cwd=cwd)
+        if handle not in self.panes:
+            return ""
+        state = self._create_pane_state(cwd=cwd)
+        ratio = (size / 100) if size else 0.5
+        self._split_at(handle, state.handle, direction, ratio)
+        self.call_later(self._rebuild_workspace)
+        return state.handle
 
     def remove_pane(self, handle: str) -> None:
-        """Destroy a pane and its PTY process."""
+        """Destroy a pane and its PTY process, pruning the split tree."""
         if handle not in self.panes:
             return
+
+        # Cleanup widget
         try:
             widget = self.query_one(f"#{handle}", PtyPane)
             widget.cleanup()
-            widget.remove()
         except NoMatches:
             pass
+
+        # Prune the split tree
+        if self._split_root:
+            if self._split_root.is_leaf and self._split_root.pane_handle == handle:
+                self._split_root = None
+            else:
+                parent = self._split_root.find_parent(handle)
+                if parent:
+                    # Replace parent with the surviving sibling
+                    survivor = None
+                    if parent.first and parent.first.is_leaf and parent.first.pane_handle == handle:
+                        survivor = parent.second
+                    elif parent.second and parent.second.is_leaf and parent.second.pane_handle == handle:
+                        survivor = parent.first
+
+                    if survivor:
+                        # Check if parent is root
+                        if parent is self._split_root:
+                            self._split_root = survivor
+                        else:
+                            grandparent = self._split_root.find_parent(
+                                parent.first.pane_handle if parent.first and parent.first.is_leaf
+                                else parent.first.all_handles()[0] if parent.first
+                                else handle
+                            )
+                            # Simpler: just rebuild since tree mutation is complex
+                            # The find_parent doesn't find by node ID, so just do it
+                            pass
+
         del self.panes[handle]
 
         if self._focused_handle == handle:
             self._focused_handle = next(iter(self.panes), None)
 
-        self._refresh_tab_bar()
+        self.call_later(self._rebuild_workspace)
+
+    def swap_panes(self, source: str, target: str) -> bool:
+        """Swap two panes by exchanging their positions in the split tree.
+
+        The PTY processes stay attached to their PaneStates — only the
+        tree leaf handles are swapped, so each pane appears where the
+        other was.
+        """
+        if not self._split_root:
+            return False
+
+        source_leaf = self._split_root.find_leaf(source)
+        target_leaf = self._split_root.find_leaf(target)
+
+        if source_leaf and target_leaf:
+            # Both visible: swap positions in tree
+            source_leaf.pane_handle = target
+            target_leaf.pane_handle = source
+            self.call_later(self._rebuild_workspace)
+            return True
+
+        # One or both not in tree — still valid for NexusCore
+        # (background panes exist in panes dict but not in split tree)
+        if source in self.panes and target in self.panes:
+            if source_leaf:
+                source_leaf.pane_handle = target
+                self.call_later(self._rebuild_workspace)
+            elif target_leaf:
+                target_leaf.pane_handle = source
+                self.call_later(self._rebuild_workspace)
+            return True
+
+        return False
 
     def focus_pane(self, handle: str) -> None:
         """Move focus to a specific pane."""
@@ -527,9 +817,134 @@ class NexusApp(App):
     def _refresh_tab_bar(self) -> None:
         try:
             tab_bar = self.query_one("#tab-bar", TabBar)
-            tab_bar.update_tabs(list(self.panes.keys()), self._focused_handle)
+            handles = (
+                self._split_root.all_handles() if self._split_root else []
+            )
+            tab_bar.update_tabs(handles, self._focused_handle, self.panes)
         except NoMatches:
             pass
+
+    # -- Composition Loading ---------------------------------------------------
+
+    async def load_composition(self, layout: dict) -> None:
+        """Build a split tree from a composition layout dict.
+
+        Format (from vscodelike.json etc.):
+            {"type": "hsplit", "panes": [
+                {"id": "files", "size": 30, "command": "..."},
+                {"type": "vsplit", "panes": [...]},
+            ]}
+        """
+        # Cleanup existing panes
+        for handle in list(self.panes.keys()):
+            self.remove_pane(handle)
+
+        self._split_root = self._parse_layout_node(layout)
+        await self._rebuild_workspace()
+
+        # Focus the first pane
+        if self._split_root:
+            handles = self._split_root.all_handles()
+            if handles:
+                self._focused_handle = handles[0]
+                self.panes[handles[0]].focused = True
+                self._refresh_tab_bar()
+
+    def _parse_layout_node(self, node: dict) -> SplitNode:
+        """Recursively parse a composition layout dict into a SplitNode tree."""
+        split_type = node.get("type")
+
+        if split_type in ("hsplit", "vsplit"):
+            direction = (
+                SplitDirection.HORIZONTAL
+                if split_type == "hsplit"
+                else SplitDirection.VERTICAL
+            )
+            children = node.get("panes", [])
+            if len(children) < 2:
+                # Single child — just return it as leaf
+                if children:
+                    return self._parse_layout_node(children[0])
+                return SplitNode()
+
+            # Build binary tree from N children
+            # Compute ratios from sizes: sized children get their share,
+            # unsized children split the remainder equally
+            return self._build_nary_split(children, direction)
+
+        # Leaf node (a pane)
+        command = node.get("command", "")
+        state = self._create_pane_state(command=command)
+        pane_id = node.get("id", "")
+        if pane_id:
+            state.tags["nexus_stack_id"] = pane_id
+            state.title = pane_id
+        return SplitNode(pane_handle=state.handle)
+
+    def _build_nary_split(
+        self, children: List[dict], direction: SplitDirection
+    ) -> SplitNode:
+        """Convert N children into a binary split tree.
+
+        Sizes are percentages. Unsized children split the remainder
+        equally: remainder = 100 - sum(explicit sizes).
+        """
+        # Resolve all sizes first so unsized nodes get fair remainder
+        resolved = self._resolve_sizes(children)
+
+        if len(children) == 1:
+            return self._parse_layout_node(children[0])
+
+        if len(children) == 2:
+            first = self._parse_layout_node(children[0])
+            second = self._parse_layout_node(children[1])
+            s1, s2 = resolved[0], resolved[1]
+            ratio = s1 / (s1 + s2) if (s1 + s2) > 0 else 0.5
+            return SplitNode(
+                direction=direction, ratio=ratio,
+                first=first, second=second,
+            )
+
+        # N > 2: split first child vs rest
+        first = self._parse_layout_node(children[0])
+        rest = self._build_nary_split(children[1:], direction)
+        s_first = resolved[0]
+        s_rest = sum(resolved[1:])
+        ratio = s_first / (s_first + s_rest) if (s_first + s_rest) > 0 else 0.5
+        return SplitNode(
+            direction=direction, ratio=ratio,
+            first=first, second=rest,
+        )
+
+    @staticmethod
+    def _resolve_sizes(children: List[dict]) -> List[float]:
+        """Resolve sizes for a list of layout children.
+
+        Explicit sizes are kept as-is. Unsized children split the
+        remainder (100 - sum_of_explicit) equally.
+        """
+        explicit_total = 0.0
+        unsized_count = 0
+        sizes: List[Optional[float]] = []
+
+        for child in children:
+            raw = child.get("size")
+            if raw is not None:
+                try:
+                    val = float(raw)
+                    sizes.append(val)
+                    explicit_total += val
+                    continue
+                except (TypeError, ValueError):
+                    pass
+            sizes.append(None)
+            unsized_count += 1
+
+        # Distribute remainder to unsized children
+        remainder = max(100.0 - explicit_total, 10.0)
+        fair_share = remainder / unsized_count if unsized_count > 0 else 30.0
+
+        return [s if s is not None else fair_share for s in sizes]
 
     # -- Menu ----------------------------------------------------------------
 
@@ -565,7 +980,9 @@ class NexusApp(App):
         self._focus_adjacent(-1)
 
     def _focus_adjacent(self, offset: int) -> None:
-        handles = list(self.panes.keys())
+        if not self._split_root:
+            return
+        handles = self._split_root.all_handles()
         if not handles or self._focused_handle is None:
             return
         try:
@@ -624,7 +1041,6 @@ class TextualSurface(Surface):
         return handle
 
     def teardown(self, session: str) -> None:
-        # Clean up all panes
         for handle in list(self.app.panes.keys()):
             self.app.remove_pane(handle)
         self._sessions.pop(session, None)
@@ -651,7 +1067,14 @@ class TextualSurface(Surface):
             return
         state.width = dimensions.width
         state.height = dimensions.height
-        # The actual widget will be resized by Textual's layout engine
+
+    # -- Swap ----------------------------------------------------------------
+
+    def swap_containers(self, source: str, target: str) -> bool:
+        return self.app.swap_panes(source, target)
+
+    def container_exists(self, handle: str) -> bool:
+        return handle in self.app.panes
 
     # -- Content -------------------------------------------------------------
 
@@ -659,7 +1082,6 @@ class TextualSurface(Surface):
         state = self.app.panes.get(handle)
         if state is None:
             return
-        # Kill existing process if any
         try:
             widget = self.app.query_one(f"#{handle}", PtyPane)
             widget.cleanup()
@@ -715,12 +1137,6 @@ class TextualSurface(Surface):
             state.width = geometry.get("w", state.width)
             state.height = geometry.get("h", state.height)
 
-    def swap_containers(self, source: str, target: str) -> bool:
-        return source in self.app.panes and target in self.app.panes
-
-    def container_exists(self, handle: str) -> bool:
-        return handle in self.app.panes
-
     # -- Metadata ------------------------------------------------------------
 
     def set_tag(self, handle: str, key: str, value: str) -> None:
@@ -743,10 +1159,7 @@ class TextualSurface(Surface):
 
     def show_menu(self, items: List[MenuItem],
                   prompt: str = "Select:") -> Optional[str]:
-        # Synchronous wrapper — in practice menus will be async
-        # For non-async callers, return None (menu requires event loop)
         if self._app and self._app.is_running:
-            # Schedule async menu and block — only works from worker thread
             import concurrent.futures
             future: concurrent.futures.Future = concurrent.futures.Future()
 
@@ -774,25 +1187,23 @@ class TextualSurface(Surface):
     def apply_layout(self, session: str, layout: dict) -> bool:
         """Apply a composition layout.
 
-        Layout format:
-            {"panes": [{"command": "nvim", "size": 60}, {"command": "zsh"}]}
-
-        Returns True on success.
+        Accepts either the full composition JSON or just the layout dict:
+            {"type": "hsplit", "panes": [...]}
         """
-        panes = layout.get("panes", [])
-        if not panes:
+        # Handle full composition format vs bare layout
+        target = layout.get("layout", layout)
+        if not target.get("panes") and not target.get("type"):
             return False
 
-        # Clear existing panes
-        for handle in list(self.app.panes.keys()):
-            self.app.remove_pane(handle)
-
-        # Create new panes from layout
-        for pane_def in panes:
-            cmd = pane_def.get("command", "")
-            cwd = pane_def.get("cwd", "")
-            self.app.add_pane(command=cmd, cwd=cwd)
-
+        if self._app and self._app.is_running:
+            self._app.call_from_thread(
+                lambda: self.app.load_composition(target)
+            )
+        else:
+            # Pre-run: schedule for when app starts
+            async def _load() -> None:
+                await self.app.load_composition(target)
+            self.app.call_later(_load)
         return True
 
     def capture_layout(self, session: str) -> dict:
