@@ -291,6 +291,42 @@ class NexusCore:
 
 Every CLI command, every keybinding, every UI interaction calls through this API. The surface is injected at construction. Nothing in the core knows which surface is active.
 
+## Extension Model
+
+Nexus Shell has five levels of extensibility, from trivial to complex:
+
+| Level | What | Who writes it | Portability |
+|-------|------|---------------|-------------|
+| **1. Action** | Single script with metadata header | End users | Fully portable — engine dispatches on every surface |
+| **2. Menu Tree** | YAML file declaring Command Graph nodes | End users | Fully portable — pure data, no code |
+| **3. Pack** | Domain bundle (tools, connectors, menu nodes, services) | Community / users | Fully portable — declares WHAT, not HOW |
+| **4. Module** | Adapter implementing a Capability ABC | Tool authors | Per-surface — the "drivers" of the system |
+| **5. Surface** | Complete display layer implementation | Distribution authors | IS the surface — tmux, Tauri, Web, Sway |
+
+**The invariant**: Levels 1-3 never import or reference anything below the engine layer. A pack that works on tmux works on Tauri without modification. Only Levels 4-5 contain surface-specific code.
+
+### Content Provider Contract
+
+Extensions provide data. The engine provides execution.
+
+- **YAML** for static declarations — menu entries, boot sequences, pack manifests. Parseable without execution, works on every surface.
+- **Shell scripts** for runtime discovery — sessions, git branches, running containers. Emit JSON lines to stdout.
+- **Python** for live sources — real-time data feeds querying adapter state. System/pack provided, not user-authored.
+
+> Rule: YAML for what you know. Shell for what you discover. Never shell for static content.
+
+See `.gap/architecture.md` for the full extension hierarchy, content provider protocol, and design theory.
+
+## Hybrid Surface Model
+
+Surfaces don't replace your tools with native GUIs. They **wrap** them — spawning real processes (nvim, yazi, zsh) and rendering them through embedded terminal widgets.
+
+The adapter contracts are unchanged across surfaces. `EditorCapability.open_resource()` calls the NeovimAdapter, which talks to nvim via RPC. Whether nvim is rendered in a tmux pane, a Tauri panel with an embedded terminal, or an xterm.js widget in a browser — the adapter doesn't know or care.
+
+Each capability slot offers a choice: wrap the CLI tool (full compatibility, user keeps their config) or go native (better integration, loses tool ecosystem). The user controls this via `adapters.yaml`. The recommended path is to wrap CLI tools first — don't build native replacements for nvim, yazi, etc.
+
+See `.gap/architecture.md` for the full hybrid surface model, per-surface comparison, and the Linux analogy.
+
 ## Current State (honest)
 
 ### What works
