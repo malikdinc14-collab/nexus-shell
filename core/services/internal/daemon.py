@@ -58,13 +58,31 @@ class TmuxAdapter(BaseContainerAdapter):
 
     def swap_containers(self, source, target):
         if source == target: return True
-        self.run_tmux(["display-message", "-p", f"Axiom-D: Swapping {source} <-> {target}"], self.socket_label)
+
+        # ── Negative Space: Assert both panes exist before swap ──
+        all_panes = self.run_tmux(["list-panes", "-a", "-F", "#{pane_id}"], self.socket_label)
+        pane_list = all_panes.split("\n") if all_panes else []
+
+        if source not in pane_list:
+            err = (f"[INVARIANT] ghost_swap source pane '{source}' does not exist in tmux. "
+                   f"Target: '{target}'. Live panes: {pane_list}. "
+                   f"Socket: {self.socket_label}")
+            print(f"[{datetime.now()}] [TmuxAdapter] {err}", file=sys.stderr)
+            return False
+
+        if target not in pane_list:
+            err = (f"[INVARIANT] ghost_swap target pane '{target}' does not exist in tmux. "
+                   f"Source: '{source}'. Live panes: {pane_list}. "
+                   f"Socket: {self.socket_label}")
+            print(f"[{datetime.now()}] [TmuxAdapter] {err}", file=sys.stderr)
+            return False
+
         res = self.run_tmux(["swap-pane", "-d", "-s", source, "-t", target], self.socket_label)
         if res is None:
-            err_msg = f"GhostSwap Error: swap-pane failed for {source} -> {target}"
-            self.run_tmux(["display-message", err_msg], self.socket_label)
-            # Log to stdout/stderr for daemon log visibility
-            print(f"[{datetime.now()}] [TmuxAdapter] {err_msg}", file=sys.stderr)
+            err = (f"[INVARIANT] swap-pane command failed despite both panes existing. "
+                   f"Source: '{source}', Target: '{target}'. "
+                   f"Possible: panes in different sessions or source=target window")
+            print(f"[{datetime.now()}] [TmuxAdapter] {err}", file=sys.stderr)
             return False
         return True
 
@@ -171,13 +189,55 @@ class NexusDaemon:
         self.log_file = Path(f"/tmp/nexus_{USER}/daemon.log")
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         self.adapter = self._resolve_adapter()
+        self.core = self._init_core()
         self._ensure_sub_services()
+
+    def _init_core(self):
+        """Initialize NexusCore with TmuxSurface backed by the daemon's tmux runner.
+
+        Hydrates NexusCore's StackManager from existing daemon state so that
+        stack operations route through NexusCore with full context.
+        """
+        try:
+            from engine.surfaces.tmux_surface import TmuxSurface
+            from engine.core import NexusCore
+
+            socket_label = os.environ.get("SOCKET_LABEL")
+            surface = TmuxSurface(run_tmux=self.run_tmux, socket_label=socket_label)
+            core = NexusCore(
+                surface=surface,
+                workspace_dir=os.environ.get("PROJECT_ROOT", ""),
+            )
+
+            # Hydrate StackManager from existing daemon state
+            stacks_data = self.state.get("stacks", {})
+            if stacks_data:
+                core.stacks.deserialize({"stacks": stacks_data})
+                self.log(f"NexusCore hydrated with {len(stacks_data)} stacks")
+
+            self.log("NexusCore initialized with TmuxSurface")
+            return core
+        except Exception as e:
+            self.log(f"NexusCore init failed (non-fatal): {e}")
+            return None
 
     def _resolve_adapter(self):
         if os.environ.get("NEXUS_SIMULATION") == "1":
             return MockTmuxAdapter()
-        if os.environ.get("TMUX"):
-            return TmuxAdapter(self.run_tmux, os.environ.get("SOCKET_LABEL"))
+        # Check for TMUX env, or if SOCKET_LABEL is set (daemon may be started
+        # outside tmux but still need to control it via socket label)
+        socket_label = os.environ.get("SOCKET_LABEL")
+        if os.environ.get("TMUX") or socket_label:
+            return TmuxAdapter(self.run_tmux, socket_label)
+        # Fallback: check if any nexus tmux server is running
+        try:
+            import glob
+            sockets = glob.glob("/tmp/tmux-*/nexus_*")
+            if sockets:
+                label = Path(sockets[0]).name
+                return TmuxAdapter(self.run_tmux, label)
+        except Exception:
+            pass
         return WindowAdapter()
 
     def _ensure_sub_services(self):
@@ -314,10 +374,24 @@ class NexusDaemon:
         if not identity: return {"status": "error", "message": "No identity provided"}
         self.log(f"Stack Op: {action} for {identity}")
         self._scrub_registry()
+
+        # Core ops route through NexusCore when available
+        core_ops = {"push", "switch", "replace", "close", "adopt"}
+        if action in core_ops and self.core:
+            payload["identity"] = identity
+            result = self.core.handle_stack_op(action, payload)
+            if result.get("status") == "ok":
+                # Sync NexusCore state back to daemon persistence
+                self.state["stacks"] = self.core.stacks.serialize()["stacks"]
+                self._save_state()
+            return result
+
+        # Lightweight ops stay in daemon (tag/untag/rename),
+        # or fallback for core ops when NexusCore isn't available
         ops = {
-            "push": self._op_push, 
-            "switch": self._op_switch, 
-            "replace": self._op_replace, 
+            "push": self._op_push,
+            "switch": self._op_switch,
+            "replace": self._op_replace,
             "close": self._op_close,
             "tag": self._op_tag,
             "untag": self._op_untag,
@@ -368,7 +442,8 @@ class NexusDaemon:
     def _op_push(self, identity, payload):
         new_id = payload.get("pane_id")
         name = payload.get("name", "Shell")
-        focused_id = self.adapter.get_focused_id()
+        # Prefer focused_id from client (client has SOCKET_LABEL; daemon may not)
+        focused_id = payload.get("focused_id") or self.adapter.get_focused_id()
         sid, stack = self._get_or_create_stack(identity, initial_pane=focused_id)
         if not identity.startswith("stack_") and not stack.get("role"):
             stack["role"] = identity
@@ -390,7 +465,7 @@ class NexusDaemon:
             stack["active_index"] = len(stack["tabs"]) - 1
             self._save_state()
             return {"status": "ok", "stack_id": sid}
-        return {"status": "error", "message": "Push failed"}
+        return {"status": "error", "message": f"Push failed: ghost_swap({visible_id} -> {new_id}) returned False. Stack '{sid}' role='{stack.get('role')}' has {len(stack.get('tabs',[]))} tabs. Check daemon.log for [INVARIANT] details."}
 
     def _op_adopt(self, identity, payload):
         """
@@ -434,7 +509,7 @@ class NexusDaemon:
         if socket_label: os.environ["SOCKET_LABEL"] = socket_label
         if project_root: os.environ["PROJECT_ROOT"] = str(project_root)
         
-        orch = WorkspaceOrchestrator(NEXUS_HOME, Path(project_root), socket_label)
+        orch = WorkspaceOrchestrator(NEXUS_HOME, Path(project_root), socket_label, core=self.core)
         orch.apply_composition(layout_name, target_window)
         return {"status": "ok"}
 
@@ -445,7 +520,7 @@ class NexusDaemon:
         if not stack or index >= len(stack["tabs"]): return {"status": "error", "message": "Not found"}
         
         target_id = stack["tabs"][index]["id"]
-        focused_id = self.adapter.get_focused_id()
+        focused_id = payload.get("focused_id") or self.adapter.get_focused_id()
         visible_id = self._get_visible_container(stack, focused_id)
         
         if visible_id != target_id:
@@ -476,7 +551,7 @@ class NexusDaemon:
         
         idx = stack["active_index"]
         target_to_replace = stack["tabs"][idx]["id"]
-        visible_id = self._get_visible_container(stack, self.adapter.get_focused_id())
+        visible_id = self._get_visible_container(stack, payload.get("focused_id") or self.adapter.get_focused_id())
         
         # Capture current geometry
         geo = self.adapter.get_geometry(visible_id)
@@ -493,13 +568,14 @@ class NexusDaemon:
             return {"status": "ok"}
         return {"status": "error", "message": "Replace failed"}
 
-    def _op_close(self, identity):
+    def _op_close(self, identity, payload=None):
+        payload = payload or {}
         sid, stack = self._get_stack_by_identity(identity)
         if not stack or not stack["tabs"]: return {"status": "error", "message": "Empty"}
         idx = stack["active_index"]
         if idx == 0: return {"status": "error", "message": "Foundation protected"}
         target_id = stack["tabs"][idx]["id"]
-        visible_id = self._get_visible_container(stack, self.adapter.get_focused_id())
+        visible_id = self._get_visible_container(stack, payload.get("focused_id") or self.adapter.get_focused_id())
         foundation_id = stack["tabs"][0]["id"]
         if self.ghost_swap(visible_id, foundation_id):
             self.adapter.select_container(foundation_id)
@@ -510,6 +586,41 @@ class NexusDaemon:
             self._save_state()
             return {"status": "ok"}
         return {"status": "error", "message": "Close failed"}
+
+    def _handle_menu_open(self, payload):
+        """Route menu open through NexusCore or fall back to direct handler."""
+        try:
+            from engine.api.menu_handler import handle_open
+            result = handle_open()
+            return {"status": "ok", "data": result}
+        except Exception as e:
+            self.log(f"menu_open error: {e}")
+            return {"status": "error", "message": str(e)}
+
+    def _handle_menu_select(self, payload):
+        """Route menu select through NexusCore — resolve AND dispatch."""
+        node_id = payload.get("node_id")
+        mode = payload.get("mode", "new_tab")
+        if not node_id:
+            return {"status": "error", "message": "No node_id provided"}
+
+        if self.core:
+            # Full path: NexusCore resolves cascade and dispatches through Surface
+            result = self.core.select_and_dispatch(node_id, mode=mode)
+            return result
+        else:
+            # Fallback: resolve node, dispatch via run_tmux directly
+            self.log("[INVARIANT] NexusCore not available for menu_select — using fallback")
+            try:
+                from engine.api.menu_handler import handle_select
+                result = handle_select(node_id, mode=mode)
+                if result.get("action") == "exec" and result.get("command"):
+                    self.run_tmux(["send-keys", result["command"], "Enter"])
+                    return {"status": "ok", "action": "dispatched", "command": result["command"]}
+                return result
+            except Exception as e:
+                self.log(f"menu_select fallback error: {e}")
+                return {"status": "error", "message": str(e)}
 
     def handle_client(self, conn):
         try:
@@ -522,21 +633,34 @@ class NexusDaemon:
             # Granular Locking: Only lock for state-mutating or state-reading operations.
             # Long-running operations like boot_layout MUST NOT hold the global lock to avoid deadlocks
             # when the orchestrator makes recursive calls back to the daemon.
-            if action == "ping": 
+            if action == "ping":
                 response["data"] = "pong"
-            elif action == "get_state": 
-                with self.lock: response["data"] = self.state
-            elif action == "set_state": 
-                with self.lock: self.state = payload; self._save_state()
+            elif action == "get_state":
+                with self.lock:
+                    # Sync NexusCore stack state into daemon state before returning
+                    if self.core:
+                        self.state["stacks"] = self.core.stacks.serialize()["stacks"]
+                    response["data"] = self.state
+            elif action == "set_state":
+                with self.lock:
+                    self.state = payload
+                    self._save_state()
+                    # Hydrate NexusCore if available
+                    if self.core and "stacks" in payload:
+                        self.core.stacks.deserialize({"stacks": payload.get("stacks", {})})
             elif action == "tmux": 
                 # run_tmux handles its own adapter/mock logic, which might need the lock if mutating mock state
                 response["data"] = self.run_tmux(payload.get("args", []), payload.get("socket_label"))
             elif action == "boot_layout": 
                 # CRITICAL: No lock here.
                 response = self._op_boot_layout(payload)
-            elif action.startswith("stack_"): 
+            elif action == "menu_open":
+                response = self._handle_menu_open(payload)
+            elif action == "menu_select":
+                response = self._handle_menu_select(payload)
+            elif action.startswith("stack_"):
                 with self.lock: response = self.handle_stack_op(action.replace("stack_", ""), payload)
-            else: 
+            else:
                 response["status"] = "error"; response["message"] = f"Unknown action: {action}"
             
             conn.sendall(json.dumps(response).encode())

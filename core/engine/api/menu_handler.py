@@ -116,13 +116,12 @@ def _get_workspace_root() -> Optional[str]:
     return os.getcwd()
 
 
-def handle_open() -> Dict[str, Any]:
-    """Load the cascaded menu tree and return renderable items.
+def load_cascade() -> list:
+    """Load the full cascaded node tree (global + profile + workspace + pack).
 
-    Loads nodes from three scope layers (global, profile, workspace)
-    plus active pack commands, merges via resolve_tree, then flattens
-    for rendering.  Returns a dict with action ``show_menu``, the
-    flattened items list, and the source identifier.
+    This is the single source of truth for node resolution. Both
+    ``handle_open`` and ``handle_select`` use this to ensure they see
+    the same nodes.
     """
     # Layer 1: Global nodes from system_root.yaml
     yaml_path = os.path.normpath(_SYSTEM_ROOT_YAML)
@@ -144,7 +143,13 @@ def handle_open() -> Dict[str, Any]:
         workspace_nodes.extend(pack_nodes)
 
     # Merge via cascade resolver
-    nodes = resolve_tree([global_nodes, profile_nodes, workspace_nodes])
+    return resolve_tree([global_nodes, profile_nodes, workspace_nodes])
+
+
+def handle_open() -> Dict[str, Any]:
+    """Load the cascaded menu tree and return renderable items."""
+    yaml_path = os.path.normpath(_SYSTEM_ROOT_YAML)
+    nodes = load_cascade()
 
     if not nodes and not os.path.isfile(yaml_path):
         return {
@@ -193,8 +198,7 @@ def handle_select(
         the system root YAML.
     """
     if nodes is None:
-        yaml_path = os.path.normpath(_SYSTEM_ROOT_YAML)
-        nodes = load_nodes_from_yaml(yaml_path)
+        nodes = load_cascade()
 
     index = _build_node_index(nodes)
     node = index.get(node_id)

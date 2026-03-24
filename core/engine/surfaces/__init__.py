@@ -113,6 +113,22 @@ class Surface(ABC):
         """Resize a container."""
         ...
 
+    # -- Swap — atomic container exchange --------------------------------------
+
+    @abstractmethod
+    def swap_containers(self, source: str, target: str) -> bool:
+        """Atomically swap two containers (ghost-swap).
+
+        Used by the tab-stack system to swap a visible pane with a
+        background pane in the reservoir. Returns True on success.
+        """
+        ...
+
+    @abstractmethod
+    def container_exists(self, handle: str) -> bool:
+        """Return True if the container handle is still alive."""
+        ...
+
     # -- Content — process management ------------------------------------------
 
     @abstractmethod
@@ -140,6 +156,16 @@ class Surface(ABC):
     @abstractmethod
     def get_dimensions(self, handle: str) -> Dimensions:
         """Return dimensions of a container."""
+        ...
+
+    @abstractmethod
+    def get_geometry(self, handle: str) -> Optional[Dict]:
+        """Return full geometry {x, y, w, h} of a container, or None."""
+        ...
+
+    @abstractmethod
+    def set_geometry(self, handle: str, geometry: Dict) -> None:
+        """Apply geometry {w, h} to a container (resize)."""
         ...
 
     # -- Metadata — tag containers ---------------------------------------------
@@ -226,6 +252,12 @@ class NullSurface(Surface):
     def resize(self, handle: str, dimensions: Dimensions) -> None:
         pass
 
+    def swap_containers(self, source: str, target: str) -> bool:
+        return True
+
+    def container_exists(self, handle: str) -> bool:
+        return True
+
     def attach_process(self, handle: str, command: str) -> None:
         pass
 
@@ -240,6 +272,12 @@ class NullSurface(Surface):
 
     def get_dimensions(self, handle: str) -> Dimensions:
         return Dimensions(width=0, height=0)
+
+    def get_geometry(self, handle: str) -> Optional[Dict]:
+        return {"x": 0, "y": 0, "w": 80, "h": 24}
+
+    def set_geometry(self, handle: str, geometry: Dict) -> None:
+        pass
 
     def set_tag(self, handle: str, key: str, value: str) -> None:
         pass
@@ -279,3 +317,8 @@ __all__ = [
     "MenuItem",
     "HudModule",
 ]
+
+# Lazy import to avoid pulling subprocess into headless/test contexts
+def TmuxSurface(*args, **kwargs):
+    from engine.surfaces.tmux_surface import TmuxSurface as _Cls
+    return _Cls(*args, **kwargs)

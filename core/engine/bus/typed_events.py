@@ -14,6 +14,9 @@ class EventType(Enum):
     STACK_PUSH = "stack.push"
     STACK_POP = "stack.pop"
     STACK_ROTATE = "stack.rotate"
+    STACK_SWITCH = "stack.switch"
+    STACK_REPLACE = "stack.replace"
+    STACK_CLOSE = "stack.close"
     PANE_SPLIT = "pane.split"
     PANE_KILL = "pane.kill"
     TAB_SWITCH = "tab.switch"
@@ -24,6 +27,13 @@ class EventType(Enum):
     COMPOSITION_SWITCH = "composition.switch"
     WORKSPACE_SAVE = "workspace.save"
     WORKSPACE_RESTORE = "workspace.restore"
+    PROJECT_DISCOVERED = "project.discovered"
+    BOOT_START = "boot.start"
+    BOOT_PROGRESS = "boot.progress"
+    BOOT_COMPLETE = "boot.complete"
+    BOOT_ITEM_OK = "boot.item.ok"
+    BOOT_ITEM_FAIL = "boot.item.fail"
+    BOOT_SHUTDOWN = "boot.shutdown"
     CUSTOM = "custom"
 
 

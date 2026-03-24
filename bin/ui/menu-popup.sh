@@ -171,9 +171,20 @@ fi
 
 if [[ "$HAS_CHILDREN" == "true" ]]; then
     # Group node: re-open menu filtered to this subtree
-    # For now, just execute select which will expand the group
+    # TODO: implement subtree navigation
     $NEXUS_CTL menu select "$NODE_ID" 2>/dev/null
 else
-    # Leaf node: execute the selection
-    $NEXUS_CTL menu select "$NODE_ID" 2>/dev/null
+    # Leaf node: dispatch through daemon — NexusCore resolves and executes
+    DAEMON_CLIENT="$NEXUS_HOME/core/engine/lib/daemon_client.py"
+    SELECT_RESULT=$(python3 "$DAEMON_CLIENT" menu_select "{\"node_id\": \"$NODE_ID\"}" 2>/dev/null) || true
+
+    # [INVARIANT] Verify dispatch succeeded
+    if [[ -n "$SELECT_RESULT" ]]; then
+        STATUS=$(echo "$SELECT_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        if [[ "$STATUS" != "ok" ]]; then
+            echo "[menu-popup] Dispatch failed: $SELECT_RESULT" >&2
+        fi
+    else
+        echo "[menu-popup] [INVARIANT] No response from daemon menu_select" >&2
+    fi
 fi

@@ -77,12 +77,12 @@ class TestSurfaceContract:
         assert surface is not None
 
     def test_abstract_method_count(self):
-        """Surface ABC has exactly 21 abstract methods."""
+        """Surface ABC has exactly 25 abstract methods."""
         abstract = {
             name for name, val in vars(Surface).items()
             if getattr(val, "__isabstractmethod__", False)
         }
-        assert len(abstract) == 21
+        assert len(abstract) == 25
 
 
 class TestTextualSurfaceInitialize:

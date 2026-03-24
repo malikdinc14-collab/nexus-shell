@@ -63,7 +63,7 @@ class TestEventType:
             assert "." in et.value or et == EventType.CUSTOM
 
     def test_enum_count(self):
-        assert len(EventType) == 14
+        assert len(EventType) == 24
 
 
 class TestTypedEvent:

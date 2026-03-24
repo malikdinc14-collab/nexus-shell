@@ -703,6 +703,24 @@ class TextualSurface(Surface):
             return Dimensions(width=0, height=0)
         return Dimensions(width=state.width, height=state.height)
 
+    def get_geometry(self, handle: str):
+        state = self.app.panes.get(handle)
+        if state is None:
+            return None
+        return {"x": 0, "y": 0, "w": state.width, "h": state.height}
+
+    def set_geometry(self, handle: str, geometry: dict) -> None:
+        state = self.app.panes.get(handle)
+        if state:
+            state.width = geometry.get("w", state.width)
+            state.height = geometry.get("h", state.height)
+
+    def swap_containers(self, source: str, target: str) -> bool:
+        return source in self.app.panes and target in self.app.panes
+
+    def container_exists(self, handle: str) -> bool:
+        return handle in self.app.panes
+
     # -- Metadata ------------------------------------------------------------
 
     def set_tag(self, handle: str, key: str, value: str) -> None:

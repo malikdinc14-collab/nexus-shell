@@ -19,10 +19,12 @@ import getpass
 class WorkspaceOrchestrator:
     def __init__(self, nexus_home: Path, project_root: Path,
                  socket_label: Optional[str] = None,
-                 multiplexer=None):
+                 multiplexer=None,
+                 core=None):
         self.nexus_home = nexus_home
         self.project_root = project_root
         self.socket_label = socket_label
+        self.core = core  # NexusCore reference — eliminates socket re-entry
         self.wrapper = str(nexus_home / "core/kernel/boot/pane_wrapper.sh")
         user = getpass.getuser()
         self.log_file = Path(f"/tmp/nexus_{user}/daemon.log")
@@ -234,18 +236,28 @@ class WorkspaceOrchestrator:
                     self.log(f"Adapter override: '{cmd}' -> '{adapter_cmd}'")
                     cmd = adapter_cmd
 
-            wrapped = f"{self.wrapper} {cmd}"
+            # Quote the command so && and other shell operators stay inside the wrapper
+            escaped_cmd = cmd.replace("'", "'\\''")
+            wrapped = f"{self.wrapper} '{escaped_cmd}'"
             if self.mux:
                 self.mux.send_command(target_pane, wrapped)
             else:
                 self.run_tmux(["send-keys", "-t", target_pane, wrapped, "ENTER"])
         
-        # Lazy Adoption Trigger: Call stack init as 'local' to ensure unique identity
-        stack_bin = self.nexus_home / "core/kernel/stack/stack"
-        # We pass 'local' to ensure the Daemon generates a fresh UUID for this container.
-        # The 'role' metadata is already set as a tmux option and will be adopted during the init.
-        subprocess.run([str(stack_bin), "init", "local"], 
-                       env={**os.environ, "TMUX_PANE": target_pane})
+        # Adopt pane into stack registry
+        role = config.get("id") or config.get("role") or "local"
+        if self.core:
+            # Direct call — no subprocess, no socket, no deadlock
+            self.core.handle_stack_op("adopt", {
+                "identity": role if role != "local" else "",
+                "pane_id": target_pane,
+                "name": config.get("name", role.capitalize() if role != "local" else "Shell"),
+            })
+        else:
+            # Fallback: shell out to stack init (re-entrant socket call)
+            stack_bin = self.nexus_home / "core/kernel/stack/stack"
+            subprocess.run([str(stack_bin), "init", role],
+                           env={**os.environ, "TMUX_PANE": target_pane})
 
     def _build_momentum(self, snapshot: Dict[str, Any], target_window: str):
         """Restores a window from a high-fidelity 'Moment' snapshot."""
