@@ -1,0 +1,628 @@
+//! NexusCore — the single entry point for all Nexus Shell operations.
+//!
+//! The core is surface-agnostic. Inject a Surface implementation at
+//! construction time. All state lives here; the surface is a dumb renderer.
+
+use std::collections::HashMap;
+
+use crate::bus::{EventBus, EventType, TypedEvent};
+use crate::stack::{Tab, TabStack, TabStatus};
+use crate::stack_manager::StackManager;
+use crate::surface::Surface;
+
+/// Find the visible container in a stack given the focused pane.
+fn get_visible_container(stack: &TabStack, focused_id: &str) -> Option<String> {
+    if stack.tabs.is_empty() {
+        return None;
+    }
+    for tab in &stack.tabs {
+        if tab.pane_handle.as_deref() == Some(focused_id) {
+            return Some(focused_id.to_string());
+        }
+    }
+    for tab in &stack.tabs {
+        if tab.status == TabStatus::Visible {
+            return tab.pane_handle.clone();
+        }
+    }
+    stack.active_tab().and_then(|t| t.pane_handle.clone())
+}
+
+/// Result of a stack operation, returned as JSON-compatible data.
+#[derive(Debug, Clone)]
+pub struct OpResult {
+    pub status: String,
+    pub data: HashMap<String, serde_json::Value>,
+}
+
+impl OpResult {
+    pub fn ok() -> Self {
+        Self {
+            status: "ok".into(),
+            data: HashMap::new(),
+        }
+    }
+
+    pub fn ok_with(key: &str, value: impl Into<serde_json::Value>) -> Self {
+        let mut data = HashMap::new();
+        data.insert(key.to_string(), value.into());
+        Self {
+            status: "ok".into(),
+            data,
+        }
+    }
+
+    pub fn error(err: &str) -> Self {
+        let mut data = HashMap::new();
+        data.insert("error".to_string(), serde_json::Value::String(err.into()));
+        Self {
+            status: "error".into(),
+            data,
+        }
+    }
+}
+
+/// Facade wrapping all engine modules behind a surface-agnostic API.
+pub struct NexusCore {
+    pub surface: Box<dyn Surface>,
+    pub stacks: StackManager,
+    pub bus: EventBus,
+    session: Option<String>,
+}
+
+impl NexusCore {
+    pub fn new(surface: Box<dyn Surface>) -> Self {
+        Self {
+            surface,
+            stacks: StackManager::new(),
+            bus: EventBus::new(),
+            session: None,
+        }
+    }
+
+    // -- Workspace -----------------------------------------------------------
+
+    /// Initialize a workspace session on the surface.
+    pub fn create_workspace(&mut self, name: &str, cwd: &str) -> String {
+        let session = self.surface.initialize(name, cwd);
+        self.session = Some(session.clone());
+        self.bus.publish(
+            TypedEvent::new(EventType::Custom, "workspace.created")
+                .with_payload("name", name),
+        );
+        session
+    }
+
+    /// Current session handle.
+    pub fn session(&self) -> Option<&str> {
+        self.session.as_deref()
+    }
+
+    // -- Stack operations ----------------------------------------------------
+
+    /// Route a stack operation through NexusCore.
+    ///
+    /// Operations: push, switch, replace, close, adopt, tag, untag, rename
+    pub fn handle_stack_op(&mut self, op: &str, payload: &HashMap<String, String>) -> OpResult {
+        match op {
+            "push" => self.stack_push(payload),
+            "switch" => self.stack_switch(payload),
+            "replace" => self.stack_replace(payload),
+            "close" => self.stack_close(payload),
+            "adopt" => self.stack_adopt(payload),
+            "tag" => self.stack_tag(payload),
+            "untag" => self.stack_untag(payload),
+            "rename" => self.stack_rename(payload),
+            _ => OpResult::error("unknown_op"),
+        }
+    }
+
+    fn stack_push(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let new_pane_id = match payload.get("pane_id") {
+            Some(id) => id.clone(),
+            None => return OpResult::error("no_pane_id"),
+        };
+        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Shell");
+
+        let focused_id = payload
+            .get("focused_id")
+            .cloned()
+            .or_else(|| {
+                self.session
+                    .as_ref()
+                    .and_then(|s| self.surface.get_focused(s))
+            })
+            .unwrap_or_default();
+
+        let (sid, stack) = self.stacks.get_or_create_by_identity(
+            identity,
+            if focused_id.is_empty() {
+                None
+            } else {
+                Some(&focused_id)
+            },
+        );
+        let sid = sid.clone();
+
+        // Tag with role
+        if !identity.is_empty() && !identity.starts_with("stack_") && stack.role.is_none() {
+            stack.role = Some(identity.to_string());
+            if !focused_id.is_empty() {
+                self.surface.set_tag(&focused_id, "nexus_role", identity);
+            }
+        }
+
+        let visible_id = get_visible_container(
+            self.stacks.get_stack(&sid).unwrap(),
+            &focused_id,
+        );
+
+        // Mark existing tabs as background and snapshot geometry
+        if let (Some(vis), Some(stack)) = (visible_id.as_ref(), self.stacks.get_stack_mut(&sid)) {
+            let geo = self.surface.get_geometry(vis);
+            for tab in &mut stack.tabs {
+                tab.status = TabStatus::Background;
+                tab.is_active = false;
+                if tab.pane_handle.as_deref() == Some(vis) {
+                    tab.geometry = geo.clone();
+                }
+            }
+        }
+
+        // Ghost-swap
+        if let Some(ref vis) = visible_id {
+            if !self.surface.swap_containers(vis, &new_pane_id) {
+                return OpResult::error("swap_failed");
+            }
+        }
+
+        self.surface.focus(&new_pane_id);
+
+        let geo = visible_id
+            .as_ref()
+            .and_then(|_| self.surface.get_geometry(&new_pane_id));
+
+        // Add new tab
+        let new_tab = Tab::new(name)
+            .with_handle(&new_pane_id)
+            .with_status(TabStatus::Visible, true);
+        let stack = self.stacks.get_stack_mut(&sid).unwrap();
+        let mut tab = new_tab;
+        tab.geometry = geo;
+        stack.tabs.push(tab);
+        stack.active_index = stack.tabs.len() - 1;
+
+        self.surface.set_tag(&new_pane_id, "nexus_stack_id", &sid);
+
+        self.bus.publish(
+            TypedEvent::new(EventType::StackPush, "stack.push")
+                .with_payload("stack_id", sid.as_str())
+                .with_payload("pane", new_pane_id.as_str())
+                .with_payload("name", name),
+        );
+
+        OpResult::ok_with("stack_id", sid)
+    }
+
+    fn stack_switch(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let index: usize = payload
+            .get("index")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        // Resolve sid with immutable borrow, then release
+        let sid = match self.stacks.get_by_identity(identity) {
+            Some((sid, _)) => sid.to_string(),
+            None => return OpResult::error("not_found"),
+        };
+
+        // Now work with the stack through sid
+        let (target_id, visible_id) = {
+            let stack = self.stacks.get_stack(&sid).unwrap();
+            if index >= stack.tabs.len() {
+                return OpResult::error("not_found");
+            }
+            let target = match stack.tabs[index].pane_handle.clone() {
+                Some(id) => id,
+                None => return OpResult::error("no_handle"),
+            };
+            let focused_id = payload
+                .get("focused_id")
+                .cloned()
+                .or_else(|| {
+                    self.session
+                        .as_ref()
+                        .and_then(|s| self.surface.get_focused(s))
+                })
+                .unwrap_or_default();
+            let visible = get_visible_container(stack, &focused_id);
+            (target, visible)
+        };
+
+        if visible_id.as_deref() == Some(target_id.as_str()) {
+            return OpResult::ok();
+        }
+
+        let outgoing_geo = visible_id
+            .as_ref()
+            .and_then(|v| self.surface.get_geometry(v));
+
+        if let Some(ref vis) = visible_id {
+            if !self.surface.swap_containers(vis, &target_id) {
+                return OpResult::error("swap_failed");
+            }
+        }
+
+        self.surface.focus(&target_id);
+
+        // Restore geometry
+        let incoming_geo = self.stacks.get_stack(&sid).unwrap().tabs[index].geometry.clone();
+        if let Some(ref geo) = incoming_geo {
+            self.surface.set_geometry(&target_id, geo);
+        }
+
+        // Update statuses
+        let stack = self.stacks.get_stack_mut(&sid).unwrap();
+        for (i, tab) in stack.tabs.iter_mut().enumerate() {
+            if Some(tab.pane_handle.as_deref()) == Some(visible_id.as_deref()) {
+                tab.geometry = outgoing_geo.clone();
+            }
+            tab.status = if i == index {
+                TabStatus::Visible
+            } else {
+                TabStatus::Background
+            };
+            tab.is_active = i == index;
+        }
+        stack.active_index = index;
+
+        self.bus.publish(
+            TypedEvent::new(EventType::StackSwitch, "stack.switch")
+                .with_payload("stack_id", sid.as_str())
+                .with_payload("pane", target_id.as_str())
+                .with_payload("index", index as u64),
+        );
+
+        OpResult::ok()
+    }
+
+    fn stack_replace(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let new_pane_id = match payload.get("pane_id") {
+            Some(id) => id.clone(),
+            None => return OpResult::error("no_pane_id"),
+        };
+        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Shell");
+
+        // Resolve sid with immutable borrow
+        let sid = match self.stacks.get_by_identity(identity) {
+            Some((sid, _)) => sid.to_string(),
+            None => return self.stack_push(payload),
+        };
+
+        let (idx, old_pane_id, visible_id) = {
+            let stack = self.stacks.get_stack(&sid).unwrap();
+            let idx = stack.active_index;
+            let old = stack.tabs[idx].pane_handle.clone();
+            let focused_id = payload
+                .get("focused_id")
+                .cloned()
+                .or_else(|| {
+                    self.session
+                        .as_ref()
+                        .and_then(|s| self.surface.get_focused(s))
+                })
+                .unwrap_or_default();
+            let visible = get_visible_container(stack, &focused_id);
+            (idx, old, visible)
+        };
+
+        let geo = visible_id
+            .as_ref()
+            .and_then(|v| self.surface.get_geometry(v));
+
+        if let Some(ref vis) = visible_id {
+            if !self.surface.swap_containers(vis, &new_pane_id) {
+                return OpResult::error("swap_failed");
+            }
+        }
+
+        self.surface.focus(&new_pane_id);
+        if let Some(ref g) = geo {
+            self.surface.set_geometry(&new_pane_id, g);
+        }
+
+        // Kill old pane
+        if let Some(ref old) = old_pane_id {
+            if old != &new_pane_id {
+                self.surface.destroy_container(old);
+            }
+        }
+
+        // Replace tab in-place
+        let mut new_tab = Tab::new(name)
+            .with_handle(&new_pane_id)
+            .with_status(TabStatus::Visible, true);
+        new_tab.geometry = geo;
+        let stack = self.stacks.get_stack_mut(&sid).unwrap();
+        stack.tabs[idx] = new_tab;
+
+        self.bus.publish(
+            TypedEvent::new(EventType::StackReplace, "stack.replace")
+                .with_payload("stack_id", sid.as_str())
+                .with_payload("new_pane", new_pane_id.as_str()),
+        );
+
+        OpResult::ok()
+    }
+
+    fn stack_close(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+
+        // Resolve sid and extract data with immutable borrow
+        let (sid, idx, target_id, foundation_id, visible_id) = {
+            let (sid, stack) = match self.stacks.get_by_identity(identity) {
+                Some((sid, stack)) => (sid.to_string(), stack),
+                None => return OpResult::error("empty"),
+            };
+
+            if stack.tabs.is_empty() {
+                return OpResult::error("empty");
+            }
+
+            let idx = stack.active_index;
+            if idx == 0 {
+                return OpResult::error("foundation_protected");
+            }
+
+            let target = stack.tabs[idx].pane_handle.clone();
+            let foundation = match stack.tabs[0].pane_handle.clone() {
+                Some(id) => id,
+                None => return OpResult::error("no_foundation"),
+            };
+
+            let focused_id = payload
+                .get("focused_id")
+                .cloned()
+                .or_else(|| {
+                    self.session
+                        .as_ref()
+                        .and_then(|s| self.surface.get_focused(s))
+                })
+                .unwrap_or_default();
+
+            let visible = get_visible_container(stack, &focused_id);
+            (sid, idx, target, foundation, visible)
+        };
+
+        if let Some(ref vis) = visible_id {
+            if !self.surface.swap_containers(vis, &foundation_id) {
+                return OpResult::error("swap_failed");
+            }
+        }
+
+        self.surface.focus(&foundation_id);
+
+        if let Some(ref target) = target_id {
+            self.surface.destroy_container(target);
+        }
+
+        let stack = self.stacks.get_stack_mut(&sid).unwrap();
+        stack.tabs.remove(idx);
+        stack.active_index = 0;
+        for (i, tab) in stack.tabs.iter_mut().enumerate() {
+            tab.status = if i == 0 {
+                TabStatus::Visible
+            } else {
+                TabStatus::Background
+            };
+            tab.is_active = i == 0;
+        }
+
+        self.bus.publish(
+            TypedEvent::new(EventType::StackClose, "stack.close")
+                .with_payload("stack_id", sid.as_str()),
+        );
+
+        OpResult::ok()
+    }
+
+    fn stack_adopt(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let pane_id = match payload.get("pane_id") {
+            Some(id) => id.clone(),
+            None => return OpResult::error("no_pane_id"),
+        };
+        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Shell");
+
+        let (sid, stack) = self
+            .stacks
+            .get_or_create_by_identity(identity, Some(&pane_id));
+        let sid = sid.clone();
+
+        for tab in &mut stack.tabs {
+            if tab.pane_handle.as_deref() == Some(&pane_id) {
+                tab.status = TabStatus::Visible;
+                tab.name = name.to_string();
+            }
+        }
+
+        self.surface.set_tag(&pane_id, "nexus_stack_id", &sid);
+        if let Some(ref role) = stack.role.clone() {
+            self.surface.set_tag(&pane_id, "nexus_role", role);
+        }
+
+        OpResult::ok_with("stack_id", sid)
+    }
+
+    fn stack_tag(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let tag = match payload.get("tag") {
+            Some(t) => t.clone(),
+            None => return OpResult::error("no_tag"),
+        };
+
+        match self.stacks.get_by_identity_mut(identity) {
+            Some((sid, stack)) => {
+                if !stack.tags.contains(&tag) {
+                    stack.tags.push(tag);
+                }
+                OpResult::ok_with("stack_id", sid)
+            }
+            None => OpResult::error("not_found"),
+        }
+    }
+
+    fn stack_untag(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let tag = payload.get("tag").cloned().unwrap_or_default();
+
+        match self.stacks.get_by_identity_mut(identity) {
+            Some((_sid, stack)) => {
+                stack.tags.retain(|t| t != &tag);
+                OpResult::ok()
+            }
+            None => OpResult::error("not_found"),
+        }
+    }
+
+    fn stack_rename(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let name = match payload.get("name") {
+            Some(n) => n.clone(),
+            None => return OpResult::error("no_name"),
+        };
+
+        match self.stacks.get_by_identity_mut(identity) {
+            Some((_sid, stack)) => {
+                stack.role = Some(name);
+                OpResult::ok()
+            }
+            None => OpResult::error("not_found"),
+        }
+    }
+
+    // -- Event Bus -----------------------------------------------------------
+
+    pub fn publish(&mut self, source: &str, payload: HashMap<String, serde_json::Value>) {
+        let mut event = TypedEvent::new(EventType::Custom, source);
+        event.payload = payload;
+        self.bus.publish(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::surface::NullSurface;
+
+    fn make_core() -> NexusCore {
+        let mut core = NexusCore::new(Box::new(NullSurface::new()));
+        core.create_workspace("test", "/tmp");
+        core
+    }
+
+    fn payload(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn create_workspace() {
+        let mut core = NexusCore::new(Box::new(NullSurface::new()));
+        let session = core.create_workspace("test", "/tmp");
+        assert_eq!(session, "null:test");
+        assert_eq!(core.session(), Some("null:test"));
+    }
+
+    #[test]
+    fn stack_push_creates_stack() {
+        let mut core = make_core();
+        let result = core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor"), ("pane_id", "p1"), ("name", "Vim")]),
+        );
+        assert_eq!(result.status, "ok");
+        assert!(result.data.contains_key("stack_id"));
+    }
+
+    #[test]
+    fn stack_push_no_pane_id_errors() {
+        let mut core = make_core();
+        let result = core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor")]),
+        );
+        assert_eq!(result.status, "error");
+    }
+
+    #[test]
+    fn stack_adopt() {
+        let mut core = make_core();
+        let result = core.handle_stack_op(
+            "adopt",
+            &payload(&[("identity", "terminal"), ("pane_id", "p1"), ("name", "zsh")]),
+        );
+        assert_eq!(result.status, "ok");
+    }
+
+    #[test]
+    fn stack_close_protects_foundation() {
+        let mut core = make_core();
+        // Push initial tab
+        core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor"), ("pane_id", "p1")]),
+        );
+        // Try to close foundation
+        let result = core.handle_stack_op(
+            "close",
+            &payload(&[("identity", "editor")]),
+        );
+        assert_eq!(result.status, "error");
+    }
+
+    #[test]
+    fn stack_tag_and_untag() {
+        let mut core = make_core();
+        core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor"), ("pane_id", "p1")]),
+        );
+
+        let result = core.handle_stack_op(
+            "tag",
+            &payload(&[("identity", "editor"), ("tag", "important")]),
+        );
+        assert_eq!(result.status, "ok");
+
+        let result = core.handle_stack_op(
+            "untag",
+            &payload(&[("identity", "editor"), ("tag", "important")]),
+        );
+        assert_eq!(result.status, "ok");
+    }
+
+    #[test]
+    fn stack_rename() {
+        let mut core = make_core();
+        core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor"), ("pane_id", "p1")]),
+        );
+
+        let result = core.handle_stack_op(
+            "rename",
+            &payload(&[("identity", "editor"), ("name", "code")]),
+        );
+        assert_eq!(result.status, "ok");
+    }
+
+    #[test]
+    fn unknown_op_errors() {
+        let mut core = make_core();
+        let result = core.handle_stack_op("bogus", &HashMap::new());
+        assert_eq!(result.status, "error");
+    }
+}

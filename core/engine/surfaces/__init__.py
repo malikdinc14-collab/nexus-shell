@@ -6,8 +6,8 @@ a tiling window manager, a desktop app, or a web browser. The core
 never calls tmux, i3, or any display technology directly — it talks
 to a Surface.
 
-Current implementations: NullSurface, TextualSurface
-Planned: SwaySurface, HyprlandSurface, TauriSurface, WebSurface, CompositeSurface
+Current implementations: NullSurface, TmuxSurface
+Planned: KittySurface, ItermSurface, SwaySurface, HyprlandSurface, TauriSurface
 """
 
 from abc import ABC, abstractmethod
