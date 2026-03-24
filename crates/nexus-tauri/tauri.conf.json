@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/nicegui/static/nicegui/tauri.conf.json",
+  "productName": "Nexus Shell",
+  "version": "0.1.0",
+  "identifier": "com.nexus-shell.app",
+  "build": {
+    "frontendDist": "ui/dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Nexus Shell",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "decorations": true,
+        "transparent": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "nexus-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Nexus Shell desktop app — Tauri surface with embedded engine"
+
+[dependencies]
+nexus-engine = { path = "../nexus-engine" }
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[[bin]]
+name = "nexus-tauri"
+path = "src/main.rs"
