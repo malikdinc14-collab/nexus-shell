@@ -1,9 +1,14 @@
-//! Surface abstraction — the display/control layer for Nexus Shell.
+//! Mux abstraction — the multiplexer layer for Nexus Shell.
 //!
-//! A Surface is anything that can host workspaces: a terminal multiplexer,
-//! a tiling window manager, a desktop app, or a web browser. The core
-//! never calls tmux, i3, or any display technology directly — it talks
-//! to a Surface.
+//! A Mux is anything that can manage spatial layout: a terminal multiplexer
+//! (tmux, zellij), a terminal emulator (kitty, iTerm2, ghostty), a tiling
+//! window manager (sway, hyprland), or a desktop app (Tauri). The core
+//! never calls any display technology directly — it talks to a Mux.
+//!
+//! Rendering (menus, HUD, notifications) is handled by optional methods
+//! with defaults that return false/"not supported". Backends that support
+//! native popups (tmux, Tauri) override them; others fall back to
+//! pane-level widgets.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -84,16 +89,18 @@ pub struct HudModule {
 }
 
 // ---------------------------------------------------------------------------
-// Surface trait
+// Mux trait
 // ---------------------------------------------------------------------------
 
-/// Abstract base for all display surfaces.
+/// Abstract base for all multiplexer backends.
 ///
-/// A Surface handles spatial layout, process attachment, menu rendering,
-/// HUD display, and notifications. The core calls Surface methods;
-/// implementations translate to tmux, Sway, Tauri IPC, WebSocket, etc.
-pub trait Surface: Send + Sync {
-    // -- Lifecycle -----------------------------------------------------------
+/// A Mux handles spatial layout, container lifecycle, process attachment,
+/// and metadata. Optional methods cover rendering capabilities (popups,
+/// menus, notifications) that some backends support natively.
+///
+/// Implementations: tmux, kitty, iTerm2, sway, hyprland, Tauri
+pub trait Mux: Send + Sync {
+    // ── Lifecycle (required) ───────────────────────────────────────────────
 
     /// Create or attach to a workspace session. Returns session handle.
     fn initialize(&mut self, session_name: &str, cwd: &str) -> String;
@@ -101,7 +108,7 @@ pub trait Surface: Send + Sync {
     /// Destroy a workspace session and all its containers.
     fn teardown(&mut self, session: &str);
 
-    // -- Spatial — container management --------------------------------------
+    // ── Spatial (required) ─────────────────────────────────────────────────
 
     /// Create a new container in the session. Returns container handle.
     fn create_container(&mut self, session: &str, command: &str, cwd: &str) -> String;
@@ -124,7 +131,7 @@ pub trait Surface: Send + Sync {
     /// Resize a container.
     fn resize(&mut self, handle: &str, dimensions: Dimensions);
 
-    // -- Swap — atomic container exchange ------------------------------------
+    // ── Swap (required) ────────────────────────────────────────────────────
 
     /// Atomically swap two containers (ghost-swap).
     fn swap_containers(&mut self, source: &str, target: &str) -> bool;
@@ -132,7 +139,7 @@ pub trait Surface: Send + Sync {
     /// Return true if the container handle is still alive.
     fn container_exists(&self, handle: &str) -> bool;
 
-    // -- Content — process management ----------------------------------------
+    // ── Content (required) ─────────────────────────────────────────────────
 
     /// Run a command inside a container.
     fn attach_process(&mut self, handle: &str, command: &str);
@@ -140,7 +147,7 @@ pub trait Surface: Send + Sync {
     /// Send keystrokes to a container.
     fn send_input(&mut self, handle: &str, keys: &str);
 
-    // -- State — query containers --------------------------------------------
+    // ── State (required) ───────────────────────────────────────────────────
 
     /// Return all containers in the session.
     fn list_containers(&self, session: &str) -> Vec<ContainerInfo>;
@@ -157,7 +164,7 @@ pub trait Surface: Send + Sync {
     /// Apply geometry to a container.
     fn set_geometry(&mut self, handle: &str, geometry: &Geometry);
 
-    // -- Metadata — tag containers -------------------------------------------
+    // ── Metadata (required) ────────────────────────────────────────────────
 
     /// Attach metadata to a container.
     fn set_tag(&mut self, handle: &str, key: &str, value: &str);
@@ -168,18 +175,7 @@ pub trait Surface: Send + Sync {
     /// Set the display title of a container.
     fn set_title(&mut self, handle: &str, title: &str);
 
-    // -- Rendering — menus, HUD, notifications -------------------------------
-
-    /// Display a menu and return the selected item ID.
-    fn show_menu(&mut self, items: &[MenuItem], prompt: &str) -> Option<String>;
-
-    /// Update the HUD/status display.
-    fn show_hud(&mut self, modules: &[HudModule]);
-
-    /// Show a notification to the user.
-    fn notify(&mut self, message: &str, level: &str);
-
-    // -- Layout --------------------------------------------------------------
+    // ── Layout (required) ──────────────────────────────────────────────────
 
     /// Apply a composition layout to the session.
     fn apply_layout(&mut self, session: &str, layout: &serde_json::Value) -> bool;
@@ -187,23 +183,67 @@ pub trait Surface: Send + Sync {
     /// Capture the current layout for persistence.
     fn capture_layout(&self, session: &str) -> serde_json::Value;
 
-    // -- Environment ---------------------------------------------------------
+    // ── Environment (required) ─────────────────────────────────────────────
 
     /// Set an environment variable visible to all containers.
     fn set_env(&mut self, session: &str, key: &str, value: &str);
+
+    // ── Rendering (optional — override if backend supports natively) ───────
+
+    /// Show a popup overlay running a command. Returns false if unsupported.
+    /// tmux: display-popup. Tauri: native dialog. Others: fall back to pane.
+    fn show_popup(
+        &mut self,
+        _command: &str,
+        _width: u32,
+        _height: u32,
+    ) -> bool {
+        false
+    }
+
+    /// Display a menu and return the selected item ID. Returns None if unsupported.
+    /// tmux: display-menu. Tauri: native menu. Others: fall back to pane widget.
+    fn show_menu(&mut self, _items: &[MenuItem], _prompt: &str) -> Option<String> {
+        None
+    }
+
+    /// Update the HUD/status bar. No-op if unsupported.
+    /// tmux: status-left/right. Tauri: native status bar.
+    fn show_hud(&mut self, _modules: &[HudModule]) {}
+
+    /// Show a notification. Returns false if unsupported.
+    /// tmux: display-message. macOS: osascript. Linux: notify-send.
+    fn notify(&mut self, _message: &str, _level: &str) -> bool {
+        false
+    }
+
+    /// Whether this backend supports native popup overlays.
+    fn supports_popup(&self) -> bool {
+        false
+    }
+
+    /// Whether this backend supports native menus.
+    fn supports_menu(&self) -> bool {
+        false
+    }
+
+    /// Whether this backend supports native notifications.
+    fn supports_notify(&self) -> bool {
+        false
+    }
 }
 
 // ---------------------------------------------------------------------------
-// NullSurface — no-op implementation for testing
+// NullMux — no-op implementation for testing
 // ---------------------------------------------------------------------------
 
-/// No-op surface for testing and headless operation.
-pub struct NullSurface {
+/// No-op mux for testing and headless operation.
+pub struct NullMux {
     counter: u64,
     tags: HashMap<(String, String), String>,
 }
 
-impl NullSurface {
+impl NullMux {
     pub fn new() -> Self {
         Self {
             counter: 0,
@@ -217,13 +257,13 @@ impl NullSurface {
     }
 }
 
-impl Default for NullSurface {
+impl Default for NullMux {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Surface for NullSurface {
+impl Mux for NullMux {
     fn initialize(&mut self, session_name: &str, _cwd: &str) -> String {
         format!("null:{session_name}")
     }
@@ -302,14 +342,6 @@ impl Surface for NullSurface {
 
     fn set_title(&mut self, _handle: &str, _title: &str) {}
 
-    fn show_menu(&mut self, _items: &[MenuItem], _prompt: &str) -> Option<String> {
-        None
-    }
-
-    fn show_hud(&mut self, _modules: &[HudModule]) {}
-
-    fn notify(&mut self, _message: &str, _level: &str) {}
-
     fn apply_layout(&mut self, _session: &str, _layout: &serde_json::Value) -> bool {
         false
     }
@@ -326,31 +358,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn null_surface_initialize() {
-        let mut s = NullSurface::new();
-        let handle = s.initialize("test", "/tmp");
+    fn null_mux_initialize() {
+        let mut m = NullMux::new();
+        let handle = m.initialize("test", "/tmp");
         assert_eq!(handle, "null:test");
     }
 
     #[test]
-    fn null_surface_create_container_increments() {
-        let mut s = NullSurface::new();
-        let a = s.create_container("sess", "", "");
-        let b = s.create_container("sess", "", "");
+    fn null_mux_create_container_increments() {
+        let mut m = NullMux::new();
+        let a = m.create_container("sess", "", "");
+        let b = m.create_container("sess", "", "");
         assert_ne!(a, b);
     }
 
     #[test]
-    fn null_surface_tags_roundtrip() {
-        let mut s = NullSurface::new();
-        s.set_tag("pane1", "role", "editor");
-        assert_eq!(s.get_tag("pane1", "role"), "editor");
-        assert_eq!(s.get_tag("pane1", "missing"), "");
+    fn null_mux_tags_roundtrip() {
+        let mut m = NullMux::new();
+        m.set_tag("pane1", "role", "editor");
+        assert_eq!(m.get_tag("pane1", "role"), "editor");
+        assert_eq!(m.get_tag("pane1", "missing"), "");
     }
 
     #[test]
-    fn null_surface_swap_always_succeeds() {
-        let mut s = NullSurface::new();
-        assert!(s.swap_containers("a", "b"));
+    fn null_mux_swap_always_succeeds() {
+        let mut m = NullMux::new();
+        assert!(m.swap_containers("a", "b"));
+    }
+
+    #[test]
+    fn optional_methods_default_to_unsupported() {
+        let m = NullMux::new();
+        assert!(!m.supports_popup());
+        assert!(!m.supports_menu());
+        assert!(!m.supports_notify());
     }
 }

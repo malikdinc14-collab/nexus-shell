@@ -1,14 +1,14 @@
-//! Nexus Engine — surface-agnostic workspace orchestration.
+//! Nexus Engine — mux-agnostic workspace orchestration.
 //!
 //! This crate provides the core engine for Nexus Shell. It manages
 //! workspaces, tab stacks, event routing, and composition layouts
-//! through an abstract Surface trait.
+//! through an abstract Mux trait.
 //!
 //! # Architecture
 //!
 //! ```text
 //! NexusCore (facade)
-//! ├── Surface trait     (display abstraction)
+//! ├── Mux trait         (multiplexer abstraction)
 //! ├── StackManager      (tab stack state)
 //! └── EventBus          (typed pub/sub)
 //! ```
@@ -25,5 +25,5 @@ pub use bus::{EventBus, EventType, TypedEvent};
 pub use stack::{Tab, TabStack, TabStatus};
 pub use stack_manager::StackManager;
 pub use surface::{
-    ContainerInfo, Dimensions, Geometry, HudModule, MenuItem, NullSurface, SplitDirection, Surface,
+    ContainerInfo, Dimensions, Geometry, HudModule, MenuItem, Mux, NullMux, SplitDirection,
 };

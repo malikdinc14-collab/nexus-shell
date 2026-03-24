@@ -1,14 +1,14 @@
 //! NexusCore — the single entry point for all Nexus Shell operations.
 //!
-//! The core is surface-agnostic. Inject a Surface implementation at
-//! construction time. All state lives here; the surface is a dumb renderer.
+//! The core is mux-agnostic. Inject a Mux implementation at
+//! construction time. All state lives here; the mux is a dumb backend.
 
 use std::collections::HashMap;
 
 use crate::bus::{EventBus, EventType, TypedEvent};
 use crate::stack::{Tab, TabStack, TabStatus};
 use crate::stack_manager::StackManager;
-use crate::surface::Surface;
+use crate::surface::Mux;
 
 /// Find the visible container in a stack given the focused pane.
 fn get_visible_container(stack: &TabStack, focused_id: &str) -> Option<String> {
@@ -62,18 +62,18 @@ impl OpResult {
     }
 }
 
-/// Facade wrapping all engine modules behind a surface-agnostic API.
+/// Facade wrapping all engine modules behind a mux-agnostic API.
 pub struct NexusCore {
-    pub surface: Box<dyn Surface>,
+    pub mux: Box<dyn Mux>,
     pub stacks: StackManager,
     pub bus: EventBus,
     session: Option<String>,
 }
 
 impl NexusCore {
-    pub fn new(surface: Box<dyn Surface>) -> Self {
+    pub fn new(mux: Box<dyn Mux>) -> Self {
         Self {
-            surface,
+            mux,
             stacks: StackManager::new(),
             bus: EventBus::new(),
             session: None,
@@ -82,9 +82,9 @@ impl NexusCore {
 
     // -- Workspace -----------------------------------------------------------
 
-    /// Initialize a workspace session on the surface.
+    /// Initialize a workspace session on the mux.
     pub fn create_workspace(&mut self, name: &str, cwd: &str) -> String {
-        let session = self.surface.initialize(name, cwd);
+        let session = self.mux.initialize(name, cwd);
         self.session = Some(session.clone());
         self.bus.publish(
             TypedEvent::new(EventType::Custom, "workspace.created")
@@ -131,7 +131,7 @@ impl NexusCore {
             .or_else(|| {
                 self.session
                     .as_ref()
-                    .and_then(|s| self.surface.get_focused(s))
+                    .and_then(|s| self.mux.get_focused(s))
             })
             .unwrap_or_default();
 
@@ -149,7 +149,7 @@ impl NexusCore {
         if !identity.is_empty() && !identity.starts_with("stack_") && stack.role.is_none() {
             stack.role = Some(identity.to_string());
             if !focused_id.is_empty() {
-                self.surface.set_tag(&focused_id, "nexus_role", identity);
+                self.mux.set_tag(&focused_id, "nexus_role", identity);
             }
         }
 
@@ -160,7 +160,7 @@ impl NexusCore {
 
         // Mark existing tabs as background and snapshot geometry
         if let (Some(vis), Some(stack)) = (visible_id.as_ref(), self.stacks.get_stack_mut(&sid)) {
-            let geo = self.surface.get_geometry(vis);
+            let geo = self.mux.get_geometry(vis);
             for tab in &mut stack.tabs {
                 tab.status = TabStatus::Background;
                 tab.is_active = false;
@@ -172,16 +172,16 @@ impl NexusCore {
 
         // Ghost-swap
         if let Some(ref vis) = visible_id {
-            if !self.surface.swap_containers(vis, &new_pane_id) {
+            if !self.mux.swap_containers(vis, &new_pane_id) {
                 return OpResult::error("swap_failed");
             }
         }
 
-        self.surface.focus(&new_pane_id);
+        self.mux.focus(&new_pane_id);
 
         let geo = visible_id
             .as_ref()
-            .and_then(|_| self.surface.get_geometry(&new_pane_id));
+            .and_then(|_| self.mux.get_geometry(&new_pane_id));
 
         // Add new tab
         let new_tab = Tab::new(name)
@@ -193,7 +193,7 @@ impl NexusCore {
         stack.tabs.push(tab);
         stack.active_index = stack.tabs.len() - 1;
 
-        self.surface.set_tag(&new_pane_id, "nexus_stack_id", &sid);
+        self.mux.set_tag(&new_pane_id, "nexus_stack_id", &sid);
 
         self.bus.publish(
             TypedEvent::new(EventType::StackPush, "stack.push")
@@ -234,7 +234,7 @@ impl NexusCore {
                 .or_else(|| {
                     self.session
                         .as_ref()
-                        .and_then(|s| self.surface.get_focused(s))
+                        .and_then(|s| self.mux.get_focused(s))
                 })
                 .unwrap_or_default();
             let visible = get_visible_container(stack, &focused_id);
@@ -247,20 +247,20 @@ impl NexusCore {
 
         let outgoing_geo = visible_id
             .as_ref()
-            .and_then(|v| self.surface.get_geometry(v));
+            .and_then(|v| self.mux.get_geometry(v));
 
         if let Some(ref vis) = visible_id {
-            if !self.surface.swap_containers(vis, &target_id) {
+            if !self.mux.swap_containers(vis, &target_id) {
                 return OpResult::error("swap_failed");
             }
         }
 
-        self.surface.focus(&target_id);
+        self.mux.focus(&target_id);
 
         // Restore geometry
         let incoming_geo = self.stacks.get_stack(&sid).unwrap().tabs[index].geometry.clone();
         if let Some(ref geo) = incoming_geo {
-            self.surface.set_geometry(&target_id, geo);
+            self.mux.set_geometry(&target_id, geo);
         }
 
         // Update statuses
@@ -312,7 +312,7 @@ impl NexusCore {
                 .or_else(|| {
                     self.session
                         .as_ref()
-                        .and_then(|s| self.surface.get_focused(s))
+                        .and_then(|s| self.mux.get_focused(s))
                 })
                 .unwrap_or_default();
             let visible = get_visible_container(stack, &focused_id);
@@ -321,23 +321,23 @@ impl NexusCore {
 
         let geo = visible_id
             .as_ref()
-            .and_then(|v| self.surface.get_geometry(v));
+            .and_then(|v| self.mux.get_geometry(v));
 
         if let Some(ref vis) = visible_id {
-            if !self.surface.swap_containers(vis, &new_pane_id) {
+            if !self.mux.swap_containers(vis, &new_pane_id) {
                 return OpResult::error("swap_failed");
             }
         }
 
-        self.surface.focus(&new_pane_id);
+        self.mux.focus(&new_pane_id);
         if let Some(ref g) = geo {
-            self.surface.set_geometry(&new_pane_id, g);
+            self.mux.set_geometry(&new_pane_id, g);
         }
 
         // Kill old pane
         if let Some(ref old) = old_pane_id {
             if old != &new_pane_id {
-                self.surface.destroy_container(old);
+                self.mux.destroy_container(old);
             }
         }
 
@@ -389,7 +389,7 @@ impl NexusCore {
                 .or_else(|| {
                     self.session
                         .as_ref()
-                        .and_then(|s| self.surface.get_focused(s))
+                        .and_then(|s| self.mux.get_focused(s))
                 })
                 .unwrap_or_default();
 
@@ -398,15 +398,15 @@ impl NexusCore {
         };
 
         if let Some(ref vis) = visible_id {
-            if !self.surface.swap_containers(vis, &foundation_id) {
+            if !self.mux.swap_containers(vis, &foundation_id) {
                 return OpResult::error("swap_failed");
             }
         }
 
-        self.surface.focus(&foundation_id);
+        self.mux.focus(&foundation_id);
 
         if let Some(ref target) = target_id {
-            self.surface.destroy_container(target);
+            self.mux.destroy_container(target);
         }
 
         let stack = self.stacks.get_stack_mut(&sid).unwrap();
@@ -449,9 +449,9 @@ impl NexusCore {
             }
         }
 
-        self.surface.set_tag(&pane_id, "nexus_stack_id", &sid);
+        self.mux.set_tag(&pane_id, "nexus_stack_id", &sid);
         if let Some(ref role) = stack.role.clone() {
-            self.surface.set_tag(&pane_id, "nexus_role", role);
+            self.mux.set_tag(&pane_id, "nexus_role", role);
         }
 
         OpResult::ok_with("stack_id", sid)
@@ -516,10 +516,10 @@ impl NexusCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::surface::NullSurface;
+    use crate::surface::NullMux;
 
     fn make_core() -> NexusCore {
-        let mut core = NexusCore::new(Box::new(NullSurface::new()));
+        let mut core = NexusCore::new(Box::new(NullMux::new()));
         core.create_workspace("test", "/tmp");
         core
     }
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn create_workspace() {
-        let mut core = NexusCore::new(Box::new(NullSurface::new()));
+        let mut core = NexusCore::new(Box::new(NullMux::new()));
         let session = core.create_workspace("test", "/tmp");
         assert_eq!(session, "null:test");
         assert_eq!(core.session(), Some("null:test"));
