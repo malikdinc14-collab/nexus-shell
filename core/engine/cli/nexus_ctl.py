@@ -161,6 +161,16 @@ def main(argv=None):
     hud_render_p.add_argument("--separator", default=" | ", help="Separator between modules")
     hud_sub.add_parser("list", help="List available built-in HUD resolvers")
 
+    # ── project ───────────────────────────────────────────────────────────
+    proj_parser = subparsers.add_parser("project", help="Project configuration")
+    proj_sub = proj_parser.add_subparsers(dest="action")
+    proj_sub.add_parser("info", help="Show project .nexus/ config")
+    proj_sub.add_parser("boot", help="Run project boot list")
+    proj_sub.add_parser("shutdown", help="Kill boot background processes")
+    proj_sub.add_parser("menu", help="List project menu commands")
+    proj_disc = proj_sub.add_parser("discover", help="Discover .nexus/ in directory")
+    proj_disc.add_argument("--dir", default="", help="Project directory (default: cwd)")
+
     # ── bus ────────────────────────────────────────────────────────────────
     bus_parser = subparsers.add_parser("bus", help="Event bus")
     bus_sub = bus_parser.add_subparsers(dest="action")
@@ -197,6 +207,7 @@ def main(argv=None):
         "profile": _dispatch_profile,
         "config": _dispatch_config,
         "hud": _dispatch_hud,
+        "project": _dispatch_project,
         "bus": _dispatch_bus,
     }
 
@@ -395,6 +406,56 @@ def _dispatch_hud(args):
         return None  # already printed
     elif args.action == "list":
         return {"resolvers": sorted(BUILTIN_RESOLVERS.keys())}
+
+
+def _dispatch_project(args):
+    from engine.project.discovery import discover
+    from engine.project.boot import BootRunner
+    from engine.project.menu import load_project_menu
+
+    project_dir = getattr(args, "dir", "") or os.getcwd()
+
+    if args.action == "discover" or args.action == "info":
+        config = discover(project_dir)
+        if config is None:
+            return {"found": False, "dir": project_dir}
+        return {
+            "found": True,
+            "root": str(config.root),
+            "nexus_dir": str(config.nexus_dir),
+            "boot_items": len(config.boot_items),
+            "has_menu": config.menu_path is not None,
+            "profile": config.profile,
+            "theme": config.theme,
+            "composition": config.composition,
+        }
+    elif args.action == "boot":
+        config = discover(project_dir)
+        if not config or not config.boot_items:
+            return {"status": "no_boot_items", "dir": project_dir}
+        runner = BootRunner()
+        result = runner.run(config.boot_items, cwd=str(config.root))
+        return {
+            "status": "ok" if result.success else "failed",
+            "total": result.total,
+            "completed": result.completed,
+            "failed": result.failed,
+            "background": result.background,
+            "errors": result.errors,
+        }
+    elif args.action == "shutdown":
+        return {"status": "shutdown requires a running NexusCore instance"}
+    elif args.action == "menu":
+        config = discover(project_dir)
+        if not config or not config.menu_path:
+            return {"commands": [], "dir": project_dir}
+        nodes = load_project_menu(config.menu_path)
+        return {
+            "commands": [
+                {"id": n.id, "label": n.label, "command": n.command, "description": n.description}
+                for n in nodes
+            ]
+        }
 
 
 def _dispatch_bus(args):

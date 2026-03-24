@@ -20,23 +20,27 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-# Make core importable
+# Make engine importable
+_ENGINE_ROOT = Path(__file__).resolve().parents[2]
+if str(_ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ENGINE_ROOT))
+
+# [INVARIANT] All multiplexer operations route through AdapterResolver
+from engine.actions.resolver import AdapterResolver
+
+# Legacy path setup for control_bridge (migrated separately)
 _HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parent.parent))
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
 
 from control_bridge import ControlBridge
+
+MUX = AdapterResolver.multiplexer()
 
 
 def tmux_query(fmt: str) -> str:
     """Query a single tmux format string from the current pane context."""
-    try:
-        return subprocess.check_output(
-            ["tmux", "display-message", "-p", fmt],
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return ""
+    return MUX._run(["display-message", "-p", fmt]) or ""
 
 
 def fzf_pick(lines: list[str], header: str) -> Optional[str]:
@@ -69,15 +73,9 @@ def fzf_pick(lines: list[str], header: str) -> Optional[str]:
 
 
 def nvim_remote_expr(pipe: Path, expr: str) -> str:
-    """Evaluate a VimL expression in the running nvim instance."""
-    try:
-        out = subprocess.check_output(
-            ["nvim", "--server", str(pipe), "--remote-expr", expr],
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-        return out
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return ""
+    """Evaluate a VimL expression via the editor adapter."""
+    editor = AdapterResolver.editor()
+    return editor.remote_expr(expr)
 
 
 def switch_nvim(bridge: ControlBridge, pipe: Path) -> None:
@@ -145,18 +143,14 @@ def switch_terminal(pane_id: str, nexus_home: str) -> None:
     match = re.search(r'\[(%\d+)\]', choice)
     if match:
         target_pane = match.group(1)
-        subprocess.run(["tmux", "swap-pane", "-s", target_pane, "-t", pane_id])
-        subprocess.run(["tmux", "select-pane", "-t", pane_id])
+        MUX.swap_pane(target_pane, pane_id)
+        MUX.select_pane(pane_id)
 
 
 def switch_global(session_id: str) -> None:
     """Switch between tmux windows (global project slots)."""
-    try:
-        out = subprocess.check_output(
-            ["tmux", "list-windows", "-t", session_id, "-F", "#I: #{window_name}"],
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    out = MUX._run(["list-windows", "-t", session_id, "-F", "#I: #{window_name}"])
+    if not out:
         return
 
     slots = [l for l in out.splitlines() if l]
@@ -168,7 +162,7 @@ def switch_global(session_id: str) -> None:
         return
 
     idx = choice.split(":")[0].strip()
-    subprocess.run(["tmux", "select-window", "-t", f":{idx}"])
+    MUX._run(["select-window", "-t", f":{idx}"])
 
 
 def main() -> int:

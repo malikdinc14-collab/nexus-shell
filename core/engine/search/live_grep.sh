@@ -1,12 +1,12 @@
 #!/bin/bash
 # core/engine/search/live_grep.sh — Project-Wide Grep Search (tmux popup)
-# Opens a floating fzf window with ripgrep, jumps to file:line in nvim.
+# Opens fzf with ripgrep, sends selection to editor via action layer.
+# fzf is inherently terminal — it stays in shell. Only the editor/pane
+# calls go through the adapter layer.
 
 NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
-NEXUS_STATE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}"
-SESSION_NAME=$(tmux display-message -p '#S' 2>/dev/null)
-PROJECT_NAME=${SESSION_NAME#nexus_}
-NVIM_PIPE="$NEXUS_STATE/pipes/nvim_${PROJECT_NAME}.pipe"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
 
 INITIAL_QUERY="${1:-}"
 
@@ -27,13 +27,8 @@ SELECTION=$(FZF_DEFAULT_COMMAND="rg --column --line-number --no-heading --color=
 if [[ -n "$SELECTION" ]]; then
     FILE=$(echo "$SELECTION" | cut -d: -f1)
     LINE=$(echo "$SELECTION" | cut -d: -f2)
+    COL=$(echo "$SELECTION" | cut -d: -f3)
 
-    if [[ -S "$NVIM_PIPE" ]]; then
-        nvim --server "$NVIM_PIPE" --remote "$(pwd)/$FILE" 2>/dev/null
-        # Jump to line
-        nvim --server "$NVIM_PIPE" --remote-send ":${LINE}<CR>zz" 2>/dev/null
-    else
-        tmux send-keys -t editor "nvim '+$LINE' '$FILE'" Enter
-    fi
-    tmux select-pane -t editor
+    # Open file at line:col via action layer (handles editor RPC + pane focus)
+    "$PY" "$DISPATCH" editor.open "$(pwd)/$FILE" "$LINE" "${COL:-1}"
 fi

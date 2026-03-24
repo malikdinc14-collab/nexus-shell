@@ -25,6 +25,13 @@ class NexusDaemonClient:
     def __init__(self, socket_path=SOCKET_PATH):
         self.socket_path = socket_path
 
+    # Operations that are long-running and must NOT be retried on timeout.
+    # Retrying these causes a second daemon to process the same request,
+    # leading to race conditions (e.g., commands sent to panes twice).
+    _LONG_RUNNING_ACTIONS = {"boot_layout"}
+    _LONG_TIMEOUT = 30.0
+    _DEFAULT_TIMEOUT = 2.0
+
     def send(self, action, payload=None, retry=True):
         """Sends a request to the daemon and returns the response."""
         if not self.socket_path.exists():
@@ -32,10 +39,11 @@ class NexusDaemonClient:
                 self.ensure_alive()
                 return self.send(action, payload, retry=False)
             return {"status": "error", "message": "Daemon not running."}
-        
+
+        timeout = self._LONG_TIMEOUT if action in self._LONG_RUNNING_ACTIONS else self._DEFAULT_TIMEOUT
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                client.settimeout(2.0)
+                client.settimeout(timeout)
                 client.connect(str(self.socket_path))
                 
                 payload = payload or {}
@@ -51,7 +59,11 @@ class NexusDaemonClient:
                 if not data:
                     return {"status": "error", "message": "No response."}
                 return json.loads(data.decode())
-        except (socket.timeout, ConnectionRefusedError):
+        except (socket.timeout, ConnectionRefusedError) as e:
+            # Never retry long-running actions — the first daemon is still
+            # processing; restarting would cause a destructive double-run.
+            if action in self._LONG_RUNNING_ACTIONS:
+                return {"status": "error", "message": f"Timeout waiting for {action} ({timeout}s)"}
             if retry:
                 if self.socket_path.exists(): self.socket_path.unlink()
                 self.ensure_alive()

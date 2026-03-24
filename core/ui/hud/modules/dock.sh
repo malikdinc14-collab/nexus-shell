@@ -1,18 +1,26 @@
 #!/bin/bash
 # core/ui/hud/modules/dock.sh
-# Detects minimized panes and reports to HUD.
+# HUD Module: Detects minimized panes and reports to HUD.
+# Uses action layer for pane queries.
 
-# Search for any pane with @nexus_minimized == 1
-MINIMIZED_COUNT=$(tmux list-panes -a -F '#{@nexus_minimized}' | grep -cx '1' | tr -d ' ')
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
 
-if [[ "$MINIMIZED_COUNT" -gt 0 ]]; then
-    # Get distinct roles of minimized panes
-    ROLES=$(tmux list-panes -a -F '#{@nexus_minimized}|#{@nexus_role}|#{pane_id}' | grep '^1|' | cut -d'|' -f2 | sort | uniq | xargs | tr ' ' ',')
-    # Use role if available, fallback to id
-    [[ -z "$ROLES" || "$ROLES" == "null" ]] && ROLES="pane"
-    
-    echo "{\"label\": \"📥 [$ROLES]\", \"color\": \"ORANGE\"}"
-else
-    # Output empty to hide from HUD
-    echo ""
-fi
+# Query minimized panes via Python action layer
+"$PY" -c "
+import sys, os
+sys.path.insert(0, os.path.join('$NEXUS_HOME', 'core'))
+try:
+    from engine.actions.resolver import AdapterResolver
+    mux = AdapterResolver.multiplexer()
+    raw = mux._run(['list-panes', '-a', '-F', '#{@nexus_minimized}|#{@nexus_role}|#{pane_id}'])
+    if not raw:
+        sys.exit(0)
+    minimized = [l for l in raw.splitlines() if l.startswith('1|')]
+    if minimized:
+        roles = set(l.split('|')[1] for l in minimized if l.split('|')[1] and l.split('|')[1] != 'null')
+        label = ','.join(sorted(roles)) if roles else 'pane'
+        print('{\"label\": \"📥 [' + label + ']\", \"color\": \"ORANGE\"}')
+except Exception:
+    pass
+" 2>/dev/null

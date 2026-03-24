@@ -64,6 +64,15 @@ class NullAdapter(MultiplexerCapability):
     def is_available(self) -> bool:
         return True
 
+    # ── Pane Focus ────────────────────────────────────────────────────────────
+
+    def get_focused_pane_id(self) -> str:
+        # Return first pane handle as "focused"
+        for handles in self._windows.values():
+            if handles:
+                return handles[0]
+        return "%0"
+
     def _new_pane_handle(self) -> str:
         h = f"%{self._pane_counter}"
         self._pane_counter += 1
@@ -153,6 +162,22 @@ class NullAdapter(MultiplexerCapability):
 
     def select_pane(self, handle: str) -> None:
         self._log("select_pane", handle=handle)
+
+    def swap_pane(self, source: str, target: str) -> None:
+        self._log("swap_pane", source=source, target=target)
+
+    def resize_pane(self, handle: str, height=None, width=None) -> None:
+        self._log("resize_pane", handle=handle, height=height, width=width)
+
+    def respawn_pane(self, handle: str, cmd: str) -> None:
+        self.commands_sent[handle] = cmd
+        self._log("respawn_pane", handle=handle, cmd=cmd)
+
+    # ── Output Capture ─────────────────────────────────────────────────────────
+
+    def capture_output(self, handle: str, lines: int = 50) -> str:
+        self._log("capture_output", handle=handle, lines=lines)
+        return ""
 
     # ── Command Execution ─────────────────────────────────────────────────────
 

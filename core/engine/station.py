@@ -180,20 +180,23 @@ def boot(argv: list = None) -> dict:
         if _has_saved_session(project_root):
             composition = "__saved_session__"
         else:
-            print("    [*] No saved session found. Defaulting to vscodelike.")
+            print("    [*] No saved session found. Defaulting to vscodelike.",
+              file=sys.stderr)
             composition = "vscodelike"
 
     shell = _detect_shell()
     os.environ["NEXUS_SHELL"] = shell
     tmux_conf = _resolve_tmux_conf()
 
-    print(f"\033[1;36m[*] INITIALIZING STATION: {project_name}\033[0m")
-    print(f"    Layout: {composition}")
-    print(f"    Session: {session_id}")
+    print(f"\033[1;36m[*] INITIALIZING STATION: {project_name}\033[0m",
+          file=sys.stderr)
+    print(f"    Layout: {composition}", file=sys.stderr)
+    print(f"    Session: {session_id}", file=sys.stderr)
 
     # Ensure daemon is running
     daemon_client = os.path.join(NEXUS_HOME, "core/engine/lib/daemon_client.py")
-    subprocess.run([sys.executable, daemon_client, "ensure"], check=True)
+    subprocess.run([sys.executable, daemon_client, "ensure"],
+                   check=True, stdout=subprocess.DEVNULL)
 
     # Create or reuse tmux session
     exists = _session_exists(session_id, socket_label)
@@ -296,7 +299,8 @@ def boot(argv: list = None) -> dict:
     os.makedirs(pipes_dir, exist_ok=True)
 
     # Build layout via daemon
-    print(f"[*] Constructing Workspace: {composition} in Slot {window_idx}...")
+    print(f"[*] Constructing Workspace: {composition} in Slot {window_idx}...",
+          file=sys.stderr)
     subprocess.run(
         [sys.executable, daemon_client, "boot_layout",
          json.dumps({
@@ -305,7 +309,7 @@ def boot(argv: list = None) -> dict:
              "project_root": project_root,
              "socket_label": socket_label,
          })],
-        check=True,
+        check=True, stdout=subprocess.DEVNULL,
     )
 
     # Create client session
@@ -316,7 +320,7 @@ def boot(argv: list = None) -> dict:
     # Select workspace window
     _tmux(["select-window", "-t", f"{client_session}:{window_idx}"], socket_label)
 
-    print("\033[1;32m[*] Station Solidified.\033[0m")
+    print("\033[1;32m[*] Station Solidified.\033[0m", file=sys.stderr)
 
     return {
         "status": "ok",

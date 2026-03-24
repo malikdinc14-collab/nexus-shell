@@ -103,9 +103,13 @@ kill_session_tree() {
     log "Killing master tmux session $SESSION_ID"
     $TMUX_CMD kill-session -t "$SESSION_ID" 2>/dev/null || true
     
-    # 4. Final stale pipe cleanup
+    # 4. Kill the daemon so it restarts fresh next boot
+    log "Stopping daemon..."
+    pkill -f "daemon.py" 2>/dev/null || true
+
+    # 5. Final stale pipe cleanup
     rm -f "/tmp/nexus_$(whoami)/pipes/nvim_${PROJECT_NAME}.pipe" 2>/dev/null
-    
+
     log "=== guard.sh session complete ==="
 }
 

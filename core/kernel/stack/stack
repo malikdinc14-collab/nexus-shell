@@ -4,76 +4,104 @@
 Nexus Sovereign Stack Client
 ============================
 Thin wrapper that delegates stack logic to nxs-d for atomic state management.
+All multiplexer operations go through the adapter layer.
+
+INVARIANT: No direct tmux/subprocess calls for multiplexer operations.
+Uses AdapterResolver.multiplexer() for all surface interactions.
 """
 
 import os
 import sys
 import json
 import uuid
-import subprocess
 from pathlib import Path
 
 # Pillar Path Discovery
 NEXUS_HOME = Path(os.environ.get("NEXUS_HOME", Path(__file__).resolve().parents[3]))
-sys.path.append(str(NEXUS_HOME / "core" / "engine" / "lib"))
+sys.path.insert(0, str(NEXUS_HOME / "core" / "engine" / "lib"))
+sys.path.insert(0, str(NEXUS_HOME / "core"))
 
 try:
     from daemon_client import NexusDaemonClient
 except ImportError:
     NexusDaemonClient = None
 
+try:
+    from engine.actions.resolver import AdapterResolver
+    MUX = AdapterResolver.multiplexer()
+except Exception:
+    MUX = None
+
 DAEMON = NexusDaemonClient()
 RESERVOIR = "RESERVOIR"
 
-def run_tmux(args):
-    if os.environ.get("NEXUS_SIMULATION") == "1" and DAEMON:
-        # Redirect to Daemon RPC for simulation
-        res = DAEMON.send("tmux", {"args": args, "socket_label": os.environ.get("SOCKET_LABEL")})
-        return str(res.get("data", "")) if res.get("status") == "ok" else None
+# ── Negative Space: Assert daemon client resolved ──
+assert DAEMON is not None, \
+    f"[INVARIANT] NexusDaemonClient failed to import. NEXUS_HOME={NEXUS_HOME}, " \
+    f"sys.path includes: {NEXUS_HOME / 'core' / 'engine' / 'lib'}"
 
-    try:
-        cmd = ["tmux"]
-        socket_label = os.environ.get("SOCKET_LABEL")
-        if socket_label:
-            cmd += ["-L", socket_label]
-        return subprocess.check_output(cmd + args).decode().strip()
-    except:
+# ── Adapter-mediated tmux helper ──
+# Wraps MUX._run() for operations not yet in the ABC (e.g. new-window with -n flag).
+# TODO: Migrate remaining raw calls to proper adapter methods.
+def _mux_run(args):
+    """Run a multiplexer command through the adapter's internal runner."""
+    if MUX is None:
+        print("[INVARIANT] MultiplexerAdapter not resolved.", file=sys.stderr)
         return None
+    if hasattr(MUX, '_run'):
+        result = MUX._run(args)
+        return result if result else None
+    return None
+
 
 def get_session_id():
-    return run_tmux(["display-message", "-p", "#S"])
+    if MUX is None:
+        return None
+    # Use adapter's internal runner for display-message
+    raw = _mux_run(["display-message", "-p", "#S"])
+    return raw if raw else None
 
 SESSION_ID = get_session_id()
 
+# ── Negative Space: Assert tmux session reachable ──
+if SESSION_ID is None and os.environ.get("NEXUS_SIMULATION") != "1":
+    socket_label = os.environ.get("SOCKET_LABEL", "default")
+    print(f"[INVARIANT] Cannot reach tmux session. "
+          f"SOCKET_LABEL={socket_label}, "
+          f"TMUX={os.environ.get('TMUX', 'unset')}, "
+          f"Is tmux running? Check: tmux -L {socket_label} list-sessions",
+          file=sys.stderr)
+
 def ensure_reservoir():
     if not SESSION_ID: return False
-    exists = run_tmux(["list-windows", "-t", SESSION_ID, "-F", "#{window_name}"])
+    exists = _mux_run(["list-windows", "-t", SESSION_ID, "-F", "#{window_name}"])
     if not exists or RESERVOIR not in exists.split("\n"):
-        run_tmux(["new-window", "-d", "-n", RESERVOIR, "-t", SESSION_ID])
+        _mux_run(["new-window", "-d", "-n", RESERVOIR, "-t", SESSION_ID])
     return True
 
 def resolve_role(role_hint=None):
-    """
-    Resolves the semantic identity (Stack ID, Role, or Tag) for the current context.
-    """
+    """Resolves the semantic identity (Stack ID, Role, or Tag) for the current context."""
     if role_hint and role_hint != "local" and not role_hint.startswith("%"):
         return role_hint
-        
-    focused_id = run_tmux(["display-message", "-p", "#{pane_id}"])
-    
+
+    if MUX is None:
+        return f"stack_{uuid.uuid4().hex[:6]}"
+
+    focused_id = MUX.get_focused_pane_id()
+
     # 1. Check for explicit role (semantic identity)
-    val = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_role}"])
+    val = MUX.get_tag(focused_id, "nexus_role")
     if val and val != "null": return val
-    
+
     # 2. Check for unique stack ID (persistent identity)
-    val = run_tmux(["display-message", "-p", "-t", focused_id, "#{@nexus_stack_id}"])
+    val = MUX.get_tag(focused_id, "nexus_stack_id")
     if val and val != "null": return val
-    
-    # 3. Anonymity by Default: If no identity exists, treat as a new anonymous stack
-    # The Daemon will auto-generate a UUID if it doesn't recognize the context.
+
+    # 3. Anonymity by Default
     return f"stack_{uuid.uuid4().hex[:6]}"
 
 def get_leaf_process(pid):
+    import subprocess
     try:
         children = subprocess.check_output(["pgrep", "-P", str(pid)]).decode().split()
         if children:
@@ -83,49 +111,74 @@ def get_leaf_process(pid):
         return pid
 
 def get_process_command(pid):
+    import subprocess
     try:
         return subprocess.check_output(["ps", "-p", str(pid), "-o", "command="]).decode().strip()
     except:
         return ""
 
 def push(identity, cmd, name=None):
-    if not ensure_reservoir(): return
+    if not ensure_reservoir():
+        print(f"[INVARIANT] ensure_reservoir() failed. SESSION_ID={SESSION_ID}", file=sys.stderr)
+        return
     identity = resolve_role(identity)
     wrapped_cmd = f"zsh -c '{cmd}; {NEXUS_HOME}/core/kernel/stack/stack switch {identity} 0'"
-    new_pane_id = run_tmux(["split-window", "-d", "-t", f"{SESSION_ID}:{RESERVOIR}", "-P", "-F", "#{pane_id}", "-c", os.getcwd(), wrapped_cmd])
-    if not new_pane_id: return
-    
+
+    # Split in reservoir via adapter
+    new_pane_id = MUX.split(
+        f"{SESSION_ID}:{RESERVOIR}",
+        direction="v",
+        cwd=os.getcwd()
+    )
+    if not new_pane_id:
+        print(f"[INVARIANT] split returned no pane_id. "
+              f"Session={SESSION_ID}, Reservoir={RESERVOIR}, cmd={cmd[:80]}",
+              file=sys.stderr)
+        return
+
+    # Send the wrapped command to the new pane
+    MUX.send_command(new_pane_id, wrapped_cmd)
+
     tab_name = name or (Path(cmd.split()[-1]).name if "/" in cmd else "Shell")
-    
+
     # Propagate semantic identity into the new container
-    key = "@nexus_stack_id" if identity.startswith("stack_") else "@nexus_role"
-    run_tmux(["set-option", "-p", "-t", new_pane_id, key, identity])
-    run_tmux(["set-option", "-p", "-t", new_pane_id, "@nexus_tab_name", tab_name])
-    
-    res = DAEMON.send("stack_push", {"role": identity, "pane_id": new_pane_id, "name": tab_name})
-    if res.get("status") != "ok": print(f"Error: {res.get('message')}")
+    tag_key = "nexus_stack_id" if identity.startswith("stack_") else "nexus_role"
+    MUX.set_tag(new_pane_id, f"@{tag_key}", identity)
+    MUX.set_tag(new_pane_id, "@nexus_tab_name", tab_name)
+
+    # ── Negative Space: Verify daemon is alive before push ──
+    ping = DAEMON.ping()
+    if ping.get("status") != "ok":
+        print(f"[INVARIANT] Daemon not responding to ping before push. "
+              f"Response: {ping}. Socket: {DAEMON.socket_path}",
+              file=sys.stderr)
+
+    focused_id = MUX.get_focused_pane_id()
+    res = DAEMON.send("stack_push", {"role": identity, "pane_id": new_pane_id, "name": tab_name, "focused_id": focused_id})
+    if res.get("status") != "ok":
+        print(f"[INVARIANT] stack_push failed: {res.get('message')}",
+              file=sys.stderr)
 
 def portal():
     identity = resolve_role("local")
-    pane_id = run_tmux(["display-message", "-p", "#{pane_id}"])
-    current_role = run_tmux(["display-message", "-p", "-t", pane_id, "#{@nexus_role}"])
-    tab_name = run_tmux(["display-message", "-p", "-t", pane_id, "#{@nexus_tab_name}"])
-    
+    pane_id = MUX.get_focused_pane_id()
+    current_role = MUX.get_tag(pane_id, "nexus_role")
+    tab_name = MUX.get_tag(pane_id, "nexus_tab_name")
+
     if current_role == "menu" or tab_name == "Menu":
-        ret_idx = run_tmux(["display-message", "-p", "-t", pane_id, "#{@nexus_portal_return}"])
+        ret_idx = MUX.get_tag(pane_id, "nexus_portal_return")
         switch_to(identity, ret_idx if ret_idx != "null" else "0")
     else:
         state_res = DAEMON.get_state()
         if state_res.get("status") != "ok": return
         registry = state_res.get("data", {}).get("stacks", {})
-        
-        # Resolve the actual SID even if we only have a role hint
+
         sid = None
         for s_id, s_data in registry.items():
             if s_id == identity or s_data.get("role") == identity:
                 sid = s_id
                 break
-        
+
         menu_idx = None
         if sid and sid in registry:
             for i, tab in enumerate(registry[sid]["tabs"]):
@@ -137,18 +190,20 @@ def portal():
 
         if menu_idx is not None:
             switch_to(identity, menu_idx)
-            run_tmux(["set-option", "-p", "-t", run_tmux(["display-message", "-p", "#{pane_id}"]), "@nexus_portal_return", str(cur_idx)])
+            new_pane = MUX.get_focused_pane_id()
+            MUX.set_tag(new_pane, "@nexus_portal_return", str(cur_idx))
         else:
             menu_bin = str(NEXUS_HOME / "modules/menu/bin/nexus-menu")
             push(identity, f"{menu_bin} --context modules", "Menu")
-            # Wait a beat for the new pane to be registered
+            import time
             time.sleep(0.1)
-            new_id = run_tmux(["display-message", "-p", "#{pane_id}"])
-            run_tmux(["set-option", "-p", "-t", new_id, "@nexus_portal_return", str(cur_idx)])
+            new_id = MUX.get_focused_pane_id()
+            MUX.set_tag(new_id, "@nexus_portal_return", str(cur_idx))
 
 def switch_to(identity, index):
     identity = resolve_role(identity)
-    res = DAEMON.send("stack_switch", {"role": identity, "index": index})
+    focused_id = MUX.get_focused_pane_id()
+    res = DAEMON.send("stack_switch", {"role": identity, "index": index, "focused_id": focused_id})
     if res.get("status") != "ok": print(f"Error: {res.get('message')}")
 
 def close_tab(identity):
@@ -160,17 +215,16 @@ def list_stack(identity):
     state_res = DAEMON.get_state()
     if state_res.get("status") != "ok": return
     registry = state_res.get("data", {}).get("stacks", {})
-    
+
     if identity == "all":
         print(json.dumps(registry, indent=2))
         return
 
-    # Try to find the stack
     found_sid = None
     for sid, stack in registry.items():
         if sid == identity or stack.get("role") == identity or identity in stack.get("tags", []):
             found_sid = sid; break
-            
+
     if found_sid:
         print(json.dumps(registry[found_sid], indent=2))
     else:
@@ -181,13 +235,12 @@ def rotate(identity, direction):
     state_res = DAEMON.get_state()
     if state_res.get("status") != "ok": return
     registry = state_res.get("data", {}).get("stacks", {})
-    
-    # Resolve SID
+
     sid = None
     for s_id, s_data in registry.items():
         if s_id == identity or s_data.get("role") == identity:
             sid = s_id; break
-            
+
     if sid and sid in registry:
         count = len(registry[sid]["tabs"])
         if count == 0: return
@@ -216,9 +269,8 @@ if __name__ == "__main__":
     if action == "init":
         ensure_reservoir()
         role = sys.argv[2] if len(sys.argv) >= 3 else None
-        pane_id = run_tmux(["display-message", "-p", "#{pane_id}"])
+        pane_id = MUX.get_focused_pane_id()
         resolved = resolve_role(role)
-        # Notify Daemon to adopt this pane into the registry
         if DAEMON:
             DAEMON.send("stack_adopt", {"role": resolved, "pane_id": pane_id})
         print(f"Stack Initialized: {resolved}")
@@ -227,7 +279,7 @@ if __name__ == "__main__":
     elif action == "push" and len(sys.argv) >= 4:
         push(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     elif action == "replace" and len(sys.argv) >= 4:
-        res = DAEMON.send("stack_replace", {"role": resolve_role(sys.argv[2]), "pane_id": run_tmux(["display-message", "-p", "#{pane_id}"]), "name": sys.argv[4] if len(sys.argv) > 4 else "Replacement"})
+        res = DAEMON.send("stack_replace", {"role": resolve_role(sys.argv[2]), "pane_id": MUX.get_focused_pane_id(), "name": sys.argv[4] if len(sys.argv) > 4 else "Replacement"})
         if res.get("status") != "ok": print(f"Error: {res.get('message')}")
     elif action in ["switch", "switch_to"] and len(sys.argv) >= 4:
         switch_to(sys.argv[2], sys.argv[3])

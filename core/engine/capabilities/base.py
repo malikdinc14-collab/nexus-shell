@@ -103,6 +103,26 @@ class EditorCapability(Capability):
         """Applies a patch or substitution to the current buffer."""
         pass
 
+    @abstractmethod
+    def get_buffer_content(self, max_lines: int = 200) -> Optional[str]:
+        """Returns the text content of the current buffer."""
+        pass
+
+    @abstractmethod
+    def get_tabs(self) -> List[Dict[str, Any]]:
+        """Returns list of open editor tabs with metadata."""
+        pass
+
+    @abstractmethod
+    def send_editor_command(self, cmd: str) -> bool:
+        """Sends an arbitrary command to the editor."""
+        pass
+
+    @abstractmethod
+    def remote_expr(self, expr: str) -> str:
+        """Evaluates an expression in the editor and returns the result."""
+        pass
+
 class ExplorerCapability(Capability):
     """Abstract interface for file system navigation."""
     
@@ -233,6 +253,13 @@ class MultiplexerCapability(Capability):
         """Returns list of window handles in a session."""
         pass
 
+    # ── Pane Focus ────────────────────────────────────────────────────────
+
+    @abstractmethod
+    def get_focused_pane_id(self) -> str:
+        """Returns the handle of the currently focused pane."""
+        pass
+
     # ── Pane Management ─────────────────────────────────────────────────────
 
     @abstractmethod
@@ -256,6 +283,29 @@ class MultiplexerCapability(Capability):
     @abstractmethod
     def select_pane(self, handle: str) -> None:
         """Brings focus to a pane."""
+        pass
+
+    @abstractmethod
+    def swap_pane(self, source: str, target: str) -> None:
+        """Swaps the contents of two panes."""
+        pass
+
+    @abstractmethod
+    def resize_pane(self, handle: str, height: Optional[int] = None,
+                    width: Optional[int] = None) -> None:
+        """Resizes a pane to the given dimensions."""
+        pass
+
+    @abstractmethod
+    def respawn_pane(self, handle: str, cmd: str) -> None:
+        """Kills the current process in a pane and starts a new one."""
+        pass
+
+    # ── Output Capture ──────────────────────────────────────────────────────
+
+    @abstractmethod
+    def capture_output(self, handle: str, lines: int = 50) -> str:
+        """Captures visible output from a pane."""
         pass
 
     # ── Command Execution ───────────────────────────────────────────────────

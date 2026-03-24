@@ -6,6 +6,8 @@
 set -e
 
 NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
 PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 
 # Default provider: grepai if available, else ripgrep
@@ -61,15 +63,8 @@ search_interactive() {
         local file=$(echo "$SELECTION" | cut -d: -f1)
         local line=$(echo "$SELECTION" | cut -d: -f2)
         
-        # Open in editor
-        local nvim_pipe="${NVIM_PIPE:-/tmp/nexus_$(whoami)/pipes/nvim_${NEXUS_PROJECT:-default}.pipe}"
-        if [[ -S "$nvim_pipe" ]]; then
-            nvim --server "$nvim_pipe" --remote "$(pwd)/$file" 2>/dev/null
-            nvim --server "$nvim_pipe" --remote-send ":${LINE}<CR>zz" 2>/dev/null
-            tmux select-pane -t editor 2>/dev/null
-        else
-            echo "$file:$line"
-        fi
+        # Open in editor via action layer
+        "$PY" "$DISPATCH" editor.open "$(pwd)/$file" "$line" 2>/dev/null || echo "$file:$line"
     fi
 }
 

@@ -69,6 +69,11 @@ class TmuxAdapter(MultiplexerCapability):
         except Exception:
             return ""
 
+    # ── Pane Focus ────────────────────────────────────────────────────────────
+
+    def get_focused_pane_id(self) -> str:
+        return self._run(["display-message", "-p", "#{pane_id}"])
+
     # ── Session Management ────────────────────────────────────────────────────
 
     def create_session(self, name: str, cwd: str = "",
@@ -146,6 +151,25 @@ class TmuxAdapter(MultiplexerCapability):
 
     def select_pane(self, handle: str) -> None:
         self._run(["select-pane", "-t", handle])
+
+    def swap_pane(self, source: str, target: str) -> None:
+        self._run(["swap-pane", "-s", source, "-t", target])
+
+    def resize_pane(self, handle: str, height: Optional[int] = None,
+                    width: Optional[int] = None) -> None:
+        if height is not None:
+            self._run(["resize-pane", "-t", handle, "-y", str(height)])
+        if width is not None:
+            self._run(["resize-pane", "-t", handle, "-x", str(width)])
+
+    def respawn_pane(self, handle: str, cmd: str) -> None:
+        self._run(["respawn-pane", "-k", "-t", handle, cmd])
+
+    # ── Output Capture ─────────────────────────────────────────────────────────
+
+    def capture_output(self, handle: str, lines: int = 50) -> str:
+        return self._run(["capture-pane", "-t", handle, "-p",
+                          "-S", str(-lines)])
 
     # ── Command Execution ─────────────────────────────────────────────────────
 

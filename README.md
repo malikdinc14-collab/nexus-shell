@@ -89,9 +89,23 @@ Orthogonal to packs. Same tools, different arrangement:
 - **dashboard** — quad layout, everything visible
 - **presentation** — clean, large fonts, status hidden
 
+## Extension Model
+
+Nexus Shell has five levels of extensibility:
+
+1. **Actions** — single scripts with a metadata header. Write a shell script, drop it in `.nexus/actions/`, it appears in the Command Graph.
+2. **Menu Trees** — YAML files declaring Command Graph nodes. Pure data, zero code.
+3. **Packs** — domain bundles (tools, connectors, menu nodes). `pack.yaml` declares WHAT a workflow needs, not HOW.
+4. **Modules** — adapter implementations (e.g., Helix editor adapter). Written by tool authors.
+5. **Surfaces** — complete display layer implementations (tmux, Tauri, Web). Written by distribution authors.
+
+Levels 1-3 are fully portable across surfaces. A pack written for tmux works on Tauri without modification. Your investment in customization is never lost when the surface changes.
+
+Surfaces wrap your tools — they don't replace them. A Tauri surface embeds nvim in a terminal widget, same binary, same config, same RPC pipe. The adapter contracts are identical across every surface.
+
 ## Architecture
 
-See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full mission specs, Surface/Capability/Pack ABCs, core module map, migration plan, and design principles.
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for mission specs, Surface/Capability/Pack ABCs, extension model details, hybrid surface model, and design principles. See **[.gap/architecture.md](.gap/architecture.md)** for the deep design theory — the three-layer model, extension hierarchy, content provider contracts, and portability guarantees.
 
 ## Current Status
 

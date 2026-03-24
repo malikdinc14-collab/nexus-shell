@@ -7,7 +7,6 @@ import socket
 import threading
 import subprocess
 import time
-import uuid
 import getpass
 from pathlib import Path
 from queue import Queue
@@ -28,7 +27,6 @@ except ImportError:
 USER = getpass.getuser()
 DEFAULT_SOCKET = Path(f"/tmp/nexus_{USER}.sock")
 SOCKET_PATH = Path(os.environ.get("NEXUS_SOCKET", DEFAULT_SOCKET))
-RESERVOIR = "RESERVOIR"
 
 class BaseContainerAdapter(ABC):
     @abstractmethod
@@ -299,61 +297,7 @@ class NexusDaemon:
             self.log(f"RX Fatal: {e}")
             return None
 
-    def ghost_swap(self, source, target):
-        if source == target: return True
-        return self.adapter.swap_containers(source, target)
-
-    # --- Stack Registry Logic ---
-
-    def _get_stack_by_identity(self, identity):
-        registry = self.state.get("stacks", {})
-        if identity in registry: return identity, registry[identity]
-        for sid, stack in registry.items():
-            if stack.get("role") == identity: return sid, stack
-            if identity in stack.get("tags", []): return sid, stack
-        return None, None
-
-    def _get_or_create_stack(self, identity, initial_pane=None):
-        # AXIOM: Prioritize Local Context (off-by-default Global Role Singletons)
-        # If the initial pane already has a stack ID, that is our authoritative target.
-        if initial_pane:
-            pane_sid = self.adapter.get_metadata(initial_pane, "@nexus_stack_id")
-            if pane_sid and pane_sid in self.state["stacks"]:
-                return pane_sid, self.state["stacks"][pane_sid]
-
-        # Explicit UUID resolution
-        if identity and identity.startswith("stack_"):
-            if identity in self.state["stacks"]:
-                return identity, self.state["stacks"][identity]
-        
-        # Identity-Resolution (Role Lookup)
-        # Fallback to finding an existing stack by its Role if the pane itself lacked explicit metadata.
-        if identity and not identity.startswith("stack_"):
-            sid, stack = self._get_stack_by_identity(identity)
-            if sid: return sid, stack
-        
-        # New Stack: Resolve SID vs Role
-        is_uuid = identity and identity.startswith("stack_")
-        sid = identity if is_uuid else f"stack_{uuid.uuid4().hex[:6]}"
-        role = None if is_uuid else identity
-        
-        new_stack = {
-            "role": role, 
-            "tags": [], 
-            "active_index": 0, 
-            "tabs": [],
-            "metadata": {}
-        }
-        if initial_pane: 
-            new_stack["tabs"].append({
-                "id": initial_pane, 
-                "name": role.capitalize() if role else "Shell", 
-                "status": "VISIBLE"
-            })
-        
-        self.state["stacks"][sid] = new_stack
-        self._save_state()
-        return sid, new_stack
+    # --- Stack Registry ---
 
     def _scrub_registry(self):
         registry = self.state.get("stacks", {})
@@ -375,121 +319,15 @@ class NexusDaemon:
         self.log(f"Stack Op: {action} for {identity}")
         self._scrub_registry()
 
-        # Core ops route through NexusCore when available
-        core_ops = {"push", "switch", "replace", "close", "adopt"}
-        if action in core_ops and self.core:
-            payload["identity"] = identity
-            result = self.core.handle_stack_op(action, payload)
-            if result.get("status") == "ok":
-                # Sync NexusCore state back to daemon persistence
-                self.state["stacks"] = self.core.stacks.serialize()["stacks"]
-                self._save_state()
-            return result
+        if not self.core:
+            return {"status": "error", "message": "NexusCore not initialized"}
 
-        # Lightweight ops stay in daemon (tag/untag/rename),
-        # or fallback for core ops when NexusCore isn't available
-        ops = {
-            "push": self._op_push,
-            "switch": self._op_switch,
-            "replace": self._op_replace,
-            "close": self._op_close,
-            "tag": self._op_tag,
-            "untag": self._op_untag,
-            "rename": self._op_rename,
-            "adopt": self._op_adopt
-        }
-        if action in ops: return ops[action](identity, payload)
-        return {"status": "error", "message": f"Unknown op: {action}"}
-
-    def _op_tag(self, identity, payload):
-        tag = payload.get("tag")
-        if not tag: return {"status": "error", "message": "No tag provided"}
-        sid, stack = self._get_stack_by_identity(identity)
-        if not stack: return {"status": "error", "message": "Stack not found"}
-        if tag not in stack["tags"]:
-            stack["tags"].append(tag)
+        payload["identity"] = identity
+        result = self.core.handle_stack_op(action, payload)
+        if result.get("status") == "ok":
+            self.state["stacks"] = self.core.stacks.serialize()["stacks"]
             self._save_state()
-        return {"status": "ok"}
-
-    def _op_untag(self, identity, payload):
-        tag = payload.get("tag")
-        sid, stack = self._get_stack_by_identity(identity)
-        if not stack: return {"status": "error", "message": "Stack not found"}
-        if tag in stack["tags"]:
-            stack["tags"].remove(tag)
-            self._save_state()
-        return {"status": "ok"}
-
-    def _op_rename(self, identity, payload):
-        name = payload.get("name")
-        if not name: return {"status": "error", "message": "No name provided"}
-        sid, stack = self._get_stack_by_identity(identity)
-        if not stack: return {"status": "error", "message": "Stack not found"}
-        stack["role"] = name # Promoting a role name is effectively renaming the stack's primary alias
-        self._save_state()
-        return {"status": "ok"}
-
-    def _get_visible_container(self, stack, focused_id):
-        tabs = stack.get("tabs", [])
-        if any(t["id"] == focused_id for t in tabs): return focused_id
-        for tab in tabs:
-            if tab.get("status") == "VISIBLE": return tab["id"]
-        for tab in tabs:
-            win_name = self.adapter.get_metadata(tab["id"], "window_name")
-            if win_name and win_name != RESERVOIR: return tab["id"]
-        return tabs[stack["active_index"]]["id"] if tabs else None
-
-    def _op_push(self, identity, payload):
-        new_id = payload.get("pane_id")
-        name = payload.get("name", "Shell")
-        # Prefer focused_id from client (client has SOCKET_LABEL; daemon may not)
-        focused_id = payload.get("focused_id") or self.adapter.get_focused_id()
-        sid, stack = self._get_or_create_stack(identity, initial_pane=focused_id)
-        if not identity.startswith("stack_") and not stack.get("role"):
-            stack["role"] = identity
-            self.adapter.set_metadata(focused_id, "@nexus_role", identity)
-        
-        visible_id = self._get_visible_container(stack, focused_id)
-        # Record geometry of the currently visible pane before it goes to background
-        geo = self.adapter.get_geometry(visible_id)
-        for t in stack["tabs"]:
-            if t["id"] == visible_id:
-                t["geometry"] = geo
-                t["status"] = "BACKGROUND"
-            else:
-                t["status"] = "BACKGROUND"
-        
-        if self.ghost_swap(visible_id, new_id):
-            self.adapter.select_container(new_id)
-            stack["tabs"].append({"id": new_id, "name": name, "status": "VISIBLE", "geometry": geo})
-            stack["active_index"] = len(stack["tabs"]) - 1
-            self._save_state()
-            return {"status": "ok", "stack_id": sid}
-        return {"status": "error", "message": f"Push failed: ghost_swap({visible_id} -> {new_id}) returned False. Stack '{sid}' role='{stack.get('role')}' has {len(stack.get('tabs',[]))} tabs. Check daemon.log for [INVARIANT] details."}
-
-    def _op_adopt(self, identity, payload):
-        """
-        Adopts a pre-existing container into the stack registry.
-        Used during boot or when a standalone tool is initialized.
-        """
-        pane_id = payload.get("pane_id")
-        name = payload.get("name", "Shell")
-        if not pane_id: return {"status": "error", "message": "No pane_id provided"}
-        
-        sid, stack = self._get_or_create_stack(identity, initial_pane=pane_id)
-        # Ensure the pane is marked as VISIBLE if it's the current one
-        for tab in stack["tabs"]:
-            if tab["id"] == pane_id:
-                tab["status"] = "VISIBLE"
-                tab["name"] = name
-        
-        # Propagate metadata back to the pane
-        self.adapter.set_metadata(pane_id, "@nexus_stack_id", sid)
-        if stack.get("role"):
-            self.adapter.set_metadata(pane_id, "@nexus_role", stack["role"])
-            
-        self._save_state()
-        return {"status": "ok", "stack_id": sid}
+        return result
 
     def _op_boot_layout(self, payload):
         layout_name = payload.get("name")
@@ -512,80 +350,6 @@ class NexusDaemon:
         orch = WorkspaceOrchestrator(NEXUS_HOME, Path(project_root), socket_label, core=self.core)
         orch.apply_composition(layout_name, target_window)
         return {"status": "ok"}
-
-    def _op_switch(self, identity, payload):
-        try: index = int(payload.get("index", 0))
-        except: return {"status": "error", "message": "Invalid index"}
-        sid, stack = self._get_stack_by_identity(identity)
-        if not stack or index >= len(stack["tabs"]): return {"status": "error", "message": "Not found"}
-        
-        target_id = stack["tabs"][index]["id"]
-        focused_id = payload.get("focused_id") or self.adapter.get_focused_id()
-        visible_id = self._get_visible_container(stack, focused_id)
-        
-        if visible_id != target_id:
-            # Snapshot outgoing geometry
-            outgoing_geo = self.adapter.get_geometry(visible_id)
-            if self.ghost_swap(visible_id, target_id):
-                self.adapter.select_container(target_id)
-                # Restore incoming geometry if available
-                incoming_geo = stack["tabs"][index].get("geometry")
-                if incoming_geo:
-                    self.adapter.set_geometry(target_id, incoming_geo)
-                
-                for i, t in enumerate(stack["tabs"]):
-                    if t["id"] == visible_id: t["geometry"] = outgoing_geo
-                    t["status"] = "VISIBLE" if i == index else "BACKGROUND"
-                
-                stack["active_index"] = index
-                self._save_state()
-                return {"status": "ok"}
-            return {"status": "error", "message": "Switch failed"}
-        return {"status": "ok", "message": "Already active"}
-
-    def _op_replace(self, identity, payload):
-        new_id = payload.get("pane_id")
-        name = payload.get("name", "Shell")
-        sid, stack = self._get_stack_by_identity(identity)
-        if not stack: return self._op_push(identity, payload)
-        
-        idx = stack["active_index"]
-        target_to_replace = stack["tabs"][idx]["id"]
-        visible_id = self._get_visible_container(stack, payload.get("focused_id") or self.adapter.get_focused_id())
-        
-        # Capture current geometry
-        geo = self.adapter.get_geometry(visible_id)
-        
-        if self.ghost_swap(visible_id, new_id):
-            self.adapter.select_container(new_id)
-            # Apply geometry to new pane
-            if geo: self.adapter.set_geometry(new_id, geo)
-            
-            if target_to_replace != new_id:
-                self.run_tmux(["kill-pane", "-t", target_to_replace], getattr(self.adapter, 'socket_label', None))
-            stack["tabs"][idx] = {"id": new_id, "name": name, "status": "VISIBLE", "geometry": geo}
-            self._save_state()
-            return {"status": "ok"}
-        return {"status": "error", "message": "Replace failed"}
-
-    def _op_close(self, identity, payload=None):
-        payload = payload or {}
-        sid, stack = self._get_stack_by_identity(identity)
-        if not stack or not stack["tabs"]: return {"status": "error", "message": "Empty"}
-        idx = stack["active_index"]
-        if idx == 0: return {"status": "error", "message": "Foundation protected"}
-        target_id = stack["tabs"][idx]["id"]
-        visible_id = self._get_visible_container(stack, payload.get("focused_id") or self.adapter.get_focused_id())
-        foundation_id = stack["tabs"][0]["id"]
-        if self.ghost_swap(visible_id, foundation_id):
-            self.adapter.select_container(foundation_id)
-            self.run_tmux(["kill-pane", "-t", target_id], getattr(self.adapter, 'socket_label', None))
-            stack["tabs"].pop(idx)
-            stack["active_index"] = 0
-            for i, t in enumerate(stack["tabs"]): t["status"] = "VISIBLE" if i == 0 else "BACKGROUND"
-            self._save_state()
-            return {"status": "ok"}
-        return {"status": "error", "message": "Close failed"}
 
     def _handle_menu_open(self, payload):
         """Route menu open through NexusCore or fall back to direct handler."""

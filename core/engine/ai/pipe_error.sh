@@ -1,25 +1,22 @@
 #!/bin/bash
 # core/engine/ai/pipe_error.sh — Pipe terminal errors to the AI chat pane
-# Captures the last N lines from the terminal pane and sends them to the AI.
+# Layer 1 entry point. Uses action layer for pane operations.
+
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
 
 LINES="${1:-30}"
 
-# Capture terminal pane output
-ERROR_CONTEXT=$(tmux capture-pane -t terminal -p 2>/dev/null | tail -"$LINES")
+# Capture terminal pane output via action layer
+ERROR_CONTEXT=$("$PY" "$DISPATCH" pane.capture terminal "$LINES" 2>/dev/null | tail -"$LINES")
 
 if [[ -z "$ERROR_CONTEXT" ]]; then
-    tmux display-message "No terminal output to send."
+    echo "[INVARIANT] No terminal output to capture." >&2
     exit 1
 fi
 
-# Write to temp file
-ERROR_FILE="/tmp/nexus_ai_error.txt"
-echo "=== Terminal Output (last $LINES lines) ===" > "$ERROR_FILE"
-echo "$ERROR_CONTEXT" >> "$ERROR_FILE"
-
-# Send to chat pane
-tmux send-keys -t chat "I got this error. Can you help debug it?" Enter
+# Send to chat pane via action layer
+"$PY" "$DISPATCH" pane.send-command chat "I got this error. Can you help debug it?"
 sleep 0.2
-tmux send-keys -t chat "$ERROR_CONTEXT" Enter
-
-tmux display-message "Error context sent to AI ($LINES lines)"
+"$PY" "$DISPATCH" pane.send-command chat "$ERROR_CONTEXT"

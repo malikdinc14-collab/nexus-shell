@@ -74,8 +74,6 @@ class WorkspaceOrchestrator:
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         line = f"[{timestamp}] [orchestrator] {msg}"
-        print(line, flush=True)
-        # Force stderr so it shows up in simulation/terminal
         print(line, file=sys.stderr, flush=True)
         with open(self.log_file, "a") as f:
             f.write(line + "\n")
@@ -187,7 +185,8 @@ class WorkspaceOrchestrator:
             import traceback
             self.log(traceback.format_exc())
 
-    def _build_leaf(self, config: Dict[str, Any], target_pane: str):
+    def _build_leaf(self, config: Dict[str, Any], target_pane: str,
+                    from_momentum: bool = False):
         """Builds a single leaf pane (Terminal/Editor/Tool)."""
         # Leaf: Prepare Command
         cmd = config.get("command", "/bin/zsh -i")
@@ -229,12 +228,15 @@ class WorkspaceOrchestrator:
             
             # Axiom Adapter-01: Ask the registry for the best launch command.
             # The adapter may wrap the command with delays, full paths, or flags.
-            role = config.get("id") or config.get("role")
-            if role and hasattr(self, '_registry') and self._registry:
-                adapter_cmd = self._registry.get_launch_command(role)
-                if adapter_cmd and adapter_cmd != role:
-                    self.log(f"Adapter override: '{cmd}' -> '{adapter_cmd}'")
-                    cmd = adapter_cmd
+            # Skip during momentum restore — saved commands are already expanded
+            # with full context (--listen pipes, directories, etc.).
+            if not from_momentum:
+                role = config.get("id") or config.get("role")
+                if role and hasattr(self, '_registry') and self._registry:
+                    adapter_cmd = self._registry.get_launch_command(role)
+                    if adapter_cmd and adapter_cmd != role:
+                        self.log(f"Adapter override: '{cmd}' -> '{adapter_cmd}'")
+                        cmd = adapter_cmd
 
             # Quote the command so && and other shell operators stay inside the wrapper
             escaped_cmd = cmd.replace("'", "'\\''")
@@ -349,7 +351,7 @@ class WorkspaceOrchestrator:
                 target_pane = actual_panes[i]
                 stack_id = pane_cfg.get("id") or pane_cfg.get("role", "unknown")
                 self.log(f"Binding Identity '{stack_id}' -> {target_pane}")
-                self._build_leaf(pane_cfg, target_pane)
+                self._build_leaf(pane_cfg, target_pane, from_momentum=True)
 
             self.log("AXIOM-D: Momentum Restoration Verified.")
 

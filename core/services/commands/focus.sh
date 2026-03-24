@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
 # core/services/commands/focus.sh
-# Toggles the zoom (focus) state of the current Tmux pane.
+# Toggles the zoom (focus) state of the current pane.
+# Uses action layer for all multiplexer operations.
 
-SESSION_ID=$(tmux display-message -p '#S' 2>/dev/null)
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
 
-# Toggle zoom
-tmux resize-pane -Z
-
-# Update Telemetry if zoomed
-is_zoomed=$(tmux display-message -p '#{window_zoomed_flag}')
-
-if [[ "$is_zoomed" == "1" ]]; then
-    tmux display-message "Focus Mode: ACTIVE"
-else
-    tmux display-message "Focus Mode: DEACTIVATED"
-fi
+# Toggle zoom via action layer
+"$PY" "$DISPATCH" pane.zoom

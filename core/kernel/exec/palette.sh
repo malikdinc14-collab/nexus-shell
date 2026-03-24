@@ -3,9 +3,12 @@
 # Unified Command Palette (Omnibar) for Nexus Shell.
 # Aggregates everything: Files, Commands, Compositions, Keybinds, Themes, and AI.
 
-NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
-SESSION_ID=$(tmux display-message -p '#S' 2>/dev/null)
-PROJECT_ROOT=$(tmux display-message -p '#{pane_current_path}')
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
+
+SESSION_ID="${NEXUS_SESSION:-nexus_default}"
+PROJECT_ROOT="${PROJECT_ROOT:-.}"
 
 # ANSI Colors for FZF
 CYAN='\033[1;36m'
@@ -111,7 +114,7 @@ case "$TYPE" in
         "$NEXUS_HOME/core/kernel/boot/dispatch.sh" "$LABEL"
         ;;
     COMP)
-        tmux new-window -n "Nexus:$LABEL" "nxs-launcher --comp $LABEL"
+        "$PY" "$DISPATCH" pane.select-window "Nexus:$LABEL" 2>/dev/null
         ;;
     KEY)
         # Apply keybind profile via config handler

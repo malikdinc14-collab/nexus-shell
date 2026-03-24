@@ -63,8 +63,8 @@ def get_pane_command(pid):
 
         # Triage known tools to save logical variables
         # This keeps the IDE "Stateful" across different setups
-        if any(x in cmd for x in ["fzf", "nexus-menu", "px-engine"]):
-            return "$PARALLAX_CMD"
+        if any(x in cmd for x in ["fzf", "gum", "nexus-menu", "px-engine", "menu_engine"]):
+            return "$NEXUS_MENU_CMD"
         if "nvim" in cmd or "vim" in cmd:
             return "$EDITOR_CMD"
         if any(x in cmd for x in ["yazi", "ranger", "lf"]):

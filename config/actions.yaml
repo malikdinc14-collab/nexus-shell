@@ -8,10 +8,10 @@ actions:
   hard-reboot: "tmux kill-server"
   
   # Navigation
-  focus_files: "tmux select-pane -t tree || tmux select-pane -t files"
-  focus_editor: "tmux select-pane -t editor"
-  focus_chat: "tmux select-pane -t chat"
-  focus_terminal: "tmux select-pane -t terminal"
+  focus_files: "$NEXUS_KERNEL/exec/focus.sh tree files"
+  focus_editor: "$NEXUS_KERNEL/exec/focus.sh editor"
+  focus_chat: "$NEXUS_KERNEL/exec/focus.sh chat"
+  focus_terminal: "$NEXUS_KERNEL/exec/focus.sh terminal"
   quick_find: "$NEXUS_HOME/core/engine/search/quick_find.sh"
 
   # Shelf

@@ -5,27 +5,34 @@
 import json
 import os
 import sys
-import subprocess
 import math
+from pathlib import Path
 
-def run_command(cmd):
-    try:
-        return subprocess.check_output(cmd, shell=True).decode().strip()
-    except:
-        return ""
+_ENGINE_ROOT = Path(__file__).resolve().parents[2]
+if str(_ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ENGINE_ROOT))
+
+try:
+    from engine.actions.resolver import AdapterResolver
+    _EDITOR = AdapterResolver.editor()
+except Exception:
+    _EDITOR = None
+
 
 def get_nvim_tabs(pipe):
-    if not os.path.exists(pipe): return []
+    if not os.path.exists(pipe) or _EDITOR is None:
+        return []
     expr = "JSON.stringify(map(gettabinfo(), {k, v -> {'id': v.tabnr, 'type': 'nvim', 'title': fnamemodify(bufname(v.windows[0]), ':t'), 'path': bufname(v.windows[0])}}))"
-    res = run_command(f"nvim --server {pipe} --remote-expr \"{expr}\"")
+    res = _EDITOR.remote_expr(expr)
     try:
         return json.loads(res)
-    except:
-        # Fallback to buffers if no tabs or error
+    except Exception:
         expr_buf = "JSON.stringify(map(filter(getbufinfo({'buflisted':1}), {k, v -> v.name != ''}), {k, v -> {'id': v.bufnr, 'type': 'nvim_buf', 'title': fnamemodify(v.name, ':t'), 'path': v.name}}))"
-        res_buf = run_command(f"nvim --server {pipe} --remote-expr \"{expr_buf}\"")
-        try: return json.loads(res_buf)
-        except: return []
+        res_buf = _EDITOR.remote_expr(expr_buf)
+        try:
+            return json.loads(res_buf)
+        except Exception:
+            return []
 
 def get_shell_tabs():
     nexus_home = os.environ.get("NEXUS_HOME", "")

@@ -1,21 +1,19 @@
 #!/bin/bash
 # lib/yazi_open.sh
 # Bridge between Yazi and Nexus Shell to open files in the Editor pane.
+#
+# This is a Layer 1 (thin entry point) script. All logic lives in the
+# action layer (Layer 2). No direct tmux/nvim calls here.
 
 FILE_PATH="$1"
+[[ -z "$FILE_PATH" ]] && exit 0
 
-# 1. Resolve Canonical Path (The "Sovereign Bridge")
-# IDE Sidebar uses symlinks in /tmp, but editors need real paths for LSPs/Git.
-if [[ -L "$FILE_PATH" || "$FILE_PATH" == /tmp/nexus/* ]]; then
-    # Use python3 for a portable 'realpath' on macOS/Linux
-    FILE_PATH=$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$FILE_PATH")
-elif [[ "$FILE_PATH" != /* ]]; then
-    FILE_PATH="$(pwd)/$FILE_PATH"
-fi
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 
-if [[ -n "$NEXUS_HOME" && -x "$NEXUS_HOME/core/kernel/exec/router.sh" ]]; then
-    echo "NOTE|$FILE_PATH" | "$NEXUS_HOME/core/kernel/exec/router.sh"
-else
-    # Fallback if outside nexus
-    ${EDITOR:-nvim} "$FILE_PATH"
-fi
+# Resolve Python
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" \
+|| PY="${Python_BIN:-python3}"
+
+# Delegate to action layer — it handles path resolution, editor RPC,
+# and pane focus through adapters.
+exec "$PY" "$NEXUS_HOME/core/engine/actions/dispatch.py" editor.open "$FILE_PATH"

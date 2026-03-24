@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# core/services/commands/hud.sh
-# Toggles or manages the HUD visibility within the session.
+# core/services/commands/hud.sh — HUD toggle
+# Thin entry point, delegates to action layer.
 
-toggle_hud() {
-    # Check if HUD window exists in Tmux
-    if tmux list-windows | grep -q "HUD"; then
-        # If it's visible, hide it (or vice versa)
-        # For now, we'll just focus it
-        tmux select-window -t HUD
-    else
-        # Provision it
-        tmux new-window -n HUD -d "./core/ui/hud/renderer.sh"
-    fi
-}
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
 
 case "$1" in
-    toggle) toggle_hud ;;
-    *) echo "Usage: :hud toggle" ;;
+    toggle)
+        "$PY" "$DISPATCH" pane.select-window "HUD" 2>/dev/null || \
+        echo "[INVARIANT] HUD window not found." >&2
+        ;;
+    *) echo "Usage: hud.sh toggle" ;;
 esac

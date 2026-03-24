@@ -9,6 +9,11 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
+import sys
+
+_ENGINE_ROOT = Path(__file__).resolve().parents[2]
+if str(_ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ENGINE_ROOT))
 
 TRACE_DIR = Path(f"/tmp/nexus_{os.getlogin()}/trace")
 SESSION_FILE = TRACE_DIR / "active_session"
@@ -95,24 +100,22 @@ def emit_state_snapshot(label=""):
     if not is_tracing():
         return
 
-    import subprocess
+    try:
+        from engine.actions.resolver import AdapterResolver
+        mux = AdapterResolver.multiplexer()
+    except Exception:
+        mux = None
 
     try:
-        panes_raw = (
-            subprocess.check_output(
-                [
-                    "tmux",
-                    "list-panes",
-                    "-a",
-                    "-F",
-                    "#{pane_id}|#{window_name}|#{pane_current_command}|#{@nexus_role}|#{@nexus_tab_name}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
-    except:
+        panes_raw = mux._run(
+            [
+                "list-panes",
+                "-a",
+                "-F",
+                "#{pane_id}|#{window_name}|#{pane_current_command}|#{@nexus_role}|#{@nexus_tab_name}",
+            ]
+        ) if mux else ""
+    except Exception:
         panes_raw = ""
 
     panes = []
@@ -139,12 +142,8 @@ def emit_state_snapshot(label=""):
             pass
 
     try:
-        focused = (
-            subprocess.check_output(["tmux", "display-message", "-p", "#{pane_id}"])
-            .decode()
-            .strip()
-        )
-    except:
+        focused = mux.get_focused_pane_id() if mux else None
+    except Exception:
         focused = None
 
     _emit(
@@ -157,15 +156,11 @@ def emit_action_start(verb, item_type, payload, caller_pane=None):
         return
 
     if caller_pane is None:
-        import subprocess
-
         try:
-            caller_pane = (
-                subprocess.check_output(["tmux", "display-message", "-p", "#{pane_id}"])
-                .decode()
-                .strip()
-            )
-        except:
+            from engine.actions.resolver import AdapterResolver
+            mux = AdapterResolver.multiplexer()
+            caller_pane = mux.get_focused_pane_id()
+        except Exception:
             caller_pane = None
 
     _emit(

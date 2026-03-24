@@ -1,12 +1,11 @@
 #!/bin/bash
 # core/engine/search/quick_find.sh — Project-Wide File Search (tmux popup)
-# Opens a floating fzf window, sends the selected file to nvim in the editor pane.
+# Opens fzf for file selection, sends to editor via action layer.
+# fzf stays in shell. Editor/pane calls go through adapter layer.
 
 NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
-NEXUS_STATE="${NEXUS_STATE:-/tmp/nexus_$(whoami)}"
-SESSION_NAME=$(tmux display-message -p '#S' 2>/dev/null)
-PROJECT_NAME=${SESSION_NAME#nexus_}
-NVIM_PIPE="$NEXUS_STATE/pipes/nvim_${PROJECT_NAME}.pipe"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+DISPATCH="$NEXUS_HOME/core/engine/actions/dispatch.py"
 
 # Resolve search paths
 IFS=':' read -ra SEARCH_PATHS <<< "${NEXUS_ROOTS:-.}"
@@ -28,12 +27,6 @@ FILE=$($FIND_CMD | fzf \
     --bind 'ctrl-/:toggle-preview')
 
 if [[ -n "$FILE" ]]; then
-    # Open in nvim via RPC if pipe exists, otherwise send-keys
-    if [[ -S "$NVIM_PIPE" ]]; then
-        nvim --server "$NVIM_PIPE" --remote "$(pwd)/$FILE" 2>/dev/null
-    else
-        tmux send-keys -t editor "nvim '$FILE'" Enter
-    fi
-    # Focus the editor pane
-    tmux select-pane -t editor
+    # Open file via action layer (handles editor RPC + pane focus)
+    "$PY" "$DISPATCH" editor.open "$(pwd)/$FILE"
 fi

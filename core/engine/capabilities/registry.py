@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Type
 from pathlib import Path
 from .base import Capability, CapabilityType, AdapterManifest
 from .adapters.agent.opencode import OpenCodeAdapter
+from .adapters.agent.claude_code import ClaudeCodeAdapter
 from .adapters.explorer.yazi import YaziAdapter
 from .adapters.editor.neovim import NeovimAdapter
 from .adapters.menu.gum_menu import GumMenuAdapter
@@ -36,6 +37,7 @@ class CapabilityRegistry:
         never returns None.
         """
         adapters = [
+            ClaudeCodeAdapter(),
             OpenCodeAdapter(),
             YaziAdapter(),
             NeovimAdapter(),
@@ -101,7 +103,7 @@ class CapabilityRegistry:
         fallbacks = {
             "editor": ["nvim", "vim", "vi", "nano", "micro"],
             "explorer": ["yazi", "ranger", "mc", "ls"],
-            "chat": ["opencode", "aider", "bash"],
+            "chat": ["claude", "opencode", "aider", "bash"],
             "terminal": ["zsh", "bash", "sh"],
             "viewer": ["glow", "bat", "cat"],
             "search": ["rg", "grep"]

@@ -13,6 +13,24 @@ NEXUS_EDITOR="${NEXUS_EDITOR:-nvim}"
 LOG_FILE="/tmp/nexus_menu.log"
 export NXS_STRICT_LOCAL=true
 
+# ── Negative Space: Assert dispatch invariants ──
+if [[ -z "$VERB" ]]; then
+    echo "[INVARIANT] VERB is empty. Called as: $0 $*" | tee -a "$LOG_FILE" >&2
+    exit 100
+fi
+if [[ -z "$ITEM_TYPE" ]]; then
+    echo "[INVARIANT] ITEM_TYPE is empty. VERB=$VERB. Called as: $0 $*" | tee -a "$LOG_FILE" >&2
+    exit 101
+fi
+if [[ -z "$PAYLOAD" ]]; then
+    echo "[INVARIANT] PAYLOAD is empty. VERB=$VERB TYPE=$ITEM_TYPE. Called as: $0 $*" | tee -a "$LOG_FILE" >&2
+    exit 102
+fi
+if [[ ! -d "$NEXUS_HOME" ]]; then
+    echo "[INVARIANT] NEXUS_HOME not a directory: '$NEXUS_HOME'" | tee -a "$LOG_FILE" >&2
+    exit 103
+fi
+
 # Resolve Python Binary
 [[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && Python_BIN="$NEXUS_HOME/.venv/bin/python3" \
 || Python_BIN="${Python_BIN:-python3}"
@@ -24,17 +42,17 @@ log "Verb: $VERB | Type: $ITEM_TYPE | Payload: $PAYLOAD"
 
 # 0. Intelligent Routing Kernel
 if [[ "$ITEM_TYPE" == "NOTE" || "$ITEM_TYPE" == "ACTION" || -f "$PAYLOAD" ]]; then
-    # Classify the payload extension
-    REAL_TYPE=$("$Python_BIN" "$NEXUS_HOME/core/engine/api/classifier.py" "$PAYLOAD")
-    log "Classifier Result: $REAL_TYPE for $PAYLOAD"
-    
-    # If the classifier wants a renderer but we were told to 'edit', reroute if not forced
+    CLASSIFIER="$NEXUS_HOME/core/engine/api/classifier.py"
+    if [[ -f "$CLASSIFIER" ]]; then
+        REAL_TYPE=$("$Python_BIN" "$CLASSIFIER" "$PAYLOAD" 2>/dev/null)
+        log "Classifier Result: $REAL_TYPE for $PAYLOAD"
+    else
+        REAL_TYPE=""
+        log "Classifier not found, skipping"
+    fi
+
     if [[ "$REAL_TYPE" == "renderer" && "$VERB" == "edit" ]]; then
         log "Rerouting from edit to renderer"
-        # We can still allow editing if the user explicitly wants to edit a .md
-        # but for now, let's stick to the design: default to editor for .md was requested later.
-        # Wait, I set .md to 'editor' in classifier.py already.
-        # So only truly 'renderable' things (images, mermaid) will hit this.
     fi
 fi
 
@@ -129,28 +147,21 @@ case "$VERB" in
             IDX=$(get_stack_idx "$IDENTITY")
             log "SmartResolve: Switching to existing tab '$IDENTITY' at index $IDX"
             
-            # If it's a file, we still want to open it in that editor
-            if [[ -S "$NVIM_PIPE" && -f "$PAYLOAD" ]]; then
-                 log "Sending remote command to existing editor: $PAYLOAD"
-                 nvim --server "$NVIM_PIPE" --remote-send ":tabedit $PAYLOAD<CR>" 2>/dev/null
+            # If it's a file, open it in the editor via action layer
+            if [[ -f "$PAYLOAD" ]]; then
+                 log "Opening file via action layer: $PAYLOAD"
+                 "$Python_BIN" "$NEXUS_HOME/core/engine/actions/dispatch.py" editor.open "$PAYLOAD" 2>/dev/null
             fi
             
             "$STACK_BIN" switch "local" "$IDX"
             exit 0
         fi
 
-        # 2. Editor Routing (Check for remote nvim server if not switched)
-        if [[ -S "$NVIM_PIPE" ]]; then
-            log "Remote nvim detected. Sending tabedit..."
-            if [[ -f "$PAYLOAD" ]]; then
-                nvim --server "$NVIM_PIPE" --remote-send ":tabedit $PAYLOAD<CR>" 2>> "$LOG_FILE"
-                
-                # Identify if editor is in another pane and focus it
-                EDITOR_PANE=$(tmux list-panes -a -F "#{pane_id} #{@nexus_role}" | grep "editor" | head -n1 | awk '{print $1}')
-                if [[ -n "$EDITOR_PANE" ]]; then
-                    tmux select-pane -t "$EDITOR_PANE"
-                    exit 0
-                fi
+        # 2. Editor Routing — open file via action layer (handles RPC + focus)
+        if [[ -f "$PAYLOAD" ]]; then
+            log "Opening file via action layer..."
+            if "$Python_BIN" "$NEXUS_HOME/core/engine/actions/dispatch.py" editor.open "$PAYLOAD" 2>> "$LOG_FILE"; then
+                exit 0
             fi
         fi
         # 3. Fallback: Push to Stack

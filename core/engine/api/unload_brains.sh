@@ -25,4 +25,6 @@ if command -v ollama >/dev/null 2>&1; then
     echo "  - Ollama engine stopped."
 fi
 
-tmux display-message "✅ All local brains unloaded."
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+"$PY" "$NEXUS_HOME/core/engine/actions/dispatch.py" pane.display-message "All local brains unloaded." 2>/dev/null

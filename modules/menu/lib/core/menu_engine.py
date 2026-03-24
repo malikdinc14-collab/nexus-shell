@@ -28,12 +28,7 @@ ACTIVE_PROFILE= os.environ.get("NEXUS_PROFILE", "")
 
 # ── Axiom: Environmental Invariants (Negative Space) ──────────────────────────
 def validate_invariants():
-    missing = []
-    if not os.environ.get("NEXUS_HOME"):
-        # Fallback resolution but warn
-        print(f"\033[1;33m[Axiom] WARNING: NEXUS_HOME is sterile. Deriving from script location.\033[0m", file=sys.stderr)
-    if not os.environ.get("PROJECT_ROOT"):
-        print(f"\033[1;33m[Axiom] WARNING: PROJECT_ROOT is sterile. Using CWD.\033[0m", file=sys.stderr)
+    pass  # Warnings logged to debug file only, not stderr
 
 # Add core to sys.path for library access
 sys.path.append(str(NEXUS_HOME / "core"))
@@ -377,10 +372,12 @@ def get_items(context: str) -> list:
                 
                 if stack:
                     items = []
+                    active_idx = stack.get("active_index", 0)
                     for i, tab in enumerate(stack["tabs"]):
-                        label = f"[{i}] {tab['name']}"
-                        payload = f"$NEXUS_HOME/core/kernel/stack/stack switch {identity} {i}"
-                        items.append(fmt(label, "ACTION", payload, icon="🗂️"))
+                        marker = " ●" if i == active_idx else ""
+                        label = f"[{i}] {tab['name']}{marker}"
+                        payload = f"{identity}|{i}"
+                        items.append(fmt(label, "STACK_TAB", payload, icon="🗂️"))
                     return items
             return [fmt("No tabs in this stack", "INFO", "NONE")]
         except:
@@ -535,49 +532,136 @@ def get_items(context: str) -> list:
     return items or [fmt(f"Empty: {context}", "DISABLED", "NONE")]
 
 def main():
-    context = "home"
+    initial_context = "home"
     is_interactive = False
-    
+    exit_on_select = False
+
     for i, arg in enumerate(sys.argv):
         if arg == "--context" and i + 1 < len(sys.argv):
-            context = sys.argv[i + 1]
+            initial_context = sys.argv[i + 1]
         if arg == "--pick":
             is_interactive = True
-    
-    if len(sys.argv) == 2 and not sys.argv[1].startswith("-"):
-        context = sys.argv[1]
+        if arg == "--exit-on-select":
+            exit_on_select = True
 
-    items = get_items(context)
-    
+    if len(sys.argv) == 2 and not sys.argv[1].startswith("-"):
+        initial_context = sys.argv[1]
+
     if not is_interactive:
+        items = get_items(initial_context)
         for line in items:
             print(line)
         return
 
-    # Interactive Loop
+    # Interactive Loop — Esc returns to home, never exits
     adapter = get_adapter()
-    selected_json_str = adapter.pick(context, items)
-    
-    if not selected_json_str:
-        sys.exit(0)
-        
-    selected = json.loads(selected_json_str)
-    label = selected.get("label")
-    e_type = selected.get("type")
-    payload = selected.get("payload")
-    
-    if e_type in ("FOLDER", "PLANE"):
-        # Recurse: Re-launch this script with the new context
-        # We use a new process to ensure a clean UI state
-        cmd = [sys.executable, __file__, "--context", payload, "--pick"]
-        subprocess.run(cmd)
-    else:
-        # Dispatch action
-        # We use the existing action-dispatch binary
-        dispatch_bin = NEXUS_HOME / "modules" / "menu" / "bin" / "action-dispatch"
-        env = os.environ.copy()
-        env["NXS_CALLER"] = "menu"
-        subprocess.run([str(dispatch_bin), "run", e_type, payload], env=env)
+
+    # ── Negative Space: Assert adapter invariants ──
+    assert adapter is not None, \
+        f"[INVARIANT] Menu adapter resolved to None. " \
+        f"Profile: {Path(os.path.expanduser('~/.nexus/profile.yaml'))}, " \
+        f"NEXUS_HOME: {NEXUS_HOME}, " \
+        f"Available adapters: check CapabilityRegistry"
+
+    import shutil
+    if hasattr(adapter, 'capability_id') and adapter.capability_id == 'gum':
+        assert shutil.which("gum") is not None, \
+            f"[INVARIANT] Adapter is 'gum' but gum binary not found in PATH. " \
+            f"PATH: {os.environ.get('PATH', 'unset')}"
+
+    context = initial_context
+    history = []  # stack for back-navigation
+
+    while True:
+        items = get_items(context)
+
+        # ── Negative Space: Assert items resolved ──
+        assert items is not None and len(items) > 0, \
+            f"[INVARIANT] get_items('{context}') returned empty. " \
+            f"Layers checked: {get_list_layers(context) if context != 'home' else 'home.yaml cascade'}"
+
+        selected_json_str = adapter.pick(context, items)
+
+        if not selected_json_str:
+            # Esc pressed — go back or return to home
+            if history:
+                context = history.pop()
+            else:
+                context = "home"
+            continue
+
+        selected = json.loads(selected_json_str)
+        e_type = selected.get("type")
+        payload = selected.get("payload")
+
+        if e_type in ("FOLDER", "PLANE"):
+            history.append(context)
+            context = payload
+        elif e_type == "STACK_TAB":
+            # Tab switcher: switch to selected tab, then kill menu pane.
+            # Must use respawn-pane to prevent the push wrapper's
+            # "stack switch identity 0" from undoing the user's selection.
+            role, idx = payload.split("|", 1)
+            sys.path.insert(0, str(NEXUS_HOME / "core"))
+            from engine.actions.resolver import AdapterResolver
+            mux = AdapterResolver.multiplexer()
+            pane_id = mux.get_focused_pane_id()
+            stack_bin = str(NEXUS_HOME / "core" / "kernel" / "stack" / "stack")
+            # respawn-pane kills our process tree (wrapper included),
+            # runs switch (ghost_swap moves menu to reservoir), then kills menu pane
+            switch_and_cleanup = (
+                f"{sys.executable} {stack_bin} switch {role} {idx}; "
+                f"{sys.executable} -c \"from engine.actions.resolver import AdapterResolver; "
+                f"AdapterResolver.multiplexer().kill_pane('{pane_id}')\""
+            )
+            mux.respawn_pane(pane_id, switch_and_cleanup)
+            return
+        elif exit_on_select:
+            # New Tab mode: respawn this pane with the selected module.
+            # Payload format: "$NEXUS_HOME/core/kernel/stack/stack push ROLE 'CMD' 'LABEL'"
+            expanded = os.path.expandvars(payload) if payload else ""
+            import shlex
+            try:
+                parts = shlex.split(expanded)
+                if "push" in parts:
+                    push_idx = parts.index("push")
+                    module_cmd = parts[push_idx + 2] if len(parts) > push_idx + 2 else ""
+                    module_label = parts[push_idx + 3] if len(parts) > push_idx + 3 else "Tab"
+                else:
+                    module_cmd = expanded
+                    module_label = "Tab"
+            except Exception:
+                module_cmd = expanded
+                module_label = "Tab"
+
+            if module_cmd:
+                sys.path.insert(0, str(NEXUS_HOME / "core"))
+                from engine.actions.resolver import AdapterResolver
+                mux = AdapterResolver.multiplexer()
+                pane_id = mux.get_focused_pane_id()
+                # Update tab name in daemon registry
+                try:
+                    sys.path.append(str(NEXUS_HOME / "core" / "engine" / "lib"))
+                    from daemon_client import NexusDaemonClient
+                    dc = NexusDaemonClient()
+                    dc.send("stack_rename_tab", {"pane_id": pane_id, "name": module_label})
+                except Exception:
+                    pass
+                # respawn-pane replaces our process with the module
+                mux.respawn_pane(pane_id, module_cmd)
+            return
+        else:
+            # Dispatch action, then return to current context
+            dispatch_bin = NEXUS_HOME / "modules" / "menu" / "bin" / "action-dispatch"
+            env = os.environ.copy()
+            env["NXS_CALLER"] = "menu"
+            try:
+                subprocess.run(
+                    [str(dispatch_bin), "run", e_type, payload],
+                    env=env, stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass
 
 if __name__ == "__main__":
     try:

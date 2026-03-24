@@ -207,6 +207,9 @@ class NexusCore:
             "replace": self._stack_replace,
             "close": self._stack_close,
             "adopt": self._stack_adopt,
+            "tag": self._stack_tag,
+            "untag": self._stack_untag,
+            "rename": self._stack_rename,
         }
         handler = ops.get(op)
         if handler is None:
@@ -446,6 +449,48 @@ class NexusCore:
         if stack.role:
             self.surface.set_tag(pane_id, "nexus_role", stack.role)
 
+        return {"status": "ok", "stack_id": sid}
+
+    def _stack_tag(self, payload: dict) -> Dict:
+        """Add a tag to a stack."""
+        identity = payload.get("identity", "")
+        tag = payload.get("tag")
+        if not tag:
+            return {"status": "error", "error": "no_tag"}
+
+        sid, stack = self.stacks.get_by_identity(identity)
+        if not stack:
+            return {"status": "error", "error": "not_found"}
+
+        if tag not in stack.tags:
+            stack.tags.append(tag)
+        return {"status": "ok", "stack_id": sid}
+
+    def _stack_untag(self, payload: dict) -> Dict:
+        """Remove a tag from a stack."""
+        identity = payload.get("identity", "")
+        tag = payload.get("tag")
+
+        sid, stack = self.stacks.get_by_identity(identity)
+        if not stack:
+            return {"status": "error", "error": "not_found"}
+
+        if tag and tag in stack.tags:
+            stack.tags.remove(tag)
+        return {"status": "ok", "stack_id": sid}
+
+    def _stack_rename(self, payload: dict) -> Dict:
+        """Rename a stack's role."""
+        identity = payload.get("identity", "")
+        name = payload.get("name")
+        if not name:
+            return {"status": "error", "error": "no_name"}
+
+        sid, stack = self.stacks.get_by_identity(identity)
+        if not stack:
+            return {"status": "error", "error": "not_found"}
+
+        stack.role = name
         return {"status": "ok", "stack_id": sid}
 
     def list_tabs(self, identity: str) -> List[dict]:

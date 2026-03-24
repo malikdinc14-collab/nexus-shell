@@ -2,7 +2,7 @@ composition: vscodelike
 tools:
   editor: nvim
   files: yazi
-  chat: opencode
+  chat: claude
 parallax:
   enabled: true
   pillars:

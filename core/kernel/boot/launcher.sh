@@ -73,7 +73,7 @@ fi
 
 # -- Boot: delegate to Python station module --
 export PYTHONPATH="$NEXUS_CORE:${PYTHONPATH:-}"
-BOOT_JSON=$("$PY" -m engine.station "$@" 2>&1 | tee /dev/stderr | tail -1)
+BOOT_JSON=$("$PY" -m engine.station "$@")
 
 # Parse the JSON result
 CLIENT_SESSION=$(echo "$BOOT_JSON" | "$PY" -c "import json,sys; print(json.load(sys.stdin).get('client_session',''))" 2>/dev/null || echo "")

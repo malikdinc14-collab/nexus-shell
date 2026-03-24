@@ -5,4 +5,6 @@
 # @description: Switch focus to the editor pane
 # @icon: code
 
-tmux select-pane -t "${PX_NEXUS_EDITOR_PANE:-1}"
+NEXUS_HOME="${NEXUS_HOME:-$(cd "$(dirname "$0")/../../.." && pwd)}"
+[[ -x "$NEXUS_HOME/.venv/bin/python3" ]] && PY="$NEXUS_HOME/.venv/bin/python3" || PY=python3
+exec "$PY" "$NEXUS_HOME/core/engine/actions/dispatch.py" pane.focus editor

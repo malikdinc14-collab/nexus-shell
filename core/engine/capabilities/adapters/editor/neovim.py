@@ -48,10 +48,9 @@ class NeovimAdapter(EditorCapability):
         return cmd
 
     def _get_tmux_session(self):
-        try:
-            return subprocess.check_output(["tmux", "display-message", "-p", "#S"], stderr=subprocess.DEVNULL).decode().strip()
-        except:
-            return "nexus_default"
+        # Derive session name from env — no direct tmux calls in adapters
+        # that aren't MultiplexerAdapters.
+        return os.environ.get("NEXUS_SESSION", "nexus_default")
 
     def _get_pipe(self) -> Optional[Path]:
         project_name = self.session_name.replace("nexus_", "")
@@ -93,8 +92,62 @@ class NeovimAdapter(EditorCapability):
         if not pipe:
             return False
         try:
-            # Send the patch content as a command to neovim
             cmd = f":execute 'normal! i' . {repr(patch)}<CR>"
+            subprocess.run(
+                ["nvim", "--server", str(pipe), "--remote-send", cmd],
+                check=True, stderr=subprocess.DEVNULL, timeout=2,
+            )
+            return True
+        except Exception:
+            return False
+
+    def get_buffer_content(self, max_lines: int = 200) -> Optional[str]:
+        pipe = self._get_pipe()
+        if not pipe:
+            return None
+        try:
+            expr = f'join(getline(1, {max_lines}), "\\n")'
+            result = subprocess.check_output(
+                ["nvim", "--server", str(pipe), "--remote-expr", expr],
+                stderr=subprocess.DEVNULL, timeout=2,
+            ).decode().strip()
+            return result if result else None
+        except Exception:
+            return None
+
+    def get_tabs(self) -> list:
+        pipe = self._get_pipe()
+        if not pipe:
+            return []
+        try:
+            import json
+            expr = 'json_encode(map(gettabinfo(), {k,v -> {"name": fnamemodify(bufname(v.windows[0]), ":t"), "index": v.tabnr}}))'
+            result = subprocess.check_output(
+                ["nvim", "--server", str(pipe), "--remote-expr", expr],
+                stderr=subprocess.DEVNULL, timeout=2,
+            ).decode().strip()
+            return json.loads(result) if result else []
+        except Exception:
+            return []
+
+    def remote_expr(self, expr: str) -> str:
+        pipe = self._get_pipe()
+        if not pipe:
+            return ""
+        try:
+            result = subprocess.check_output(
+                ["nvim", "--server", str(pipe), "--remote-expr", expr],
+                stderr=subprocess.DEVNULL, timeout=2,
+            ).decode().strip()
+            return result or ""
+        except Exception:
+            return ""
+
+    def send_editor_command(self, cmd: str) -> bool:
+        pipe = self._get_pipe()
+        if not pipe:
+            return False
+        try:
             subprocess.run(
                 ["nvim", "--server", str(pipe), "--remote-send", cmd],
                 check=True, stderr=subprocess.DEVNULL, timeout=2,

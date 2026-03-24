@@ -14,30 +14,33 @@ trap 'pkill -P $$ 2>/dev/null; exit 0' SIGTERM SIGHUP SIGINT
 
 COMMAND="$@"
 
-# Axiom: Explicit Feedback (Negative Space)
+# ── Negative Space: Assert invariants before execution ──
+if [[ -z "$NEXUS_HOME" || ! -d "$NEXUS_HOME" ]]; then
+    printf "\033[1;31m[INVARIANT] NEXUS_HOME not set or missing: '%s'\033[0m\n" "$NEXUS_HOME"
+fi
+
 if [[ -n "$COMMAND" ]]; then
-    printf "\033[1;36m[Axiom] Launching Resource:\033[0m %s\n" "$COMMAND"
-    
-    # Check for empty variables (Common failure mode)
-    if [[ "$COMMAND" == *" $"* || "$COMMAND" == "$"* ]]; then
-        printf "\033[1;33m[WARNING] Command contains unexpanded variables. Environment may be sterile.\033[0m\n"
+    # Extract the binary from the command (first word, strip quotes)
+    CMD_BIN=$(echo "$COMMAND" | sed "s/^'//;s/'$//" | awk '{print $1}')
+    # Resolve $VAR-style references
+    CMD_BIN=$(eval echo "$CMD_BIN" 2>/dev/null)
+    if [[ -n "$CMD_BIN" && "$CMD_BIN" != /* ]] && ! command -v "$CMD_BIN" &>/dev/null; then
+        printf "\033[1;31m[INVARIANT] Command binary not found: '%s'\033[0m\n" "$CMD_BIN"
+        printf "\033[1;33m  Full command: %s\033[0m\n" "$COMMAND"
+        printf "\033[1;33m  PATH: %s\033[0m\n" "$PATH"
+    elif [[ -n "$CMD_BIN" && "$CMD_BIN" == /* && ! -x "$CMD_BIN" ]]; then
+        printf "\033[1;31m[INVARIANT] Command not executable: '%s'\033[0m\n" "$CMD_BIN"
+        ls -la "$CMD_BIN" 2>/dev/null
     fi
 
-    # Attempt execution with status capture
     eval "$COMMAND"
     EXIT_CODE=$?
 
     if [[ $EXIT_CODE -ne 0 ]]; then
-        printf "\033[1;31m[CRITICAL] Resource terminated with exit code %d.\033[0m\n" "$EXIT_CODE"
-    else
-        printf "\033[1;32m[SUCCESS] Resource finished gracefully.\033[0m\n"
+        printf "\033[1;31m[INVARIANT] Process exited non-zero: code=%d cmd='%s'\033[0m\n" "$EXIT_CODE" "$COMMAND"
     fi
-else
-    printf "\033[1;35m[Axiom] No command provided. Dropping to sterile shell.\033[0m\n"
 fi
 
 # Tool exited — drop to an interactive shell so the pane stays alive
-# Invariant: prefer zsh, then bash, then POSIX sh. Never hardcode a path.
-printf "\033[1;34m[Nexus] Dropping to interactive containment...\033[0m\n\n"
 FALLBACK_SHELL="$(command -v zsh 2>/dev/null || command -v bash 2>/dev/null || echo /bin/sh)"
 exec "$FALLBACK_SHELL" -i

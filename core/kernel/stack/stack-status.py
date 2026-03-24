@@ -4,6 +4,17 @@ import os
 import json
 from pathlib import Path
 
+from pathlib import Path as _Path
+_ENGINE_ROOT = _Path(__file__).resolve().parents[2]  # core/kernel/stack -> core
+if str(_ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ENGINE_ROOT))
+
+try:
+    from engine.actions.resolver import AdapterResolver
+    _MUX = AdapterResolver.multiplexer()
+except Exception:
+    _MUX = None
+
 import getpass
 USER_TMP = Path(f"/tmp/nexus_{getpass.getuser()}")
 STACK_STATE = USER_TMP / "stacks.json"
@@ -30,14 +41,14 @@ def load_state():
 
 
 def get_identity_metadata(pane_id):
-    """Fetches identity hints from the container."""
-    import subprocess
+    """Fetches identity hints from the container via adapter."""
     ids = {}
-    for key in ["@nexus_role", "@nexus_stack_id"]:
-        try:
-            val = subprocess.check_output(["tmux", "display-message", "-p", "-t", pane_id, f"#{{{key}}}"]).decode().strip()
-            if val and val != "null": ids[key] = val
-        except: pass
+    if _MUX is None:
+        return ids
+    for key in ["nexus_role", "nexus_stack_id"]:
+        val = _MUX.get_tag(pane_id, key)
+        if val and val != "null":
+            ids[f"@{key}"] = val
     return ids
 
 def main():
@@ -61,27 +72,20 @@ def main():
         return
 
     # 2. Nexus Stack Mode
-    meta = get_identity_metadata(pane_id)
-    role = meta.get("@nexus_role")
-    sid_hint = meta.get("@nexus_stack_id")
-    
     state = load_state()
     registry = state.get("stacks", {})
-    
-    # Resolve the Stack
+
+    # Resolve the Stack by finding which stack contains this pane_id.
+    # This is stable across swap-pane operations — the pane_id travels
+    # with the content, and the registry tracks all tab pane IDs.
     found_sid, stack = None, None
-    
-    # Priority 1: Direct UUID match
-    if sid_hint in registry:
-        found_sid, stack = sid_hint, registry[sid_hint]
-    # Priority 2: Role match
-    elif role:
-        for sid, sdata in registry.items():
-            if sdata.get("role") == role:
-                found_sid, stack = sid, sdata; break
-    # Priority 3: Pane ID fallback (Anonymous Stack)
-    if not stack and pane_id in registry:
-        found_sid, stack = pane_id, registry[pane_id]
+    for sid, sdata in registry.items():
+        for tab in sdata.get("tabs", []):
+            if tab.get("id") == pane_id:
+                found_sid, stack = sid, sdata
+                break
+        if stack:
+            break
 
     if not stack or not stack.get("tabs"):
         label = role if role else (sid_hint if sid_hint else pane_id)
