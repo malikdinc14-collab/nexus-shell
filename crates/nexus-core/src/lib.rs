@@ -1,5 +1,6 @@
 //! Nexus Core — shared types, traits, and constants for all Nexus crates.
 
+pub mod adapters;
 pub mod capability;
 pub mod config;
 pub mod constants;
@@ -7,6 +8,7 @@ pub mod error;
 pub mod keymap;
 pub mod mux;
 
+pub use adapters::{ClaudeAdapter, FsExplorer};
 pub use capability::{
     AdapterManifest, Capability, CapabilityType, ChatCapability, ChatEvent, DirEntry as CapabilityDirEntry,
     EditorCapability, ExplorerCapability, SystemContext,
