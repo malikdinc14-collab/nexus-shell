@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::stack::{Tab, TabStack, TabStatus};
 
 // ---------------------------------------------------------------------------
@@ -33,9 +35,40 @@ pub enum StackOpResult {
 ///
 /// Supports identity-based lookup (role, tag, UUID) matching the daemon's
 /// resolution semantics.
+#[derive(Debug, Clone, Serialize)]
 pub struct StackManager {
     stacks: HashMap<String, TabStack>,
     id_counter: u32,
+}
+
+impl<'de> Deserialize<'de> for StackManager {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Raw {
+            stacks: HashMap<String, TabStack>,
+            id_counter: u32,
+        }
+
+        let raw = Raw::deserialize(deserializer)?;
+
+        let max_id = raw
+            .stacks
+            .keys()
+            .filter_map(|k| k.strip_prefix("stack_"))
+            .filter_map(|hex| u32::from_str_radix(hex, 16).ok())
+            .max()
+            .unwrap_or(0);
+
+        let id_counter = raw.id_counter.max(max_id);
+
+        Ok(StackManager {
+            stacks: raw.stacks,
+            id_counter,
+        })
+    }
 }
 
 impl StackManager {
@@ -342,5 +375,41 @@ mod tests {
             StackOpResult::LastTab(_) => {}
             other => panic!("expected LastTab, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn stackmanager_roundtrip_serde() {
+        let mut mgr = StackManager::new();
+        mgr.get_or_create_by_identity("editor", Some("pane1"));
+        mgr.get_or_create_by_identity("terminal", Some("pane2"));
+
+        let json = serde_json::to_string(&mgr).unwrap();
+        let restored: StackManager = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.all_stacks().len(), 2);
+        assert!(restored.get_by_identity("editor").is_some());
+        assert!(restored.get_by_identity("terminal").is_some());
+    }
+
+    #[test]
+    fn stackmanager_id_counter_preserved() {
+        let mut mgr = StackManager::new();
+        mgr.get_or_create_by_identity("a", None);
+        mgr.get_or_create_by_identity("b", None);
+
+        let json = serde_json::to_string(&mgr).unwrap();
+        let mut restored: StackManager = serde_json::from_str(&json).unwrap();
+
+        let (sid, _) = restored.get_or_create_by_identity("c", None);
+        assert_eq!(sid, "stack_000003");
+    }
+
+    #[test]
+    fn stackmanager_id_counter_recomputed_if_too_low() {
+        let json = r#"{"stacks":{"stack_000005":{"id":"stack_000005","pane_id":"stack_000005","tabs":[],"active_index":0,"role":null,"tags":[],"metadata":{}}},"id_counter":1}"#;
+        let mut restored: StackManager = serde_json::from_str(json).unwrap();
+
+        let (sid, _) = restored.get_or_create_by_identity("new", None);
+        assert_eq!(sid, "stack_000006");
     }
 }
