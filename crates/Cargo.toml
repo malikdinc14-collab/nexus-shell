@@ -7,4 +7,5 @@ members = [
     "nexus-daemon",
     "nexus-core",
     "nexus-editor",
+    "nexus-tmux",
 ]
