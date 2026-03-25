@@ -5,6 +5,7 @@ members = [
     "nexus-tauri",
     "nexus-cli",
     "nexus-daemon",
+    "nexus-client",
     "nexus-core",
     "nexus-editor",
     "nexus-tmux",
