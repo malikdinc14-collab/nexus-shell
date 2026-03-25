@@ -4,8 +4,38 @@
 
 use nexus_core::adapters::{ClaudeAdapter, FsExplorer};
 use nexus_core::capability::SystemContext;
+use nexus_engine::persistence;
 use nexus_engine::{NexusCore, NullMux, TypedEvent};
 use std::sync::{Arc, Mutex as StdMutex};
+
+async fn auto_save_loop(core: Arc<StdMutex<NexusCore>>) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+    loop {
+        interval.tick().await;
+
+        let snapshot = {
+            let mut guard = match core.lock() {
+                Ok(g) => g,
+                Err(_) => continue,
+            };
+            if !guard.is_dirty() {
+                continue;
+            }
+            let snap = guard.snapshot();
+            guard.clear_dirty();
+            snap
+        };
+
+        let session_name = snapshot.name.clone();
+        let session_dir = persistence::nexus_home()
+            .join("sessions")
+            .join(&session_name);
+
+        if let Err(e) = persistence::save_workspace(&session_dir, &snapshot) {
+            eprintln!("auto-save failed: {e}");
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -95,6 +125,19 @@ async fn main() {
     }
     core.create_workspace("nexus", &cwd);
 
+    // -- Attempt restore from previous session --
+    let session_dir = persistence::session_dir("nexus");
+    match persistence::load_workspace(&session_dir) {
+        Ok(save) => {
+            eprintln!("  restored session from {}", session_dir.display());
+            core.layout = save.layout;
+            core.stacks = save.stacks;
+        }
+        Err(_) => {
+            // No previous session or corrupt — start fresh
+        }
+    }
+
     // -- Event bridge --
     let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel::<TypedEvent>();
     {
@@ -129,6 +172,7 @@ async fn main() {
         _ = nexus_daemon::server::idle_shutdown_monitor(
             core.clone(), client_count, shutdown_tx
         ) => {}
+        _ = auto_save_loop(core.clone()) => {}
         _ = tokio::signal::ctrl_c() => {
             eprintln!("\nShutting down...");
         }
