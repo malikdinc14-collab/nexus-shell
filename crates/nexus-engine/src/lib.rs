@@ -15,13 +15,17 @@
 
 pub mod bus;
 pub mod core;
+pub mod layout;
+pub mod registry;
 pub mod stack;
 pub mod stack_manager;
 pub mod surface;
 
 // Re-exports for convenience
 pub use crate::core::NexusCore;
+pub use registry::CapabilityRegistry;
 pub use bus::{EventBus, EventType, TypedEvent};
+pub use layout::{Direction, LayoutNode, LayoutTree, Nav, PaneType};
 pub use stack::{Tab, TabStack, TabStatus};
 pub use stack_manager::StackManager;
 pub use surface::{
