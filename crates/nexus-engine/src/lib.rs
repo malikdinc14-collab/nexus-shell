@@ -16,6 +16,7 @@
 pub mod bus;
 pub mod core;
 pub mod layout;
+pub mod pty;
 pub mod registry;
 pub mod stack;
 pub mod stack_manager;
@@ -27,6 +28,7 @@ pub use registry::CapabilityRegistry;
 pub use bus::{EventBus, EventType, TypedEvent};
 pub use layout::{Direction, LayoutNode, LayoutTree, Nav, PaneType};
 pub use stack::{Tab, TabStack, TabStatus};
+pub use pty::PtyManager;
 pub use stack_manager::StackManager;
 pub use surface::{
     ContainerInfo, Dimensions, Geometry, HudModule, MenuItem, Mux, NullMux, SplitDirection,
