@@ -124,6 +124,22 @@ pub struct LayoutExport {
 }
 ```
 
+### Surface Modes and Persistence
+
+Surface mode is a property of each **client connection**, not the workspace. Multiple surfaces can connect simultaneously to the same daemon. The workspace save is surface-agnostic — it captures logical state only.
+
+Five surface types connect to the daemon:
+
+| Surface | Rendering | How it uses the layout tree |
+|---------|-----------|---------------------------|
+| **Shell (single)** | User's terminal | Ignores layout — commands return to stdout |
+| **Shell (multi)** | tmux / iTerm2 / Ghostty / OS WM | Mux adapter maps logical tree to physical panes |
+| **Tauri (app)** | Internal tiling WM, one window | Split ratios rendered directly |
+| **Tauri (WM)** | OS window manager (Sway/Hyprland) | Each pane = OS window, WM positions them |
+| **Headless** | None | Daemon runs for agents/CI/scripts, no rendering |
+
+On restore, each connected surface interprets the logical layout according to its own rendering model. The daemon doesn't dictate how panes are displayed — it only owns the logical structure, pane state, and PTYs.
+
 ## File Locations
 
 ```
