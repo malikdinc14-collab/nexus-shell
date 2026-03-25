@@ -15,6 +15,7 @@
 
 pub mod bus;
 pub mod core;
+pub mod dispatch;
 pub mod layout;
 pub mod pty;
 pub mod registry;
@@ -24,6 +25,7 @@ pub mod surface;
 
 // Re-exports for convenience
 pub use crate::core::NexusCore;
+pub use dispatch::dispatch;
 pub use registry::CapabilityRegistry;
 pub use bus::{EventBus, EventType, TypedEvent};
 pub use layout::{Direction, LayoutNode, LayoutTree, Nav, PaneType};
