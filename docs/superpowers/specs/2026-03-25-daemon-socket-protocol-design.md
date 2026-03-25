@@ -102,7 +102,7 @@ Event notification (server → client, continuous — JSON-RPC notification, no 
 
 ## Method Surface
 
-The daemon server routes methods through `nexus_engine::dispatch()` where possible. Methods not yet handled by `dispatch()` (PTY, session, keymap, commands, layout) are routed directly to `NexusCore` methods by the server. As `dispatch()` grows to cover these domains, the direct routes can be replaced.
+The daemon server routes ALL methods through `nexus_engine::dispatch()`. This spec requires extending `dispatch()` to cover all domains (PTY, session, keymap, commands, layout, chat) so the server has a single routing path. No method bypasses dispatch.
 
 ### Navigation
 
@@ -144,7 +144,7 @@ The daemon server routes methods through `nexus_engine::dispatch()` where possib
 |---|---|---|
 | `chat.send` | `pane_id: String, message: String, cwd?: String` | `null` |
 
-Chat output arrives as events on the event connection, not as the method response. The server routes this to `NexusCore::chat_send()` directly (the `chat` domain in `dispatch()` needs wiring — this is implementation work for this spec).
+Chat output arrives as events on the event connection, not as the method response. The `chat` domain in `dispatch()` must be wired to `core.chat_send()` as part of this spec's implementation.
 
 ### Stack
 
@@ -167,6 +167,7 @@ All stack methods delegate to `core.handle_stack_op()`.
 |---|---|---|
 | `session.create` | `name: String, cwd: String` | `{session_id: String}` |
 | `session.info` | — | `{name?: String}` |
+| `session.list` | — | `[{name: String}]` |
 
 ### Keymap & Commands
 
@@ -180,6 +181,22 @@ All stack methods delegate to `core.handle_stack_op()`.
 | Method | Params | Returns |
 |---|---|---|
 | `layout.show` | — | `Value` (layout tree JSON) |
+
+### Capabilities
+
+| Method | Params | Returns |
+|---|---|---|
+| `capabilities.list` | `type?: "chat" \| "editor" \| "explorer"` | `[{name, type, priority, binary, available: bool}]` |
+
+Returns registered adapters with their availability status. Without `type` filter, returns all. Enables surfaces to show what backends are available (e.g., "Claude available, OpenCode not found").
+
+### Protocol
+
+| Method | Params | Returns |
+|---|---|---|
+| `nexus.hello` | — | `{version: String, protocol: u32}` |
+
+Optional handshake. Returns daemon version and protocol version number. Protocol version increments on breaking wire changes. Clients can check compatibility. Not required — clients that skip it get the current protocol.
 
 ### Generic dispatch
 
@@ -253,13 +270,66 @@ let result = tokio::task::spawn_blocking(move || {
 
 This is critical because `chat_send()` spawns background threads and `pty_spawn()` creates PTY processes — both can block briefly.
 
-## Client Library (`nexus-daemon/src/client.rs`)
+## Client Library (`nexus-client` crate)
+
+**The client library lives in its own crate, not in `nexus-daemon`.** This prevents surfaces from transitively depending on the engine, tokio, portable-pty, etc. A CLI that sends JSON over a socket should be a tiny binary.
+
+```
+nexus-client/
+├── Cargo.toml          (deps: nexus-core, serde, serde_json, base64)
+├── src/
+│   ├── lib.rs
+│   ├── protocol.rs     — JSON-RPC 2.0 types (Request, Response, Notification)
+│   ├── client.rs       — NexusClient (sync, command connection)
+│   ├── events.rs       — EventSubscription (sync, event connection)
+│   └── auto_launch.rs  — daemon auto-start logic
+```
+
+### Protocol types (`protocol.rs`)
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcRequest {
+    pub jsonrpc: String,  // always "2.0"
+    pub id: u64,
+    pub method: String,
+    #[serde(default)]
+    pub params: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcResponse {
+    pub jsonrpc: String,
+    pub id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcError {
+    pub code: i32,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonRpcNotification {
+    pub jsonrpc: String,
+    pub method: String,
+    #[serde(default)]
+    pub params: Value,
+}
+```
+
+### NexusClient (`client.rs`)
 
 Synchronous client for use by CLI, tmux adapter, and any non-async surface.
 
 ```rust
 pub struct NexusClient {
-    cmd_stream: BufReader<UnixStream> + UnixStream writer,
+    reader: BufReader<UnixStream>,
+    writer: UnixStream,  // cloned from same fd
     next_id: AtomicU64,
 }
 
@@ -286,12 +356,17 @@ impl NexusClient {
     pub fn keymap(&self) -> Result<Value, NexusError>;
     pub fn commands(&self) -> Result<Value, NexusError>;
     pub fn pane_list(&self) -> Result<Value, NexusError>;
+    pub fn capabilities(&self, cap_type: Option<&str>) -> Result<Value, NexusError>;
+    pub fn hello(&self) -> Result<Value, NexusError>;
 }
 ```
 
+### EventSubscription (`events.rs`)
+
 ```rust
 pub struct EventSubscription {
-    stream: BufReader<UnixStream> + UnixStream writer,
+    reader: BufReader<UnixStream>,
+    writer: UnixStream,
     next_id: AtomicU64,
 }
 
@@ -310,7 +385,7 @@ impl EventSubscription {
     ) -> Result<(), NexusError>;
 
     /// Block until next event arrives. Returns the JSON-RPC notification.
-    pub fn next_event(&self) -> Result<Notification, NexusError>;
+    pub fn next_event(&self) -> Result<JsonRpcNotification, NexusError>;
 }
 ```
 
@@ -364,7 +439,7 @@ Tokio-based. Two `UnixListener`s bound to the command and event socket paths.
 Per-connection tokio task:
 1. Read lines from socket (NDJSON)
 2. Parse as JSON-RPC request
-3. `spawn_blocking` → lock `NexusCore`, route to `dispatch()` or direct engine method
+3. `spawn_blocking` → lock `NexusCore`, call `dispatch(core, method, params)`
 4. Serialize result as JSON-RPC response
 5. Write response line to socket
 
@@ -411,24 +486,39 @@ async fn main() {
 
 These changes to existing code are part of this spec's implementation scope:
 
-1. **Wire `chat` domain in `dispatch.rs`** — Currently a stub. Route `chat.send` to `core.chat_send()`.
-2. **Add PTY, session, keymap, commands, layout domains to `dispatch.rs`** — Or handle directly in the daemon server. Recommended: extend `dispatch()` so all surfaces benefit.
-3. **Add `events_socket_path()` to `constants.rs`** — Alongside existing `socket_path()`.
-4. **Add `pane_list()` method to `LayoutTree`** — Flat list of pane IDs + types from the tree.
-5. **Make `TypedEvent` implement `Clone`** — Required for the mpsc bridge pattern.
+1. **Extend `dispatch()` to cover ALL domains** — Add `pty`, `session`, `keymap`, `commands`, `layout`, `capabilities` domains. Wire `chat.send` to `core.chat_send()`. The daemon server must not have its own routing — everything goes through `dispatch()`.
+2. **Add `events_socket_path()` to `constants.rs`** — Alongside existing `socket_path()`.
+3. **Add `pane_list()` method to `LayoutTree`** — Flat list of pane IDs + types from the tree.
+4. **Make `TypedEvent` implement `Clone`** — Required for the mpsc bridge pattern.
+5. **Add `capabilities_list()` to `NexusCore`** — Queries registry for all adapters with availability status.
+6. **Add `session_list()` to `NexusCore`** — Returns active sessions (currently only one, but the interface should support multiple).
 
 ## Crate Changes
+
+### `nexus-client` — NEW crate
+
+| File | Purpose |
+|---|---|
+| `protocol.rs` | JSON-RPC 2.0 types (Request, Response, Notification, Error) |
+| `client.rs` | `NexusClient` — sync command connection with auto-launch |
+| `events.rs` | `EventSubscription` — sync event connection with filtering |
+| `auto_launch.rs` | Daemon binary discovery and spawn logic |
+| `lib.rs` | Re-exports |
+
+Dependencies: `nexus-core` (for `NexusError`, `socket_path`, `SystemContext`), `serde`, `serde_json`, `base64`.
 
 ### `nexus-daemon` — Major rework
 
 | File | Change |
 |---|---|
-| `protocol.rs` | Replace custom Request/Response with JSON-RPC 2.0 types |
-| `server.rs` | Two listeners, per-connection tokio tasks, spawn_blocking for engine calls |
-| `client.rs` | `NexusClient` (sync) + `EventSubscription` with auto-launch |
+| `protocol.rs` | DELETE — moved to `nexus-client` |
+| `client.rs` | DELETE — moved to `nexus-client` |
+| `server.rs` | Two listeners, per-connection tokio tasks, spawn_blocking, all routing through `dispatch()` |
 | `event_bridge.rs` | NEW — mpsc-based bridge from EventBus to filtered event connections |
 | `main.rs` | Bootstrap engine with registry, set up event bridge, start listeners, idle shutdown |
-| `lib.rs` | Add `pub mod event_bridge` |
+| `lib.rs` | Just `pub mod server; pub mod event_bridge;` |
+
+Dependencies: `nexus-engine`, `nexus-core`, `nexus-client` (for protocol types), `tokio`.
 
 ### `nexus-cli` — Thin client
 
@@ -436,7 +526,7 @@ Replace in-process `NexusCore` with `NexusClient::connect()`. Each subcommand be
 
 | Before | After |
 |---|---|
-| `nexus-engine` dep | `nexus-daemon` dep (for `NexusClient`) |
+| `nexus-engine` dep | `nexus-client` dep |
 | `NexusCore::new(NullMux)` | `NexusClient::connect()` |
 | In-process method calls | `client.request("method", params)` |
 
@@ -447,14 +537,14 @@ Replace `NexusCore` ownership with `NexusClient`. Commands delegate to `client.r
 | Before | After |
 |---|---|
 | `AppState { core: Mutex<NexusCore> }` | `AppState { client: NexusClient }` |
+| `nexus-engine` dep | `nexus-client` dep |
 | `core.lock().layout.navigate(Nav::Left)` | `client.navigate("left")` |
 | `core.lock().pty_spawn(...)` | `client.pty_spawn(...)` |
 | Bus subscription in `setup()` | `EventSubscription` in background thread, emits Tauri events |
-| `nexus-engine` dep | `nexus-daemon` dep (for client) |
 
 ### `nexus-engine` — Extend dispatch
 
-Add domains to `dispatch()`: `pty`, `session`, `keymap`, `commands`, `layout`. Wire `chat` domain to `core.chat_send()`.
+Add all domains to `dispatch()`: `pty`, `session`, `keymap`, `commands`, `layout`, `capabilities`. Wire `chat` domain to `core.chat_send()`. Add `capabilities.list` handler that queries the registry.
 
 ### `nexus-core` — Minimal changes
 
@@ -463,14 +553,17 @@ Add `events_socket_path()` to `constants.rs`. Ensure `TypedEvent` derives `Clone
 ## Dependency Graph (After)
 
 ```
-nexus-core          (traits, types, constants)
-nexus-engine        → nexus-core
-nexus-daemon        → nexus-engine, nexus-core, tokio     (owns the engine)
-nexus-cli           → nexus-daemon (client only), nexus-core
-nexus-tauri         → nexus-daemon (client only), nexus-core, tauri
-nexus-tmux          → nexus-core
-nexus-editor        → nexus-core
+nexus-core          (traits, types, constants, socket paths)
+nexus-client        → nexus-core                           (protocol + sync client)
+nexus-engine        → nexus-core                           (orchestration, process ownership)
+nexus-daemon        → nexus-engine, nexus-core, nexus-client, tokio  (owns engine, serves socket)
+nexus-cli           → nexus-client, nexus-core             (thin binary, no engine)
+nexus-tauri         → nexus-client, nexus-core, tauri      (thin GUI, no engine)
+nexus-tmux          → nexus-core                           (mux adapter)
+nexus-editor        → nexus-core                           (editor adapter)
 ```
+
+**Key property:** Surfaces (`nexus-cli`, `nexus-tauri`) depend on `nexus-client` — never on `nexus-engine` or `nexus-daemon`. Only the daemon depends on the engine. This means surface binaries are small and compile fast.
 
 ## Invariants
 
@@ -481,6 +574,8 @@ nexus-editor        → nexus-core
 5. **JSON-RPC 2.0 everywhere.** Both connections use the same wire format. No custom envelope.
 6. **Event filtering is server-side.** Clients declare what they want. Server only sends matching events. No wasted bandwidth.
 7. **spawn_blocking for engine calls.** Never hold the engine lock on a tokio worker thread.
+8. **Single routing path.** All methods go through `dispatch()`. The daemon server never routes directly to engine methods.
+9. **Surfaces never depend on the engine.** They depend on `nexus-client` only. Only the daemon depends on `nexus-engine`.
 
 ## Not In Scope
 
