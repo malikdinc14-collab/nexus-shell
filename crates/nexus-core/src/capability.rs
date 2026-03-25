@@ -4,6 +4,7 @@
 //! these traits. Surfaces never own tools; they delegate through capabilities.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::mpsc;
 
 use crate::error::NexusError;
@@ -25,7 +26,7 @@ pub enum CapabilityType {
 ///
 /// macOS GUI apps inherit a minimal PATH. `from_login_shell()` probes the
 /// user's login shell to capture the full PATH, so adapters can find binaries
-/// like `tmux`, `nvim`, `yazi`, etc.
+/// like `claude`, `nvim`, `yazi`, etc.
 #[derive(Debug, Clone)]
 pub struct SystemContext {
     pub path: String,
@@ -33,21 +34,23 @@ pub struct SystemContext {
 }
 
 impl SystemContext {
-    /// Probe the login shell for the full PATH.
+    /// Probe the login shell for the full PATH. Cached by caller.
     pub fn from_login_shell() -> Self {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-
-        // Run the login shell to emit PATH. This captures .zshrc/.bashrc additions.
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
         let path = std::process::Command::new(&shell)
-            .args(["-l", "-c", "echo $PATH"])
+            .args(["-l", "-c", "source ~/.zshrc 2>/dev/null; printf '%s' \"$PATH\""])
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_else(|_| std::env::var("PATH").unwrap_or_default());
-
-        SystemContext { path, shell }
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default());
+        Self { path, shell }
     }
 
-    /// Resolve a binary name to its full path using the captured PATH.
+    /// Resolve a binary name to its absolute path using this context's PATH.
     pub fn resolve_binary(&self, name: &str) -> Option<String> {
         for dir in self.path.split(':') {
             let candidate = std::path::Path::new(dir).join(name);
@@ -75,7 +78,7 @@ pub struct AdapterManifest {
 /// Every adapter implements Capability for lifecycle and discovery.
 pub trait Capability: Send + Sync {
     /// Return the static manifest for this adapter.
-    fn manifest(&self) -> AdapterManifest;
+    fn manifest(&self) -> &AdapterManifest;
 
     /// Check whether the adapter's backing binary is available.
     fn is_available(&self) -> bool;
@@ -86,7 +89,7 @@ pub trait Capability: Send + Sync {
 // ---------------------------------------------------------------------------
 
 /// Events emitted by a chat backend during a conversation turn.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum ChatEvent {
     Start { backend: String },
     Text { chunk: String },
@@ -94,9 +97,15 @@ pub enum ChatEvent {
     Error { message: String },
 }
 
-/// A chat backend (Claude Code, Aider, etc.).
+/// Headless agent backend (claude, opencode, etc.)
+///
+/// Threading contract: `send_message` spawns a background thread that
+/// pushes events to the provided `Sender`. The caller owns the `Receiver`
+/// and drains it. The adapter must send `Done` or `Error` as the final
+/// event and then drop the sender.
 pub trait ChatCapability: Capability {
-    /// Send a message and stream events back through `tx`.
+    /// Spawn the agent CLI. Push streaming events to `tx`.
+    /// Returns immediately — work happens on a background thread.
     fn send_message(
         &self,
         message: &str,
@@ -104,7 +113,8 @@ pub trait ChatCapability: Capability {
         tx: mpsc::Sender<ChatEvent>,
     ) -> Result<(), NexusError>;
 
-    /// Return the shell command to launch this chat backend, if applicable.
+    /// For mux-hosted surfaces (tmux): return the shell command to launch
+    /// the agent interactively in a pane. None if not supported.
     fn get_launch_command(&self) -> Option<String>;
 }
 
@@ -112,36 +122,15 @@ pub trait ChatCapability: Capability {
 // Editor capability
 // ---------------------------------------------------------------------------
 
-/// A headless editor backend (Neovim, Helix, etc.).
+/// Text editor backend (neovim, helix, etc.)
 pub trait EditorCapability: Capability {
-    /// Open a file at the given path, optionally at a line number.
-    fn open(&mut self, path: &str, line: Option<u32>) -> Result<(), NexusError>;
-
-    /// Return the path of the currently active buffer.
-    fn get_current_buffer(&self) -> Result<String, NexusError>;
-
-    /// Return the full text content of a buffer.
-    fn get_buffer_content(&self, buffer: &str) -> Result<String, NexusError>;
-
-    /// Apply a text edit to a buffer.
-    fn apply_edit(
-        &mut self,
-        buffer: &str,
-        start_line: u32,
-        end_line: u32,
-        text: &str,
-    ) -> Result<(), NexusError>;
-
-    /// List open tabs/buffers.
-    fn get_tabs(&self) -> Result<Vec<String>, NexusError>;
-
-    /// Send an ex-command or equivalent.
-    fn send_command(&mut self, command: &str) -> Result<String, NexusError>;
-
-    /// Evaluate a remote expression (Neovim: nvim_eval).
-    fn remote_expr(&self, expr: &str) -> Result<String, NexusError>;
-
-    /// Check whether the editor process is still running.
+    fn open(&mut self, path: &str, line: u32, col: u32) -> Result<(), NexusError>;
+    fn get_current_buffer(&self) -> Option<String>;
+    fn get_buffer_content(&self, max_lines: u32) -> Option<String>;
+    fn apply_edit(&mut self, patch: &str) -> Result<(), NexusError>;
+    fn get_tabs(&self) -> Vec<HashMap<String, String>>;
+    fn send_command(&mut self, cmd: &str) -> Result<(), NexusError>;
+    fn remote_expr(&self, expr: &str) -> Option<String>;
     fn is_alive(&self) -> bool;
 }
 
@@ -158,18 +147,11 @@ pub struct DirEntry {
     pub size: u64,
 }
 
-/// A file explorer backend (Yazi, lf, etc.).
+/// File explorer backend (yazi, ranger, built-in fs)
 pub trait ExplorerCapability: Capability {
-    /// List entries in a directory.
     fn list_directory(&self, path: &str) -> Result<Vec<DirEntry>, NexusError>;
-
-    /// Return the currently selected entry path, if any.
-    fn get_selection(&self) -> Result<Option<String>, NexusError>;
-
-    /// Trigger a named action (open, delete, rename, etc.).
-    fn trigger_action(&mut self, action: &str, path: &str) -> Result<(), NexusError>;
-
-    /// Return the shell command to launch this explorer, if applicable.
+    fn get_selection(&self) -> Option<String>;
+    fn trigger_action(&mut self, action: &str, payload: &str) -> Result<(), NexusError>;
     fn get_launch_command(&self) -> Option<String>;
 }
 
