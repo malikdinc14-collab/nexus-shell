@@ -34,6 +34,13 @@ pub fn dispatch(
         "pane" => handle_pane(core, action, args),
         "stack" => handle_stack(core, action, args),
         "chat" => handle_chat(core, action, args),
+        "pty" => handle_pty(core, action, args),
+        "session" => handle_session(core, action, args),
+        "keymap" => handle_keymap(core, action),
+        "commands" => handle_commands(core, action),
+        "layout" => handle_layout(core, action, args),
+        "capabilities" => handle_capabilities(core, action, args),
+        "nexus" => handle_nexus(action),
         _ => Err(NexusError::NotFound(format!("unknown domain: {domain}"))),
     }
 }
@@ -77,6 +84,9 @@ fn handle_pane(
     };
 
     match action {
+        // -- list ------------------------------------------------------------
+        "list" => Ok(core.layout.pane_list()),
+
         // -- split variants --------------------------------------------------
         "split" | "split.vertical" | "split.horizontal" => {
             let direction = if action == "split.horizontal" {
@@ -201,15 +211,205 @@ fn handle_stack(
 // ---------------------------------------------------------------------------
 
 fn handle_chat(
-    _core: &mut NexusCore,
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "send" => {
+            let pane_id = args.get("pane_id").and_then(|v| v.as_str()).ok_or_else(|| {
+                NexusError::InvalidState("chat.send requires pane_id".into())
+            })?;
+            let message = args.get("message").and_then(|v| v.as_str()).ok_or_else(|| {
+                NexusError::InvalidState("chat.send requires message".into())
+            })?;
+            let cwd = args.get("cwd").and_then(|v| v.as_str()).unwrap_or("/tmp");
+            core.chat_send(pane_id, message, cwd)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::Value::Null)
+        }
+        _ => Err(NexusError::NotFound(format!("unknown chat action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// pty.*
+// ---------------------------------------------------------------------------
+
+fn handle_pty(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "spawn" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("pty.spawn requires pane_id".into())
+            })?;
+            let cwd = str_arg("cwd");
+            let program = str_arg("program");
+            let prog_args: Option<Vec<String>> = args.get("args")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
+
+            if let (Some(prog), Some(pargs)) = (program, prog_args) {
+                core.pty_spawn_cmd(&pane_id, cwd.as_deref().unwrap_or("/tmp"), &prog, &pargs)
+                    .map_err(|e| NexusError::InvalidState(e))?;
+            } else {
+                core.pty_spawn(&pane_id, cwd.as_deref())
+                    .map_err(|e| NexusError::InvalidState(e))?;
+            }
+            Ok(serde_json::Value::Null)
+        }
+        "write" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("pty.write requires pane_id".into())
+            })?;
+            let data_b64 = str_arg("data").ok_or_else(|| {
+                NexusError::InvalidState("pty.write requires data".into())
+            })?;
+            // Decode base64 wire encoding back to raw bytes
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(&data_b64)
+                .map_err(|e| NexusError::InvalidState(format!("base64 decode: {e}")))?;
+            let decoded = String::from_utf8_lossy(&bytes);
+            core.pty_write(&pane_id, &decoded)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::Value::Null)
+        }
+        "resize" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("pty.resize requires pane_id".into())
+            })?;
+            let cols = args.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
+            let rows = args.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
+            core.pty_resize(&pane_id, cols, rows)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::Value::Null)
+        }
+        "kill" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("pty.kill requires pane_id".into())
+            })?;
+            core.pty_kill(&pane_id)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::Value::Null)
+        }
+        _ => Err(NexusError::NotFound(format!("unknown pty action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// session.*
+// ---------------------------------------------------------------------------
+
+fn handle_session(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "create" => {
+            let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("nexus");
+            let cwd = args.get("cwd").and_then(|v| v.as_str()).unwrap_or("/tmp");
+            let session_id = core.create_workspace(name, cwd);
+            Ok(serde_json::json!({"session_id": session_id}))
+        }
+        "info" => {
+            Ok(serde_json::json!({"name": core.session()}))
+        }
+        "list" => {
+            Ok(serde_json::Value::Array(core.session_list()))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown session action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// keymap.*
+// ---------------------------------------------------------------------------
+
+fn handle_keymap(
+    core: &mut NexusCore,
+    action: &str,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "get" => {
+            serde_json::to_value(core.get_keymap())
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown keymap action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// commands.*
+// ---------------------------------------------------------------------------
+
+fn handle_commands(
+    core: &mut NexusCore,
+    action: &str,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "list" => {
+            serde_json::to_value(core.get_commands())
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown commands action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// layout.*
+// ---------------------------------------------------------------------------
+
+fn handle_layout(
+    core: &mut NexusCore,
     action: &str,
     _args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
-    // Stub — chat backend not yet wired.
-    Ok(serde_json::json!({
-        "status": "ok",
-        "message": format!("chat.{action} not yet wired"),
-    }))
+    match action {
+        "show" => Ok(core.layout.to_json()),
+        _ => Err(NexusError::NotFound(format!("unknown layout action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// capabilities.*
+// ---------------------------------------------------------------------------
+
+fn handle_capabilities(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "list" => {
+            let type_filter = args.get("type").and_then(|v| v.as_str());
+            Ok(core.capabilities_list(type_filter))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown capabilities action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// nexus.*
+// ---------------------------------------------------------------------------
+
+fn handle_nexus(
+    action: &str,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "hello" => Ok(serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "protocol": 1,
+        })),
+        _ => Err(NexusError::NotFound(format!("unknown nexus action: {action}"))),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -280,5 +480,94 @@ mod tests {
         let mut core = make_core();
         let result = dispatch(&mut core, "navigate.diagonal", &HashMap::new());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn dispatch_layout_show() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "layout.show", &HashMap::new());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_pane_list() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "pane.list", &HashMap::new());
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert!(val.is_array());
+    }
+
+    #[test]
+    fn dispatch_session_info() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "session.info", &HashMap::new());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_session_create() {
+        let mut core = make_core();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("test2"));
+        args.insert("cwd".to_string(), serde_json::json!("/tmp"));
+        let result = dispatch(&mut core, "session.create", &args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_session_list() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "session.list", &HashMap::new());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_keymap_get() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "keymap.get", &HashMap::new());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_commands_list() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "commands.list", &HashMap::new());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_capabilities_list() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "capabilities.list", &HashMap::new());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_pty_spawn_and_kill() {
+        let ctx = nexus_core::capability::SystemContext {
+            path: std::env::var("PATH").unwrap_or_default(),
+            shell: "/bin/zsh".into(),
+        };
+        let mut core = NexusCore::with_registry(Box::new(NullMux::new()), ctx);
+        core.create_workspace("test", "/tmp");
+
+        let mut args = HashMap::new();
+        args.insert("pane_id".to_string(), serde_json::json!("test-pane"));
+        let spawn = dispatch(&mut core, "pty.spawn", &args);
+        assert!(spawn.is_ok());
+
+        let kill = dispatch(&mut core, "pty.kill", &args);
+        assert!(kill.is_ok());
+    }
+
+    #[test]
+    fn dispatch_nexus_hello() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "nexus.hello", &HashMap::new());
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        assert!(val.get("version").is_some());
+        assert!(val.get("protocol").is_some());
     }
 }
