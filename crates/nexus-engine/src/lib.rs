@@ -21,10 +21,12 @@ pub mod pty;
 pub mod registry;
 pub mod stack;
 pub mod stack_manager;
+pub mod persistence;
 pub mod surface;
 
 // Re-exports for convenience
 pub use crate::core::NexusCore;
+pub use persistence::{WorkspaceSave, LayoutExport, PaneState};
 pub use dispatch::dispatch;
 pub use registry::CapabilityRegistry;
 pub use bus::{EventBus, EventType, TypedEvent};
