@@ -99,10 +99,8 @@ pub fn spawn_fanout(
             let mut to_remove = Vec::new();
 
             for (i, conn) in conns.iter_mut().enumerate() {
-                if conn.sub.matches(&event) {
-                    if !conn.write_event(&event).await {
-                        to_remove.push(i);
-                    }
+                if conn.sub.matches(&event) && !conn.write_event(&event).await {
+                    to_remove.push(i);
                 }
             }
 

@@ -237,7 +237,7 @@ fn handle_chat(
             })?;
             let cwd = args.get("cwd").and_then(|v| v.as_str()).unwrap_or("/tmp");
             core.chat_send(pane_id, message, cwd)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             Ok(serde_json::Value::Null)
         }
         _ => Err(NexusError::NotFound(format!("unknown chat action: {action}"))),
@@ -270,10 +270,10 @@ fn handle_pty(
 
             if let (Some(prog), Some(pargs)) = (program, prog_args) {
                 core.pty_spawn_cmd(&pane_id, cwd.as_deref().unwrap_or("/tmp"), &prog, &pargs)
-                    .map_err(|e| NexusError::InvalidState(e))?;
+                    .map_err(NexusError::InvalidState)?;
             } else {
                 core.pty_spawn(&pane_id, cwd.as_deref())
-                    .map_err(|e| NexusError::InvalidState(e))?;
+                    .map_err(NexusError::InvalidState)?;
             }
             core.mark_dirty();
             Ok(serde_json::Value::Null)
@@ -291,7 +291,7 @@ fn handle_pty(
                 .map_err(|e| NexusError::InvalidState(format!("base64 decode: {e}")))?;
             let decoded = String::from_utf8_lossy(&bytes);
             core.pty_write(&pane_id, &decoded)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             Ok(serde_json::Value::Null)
         }
         "resize" => {
@@ -301,7 +301,7 @@ fn handle_pty(
             let cols = args.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
             let rows = args.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
             core.pty_resize(&pane_id, cols, rows)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             Ok(serde_json::Value::Null)
         }
         "kill" => {
@@ -309,7 +309,7 @@ fn handle_pty(
                 NexusError::InvalidState("pty.kill requires pane_id".into())
             })?;
             core.pty_kill(&pane_id)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             core.mark_dirty();
             Ok(serde_json::Value::Null)
         }
@@ -359,7 +359,7 @@ fn handle_session(
             let home = resolve_nexus_home(args);
             let dir = home.join("sessions").join(&ws_name);
             let snapshots = persistence::list_snapshots(&dir)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             Ok(serde_json::Value::Array(snapshots))
         }
         "save" => {
@@ -370,7 +370,7 @@ fn handle_session(
             let home = resolve_nexus_home(args);
             let dir = home.join("sessions").join(&ws_name);
             let path = persistence::save_snapshot(&dir, &name, &snap)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             core.clear_dirty();
             Ok(serde_json::json!({"path": path}))
         }
@@ -381,7 +381,7 @@ fn handle_session(
             let home = resolve_nexus_home(args);
             let dir = home.join("sessions").join(&ws_name);
             let save = persistence::load_snapshot(&dir, &name)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
 
             let old_pane_ids = core.layout.root.leaf_ids();
             for pane_id in &old_pane_ids {
@@ -400,7 +400,7 @@ fn handle_session(
             let home = resolve_nexus_home(args);
             let dir = home.join("sessions").join(&ws_name);
             persistence::delete_snapshot(&dir, &name)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             Ok(serde_json::json!({"status": "ok"}))
         }
         _ => Err(NexusError::NotFound(format!("unknown session action: {action}"))),
@@ -478,7 +478,7 @@ fn handle_layout(
             };
 
             let path = persistence::save_layout_export(&layouts_dir, &export)
-                .map_err(|e| NexusError::InvalidState(e))?;
+                .map_err(NexusError::InvalidState)?;
             Ok(serde_json::json!({"path": path}))
         }
 

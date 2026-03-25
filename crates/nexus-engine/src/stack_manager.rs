@@ -20,6 +20,7 @@ pub struct NativelyManaged;
 
 /// Result of a stack operation that may return a sentinel.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StackOpResult {
     Ok(Option<Tab>),
     LastTab(LastTabWarning),
