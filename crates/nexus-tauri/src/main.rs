@@ -1,7 +1,7 @@
-//! Nexus Shell — Tauri desktop app with embedded engine.
+//! Nexus Shell — Tauri desktop app (thin client).
 //!
-//! This is a thin IPC bridge. All tool-owning logic lives in nexus-engine;
-//! commands.rs simply delegates to NexusCore methods.
+//! Connects to nexus-daemon via NexusClient. All engine state lives in
+//! the daemon. This binary is a pure GUI frontend.
 
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
@@ -10,31 +10,20 @@
 
 mod commands;
 
-use nexus_core::adapters::{ClaudeAdapter, FsExplorer};
-use nexus_core::capability::SystemContext;
-use nexus_engine::{NexusCore, NullMux};
+use nexus_client::{EventSubscription, NexusClient};
 use std::sync::Mutex;
-use tauri::Manager;
 
-/// Shared application state accessible from Tauri commands.
+/// Shared application state — holds the daemon client connection.
 pub struct AppState {
-    pub core: Mutex<NexusCore>,
+    pub client: Mutex<NexusClient>,
 }
 
 fn main() {
-    let ctx = SystemContext::from_login_shell();
-    let claude = ClaudeAdapter::new(ctx.clone());
-    let fs_explorer = FsExplorer::new();
-
-    let mut core = NexusCore::with_registry(Box::new(NullMux::new()), ctx);
-    if let Some(ref mut reg) = core.registry {
-        reg.register_chat(Box::new(claude));
-        reg.register_explorer(Box::new(fs_explorer));
-    }
+    let client = NexusClient::connect().expect("Failed to connect to nexus daemon");
 
     tauri::Builder::default()
         .manage(AppState {
-            core: Mutex::new(core),
+            client: Mutex::new(client),
         })
         .invoke_handler(tauri::generate_handler![
             commands::create_workspace,
@@ -61,51 +50,55 @@ fn main() {
             commands::dispatch_command,
         ])
         .setup(|app| {
-            let state = app.state::<AppState>();
-            let bus_arc;
-            {
-                let mut core = state.core.lock().unwrap();
-                let cwd = std::env::current_dir()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                core.create_workspace("nexus", &cwd);
-                bus_arc = core.bus.clone();
-            }
-            // Core lock is dropped — safe to lock bus without nesting.
-
-            // Bridge engine events to Tauri frontend
+            // Bridge daemon events to Tauri frontend via EventSubscription
             let app_handle = app.handle().clone();
-            {
-                let mut bus = bus_arc.lock().unwrap();
+            std::thread::spawn(move || {
+                // Subscribe to all events
+                let mut sub = match EventSubscription::subscribe(&["*.*"], None) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Event subscription failed: {e}");
+                        return;
+                    }
+                };
 
-                // PTY events -> pty-output / pty-exit
-                let app_pty = app_handle.clone();
-                bus.subscribe("pty.*", move |event| {
-                    use tauri::Emitter;
-                    let tauri_event = match event.source.as_str() {
-                        "pty.output" => "pty-output",
-                        "pty.exit" => "pty-exit",
-                        _ => return,
-                    };
-                    let _ = app_pty.emit(tauri_event, &event.payload);
-                });
+                loop {
+                    match sub.next_event() {
+                        Ok(notif) => {
+                            use tauri::Emitter;
+                            let tauri_event = match notif.method.as_str() {
+                                "pty.output" => "pty-output",
+                                "pty.exit" => "pty-exit",
+                                s if s.starts_with("agent.") => "agent-output",
+                                "layout.changed" => "layout-changed",
+                                "stack.changed" => "stack-changed",
+                                _ => continue,
+                            };
 
-                // Agent/chat events -> agent-output
-                let app_agent = app_handle.clone();
-                bus.subscribe("agent.*", move |event| {
-                    use tauri::Emitter;
-                    let event_type = match event.source.as_str() {
-                        "agent.start" => "start",
-                        "agent.text" => "text",
-                        "agent.done" => "done",
-                        "agent.error" => "error",
-                        _ => return,
-                    };
-                    let mut payload = event.payload.clone();
-                    payload.insert("type".to_string(), serde_json::json!(event_type));
-                    let _ = app_agent.emit("agent-output", &payload);
-                });
-            }
+                            let mut payload = match notif.params.as_object() {
+                                Some(m) => m.clone(),
+                                None => serde_json::Map::new(),
+                            };
+
+                            // For agent events, add the type field
+                            if notif.method.starts_with("agent.") {
+                                let event_type = notif.method.strip_prefix("agent.").unwrap_or("");
+                                payload.insert("type".into(), serde_json::json!(event_type));
+                            }
+
+                            let _ = app_handle.emit(tauri_event, &serde_json::Value::Object(payload));
+                        }
+                        Err(_) => {
+                            // Connection lost — try to reconnect
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            sub = match EventSubscription::subscribe(&["*.*"], None) {
+                                Ok(s) => s,
+                                Err(_) => continue,
+                            };
+                        }
+                    }
+                }
+            });
 
             Ok(())
         })

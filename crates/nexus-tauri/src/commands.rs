@@ -1,13 +1,14 @@
-//! Tauri commands — IPC bridge between frontend and NexusCore.
+//! Tauri commands — IPC bridge between frontend and nexus-daemon.
+//!
+//! Each command locks the NexusClient and sends a JSON-RPC request.
 
 use crate::AppState;
-use nexus_engine::{Direction, Nav, PaneType};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tauri::State;
 
-// -- Engine commands ---------------------------------------------------------
+// -- Engine commands (delegated to daemon) -----------------------------------
 
 #[tauri::command]
 pub fn create_workspace(
@@ -15,9 +16,9 @@ pub fn create_workspace(
     name: String,
     cwd: String,
 ) -> Result<String, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    let session = core.create_workspace(&name, &cwd);
-    Ok(session)
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    let result = client.session_create(&name, &cwd).map_err(|e| e.to_string())?;
+    Ok(result.get("session_id").and_then(|v| v.as_str()).unwrap_or("").to_string())
 }
 
 #[tauri::command]
@@ -26,14 +27,8 @@ pub fn stack_op(
     op: String,
     payload: HashMap<String, String>,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    let result = core.handle_stack_op(&op, &payload);
-    let mut map = serde_json::Map::new();
-    map.insert("status".into(), serde_json::Value::String(result.status));
-    for (k, v) in result.data {
-        map.insert(k, v);
-    }
-    Ok(serde_json::Value::Object(map))
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.stack_op(&op, &payload).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -41,33 +36,25 @@ pub fn list_tabs(
     state: State<AppState>,
     identity: String,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let core = state.core.lock().map_err(|e| e.to_string())?;
-    match core.stacks.get_by_identity(&identity) {
-        Some((_, stack)) => {
-            let tabs: Vec<serde_json::Value> = stack
-                .tabs
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "id": t.pane_handle.as_deref().unwrap_or(&t.id),
-                        "name": t.name,
-                        "active": t.is_active,
-                    })
-                })
-                .collect();
-            Ok(tabs)
-        }
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    let result = client.request(
+        "stack.list",
+        serde_json::json!({"identity": identity}),
+    ).map_err(|e| e.to_string())?;
+    match result.as_array() {
+        Some(arr) => Ok(arr.clone()),
         None => Ok(Vec::new()),
     }
 }
 
 #[tauri::command]
 pub fn get_session(state: State<AppState>) -> Result<Option<String>, String> {
-    let core = state.core.lock().map_err(|e| e.to_string())?;
-    Ok(core.session().map(|s| s.to_string()))
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    let result = client.session_info().map_err(|e| e.to_string())?;
+    Ok(result.get("name").and_then(|v| v.as_str()).map(String::from))
 }
 
-// -- Filesystem commands -----------------------------------------------------
+// -- Filesystem commands (local, not through daemon) -------------------------
 
 #[derive(Serialize)]
 pub struct DirEntry {
@@ -101,7 +88,6 @@ pub fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
         })
         .collect();
 
-    // Dirs first, then files, alphabetical within each
     entries.sort_by(|a, b| {
         b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
@@ -125,8 +111,8 @@ pub fn get_cwd() -> Result<String, String> {
 
 #[tauri::command]
 pub fn get_layout(state: State<AppState>) -> Result<serde_json::Value, String> {
-    let core = state.core.lock().map_err(|e| e.to_string())?;
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.layout().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -135,14 +121,11 @@ pub fn split_pane(
     direction: String,
     pane_type: String,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    let dir = match direction.as_str() {
-        "horizontal" | "h" => Direction::Horizontal,
-        _ => Direction::Vertical,
-    };
-    let pt = PaneType::from_str(&pane_type);
-    let _new_id = core.layout.split_focused(dir, pt);
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.request("pane.split", serde_json::json!({
+        "direction": direction,
+        "pane_type": pane_type,
+    })).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -150,15 +133,8 @@ pub fn navigate_pane(
     state: State<AppState>,
     direction: String,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    let nav = match direction.as_str() {
-        "left" | "h" => Nav::Left,
-        "down" | "j" => Nav::Down,
-        "up" | "k" => Nav::Up,
-        _ => Nav::Right,
-    };
-    core.layout.navigate(nav);
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.navigate(&direction).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -166,9 +142,8 @@ pub fn focus_pane(
     state: State<AppState>,
     pane_id: String,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.layout.set_focus(&pane_id);
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.focus(&pane_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -176,16 +151,14 @@ pub fn close_pane(
     state: State<AppState>,
     pane_id: String,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.layout.close_pane(&pane_id);
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.close_pane(&pane_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn zoom_pane(state: State<AppState>) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.layout.toggle_zoom();
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.zoom().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -194,12 +167,11 @@ pub fn resize_pane(
     pane_id: String,
     ratio: f64,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.layout.set_ratio(&pane_id, ratio);
-    Ok(core.layout.to_json())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.resize(&pane_id, ratio).map_err(|e| e.to_string())
 }
 
-// -- PTY commands (delegated to engine) --------------------------------------
+// -- PTY commands ------------------------------------------------------------
 
 #[tauri::command]
 pub fn pty_spawn(
@@ -207,14 +179,14 @@ pub fn pty_spawn(
     pane_id: String,
     cwd: Option<String>,
 ) -> Result<(), String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.pty_spawn(&pane_id, cwd.as_deref())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.pty_spawn(&pane_id, cwd.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn pty_write(state: State<AppState>, pane_id: String, data: String) -> Result<(), String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.pty_write(&pane_id, &data)
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.pty_write(&pane_id, data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -224,17 +196,17 @@ pub fn pty_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.pty_resize(&pane_id, cols, rows)
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.pty_resize(&pane_id, cols, rows).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn pty_kill(state: State<AppState>, pane_id: String) -> Result<(), String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.pty_kill(&pane_id)
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.pty_kill(&pane_id).map_err(|e| e.to_string())
 }
 
-// -- Agent commands (delegated to engine) ------------------------------------
+// -- Agent commands ----------------------------------------------------------
 
 #[tauri::command]
 pub fn agent_send(
@@ -244,28 +216,28 @@ pub fn agent_send(
     backend: Option<String>,
     cwd: Option<String>,
 ) -> Result<(), String> {
-    let _ = backend; // TODO: wire backend selection through registry
+    let _ = backend; // TODO: wire backend selection
     let cwd = cwd.unwrap_or_else(|| {
         std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| "/tmp".into())
     });
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    core.chat_send(&pane_id, &message, &cwd)
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.chat_send(&pane_id, &message, Some(&cwd)).map_err(|e| e.to_string())
 }
 
 // -- Keymap & dispatch commands ----------------------------------------------
 
 #[tauri::command]
 pub fn get_keymap(state: State<AppState>) -> Result<serde_json::Value, String> {
-    let core = state.core.lock().map_err(|e| e.to_string())?;
-    serde_json::to_value(core.get_keymap()).map_err(|e| e.to_string())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.keymap().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn get_commands(state: State<AppState>) -> Result<serde_json::Value, String> {
-    let core = state.core.lock().map_err(|e| e.to_string())?;
-    serde_json::to_value(core.get_commands()).map_err(|e| e.to_string())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.commands().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -274,7 +246,10 @@ pub fn dispatch_command(
     command: String,
     args: Option<HashMap<String, serde_json::Value>>,
 ) -> Result<serde_json::Value, String> {
-    let mut core = state.core.lock().map_err(|e| e.to_string())?;
-    let args = args.unwrap_or_default();
-    nexus_engine::dispatch(&mut core, &command, &args).map_err(|e| e.to_string())
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    let params = match args {
+        Some(map) => serde_json::to_value(map).unwrap_or(serde_json::Value::Null),
+        None => serde_json::Value::Null,
+    };
+    client.request(&command, params).map_err(|e| e.to_string())
 }
