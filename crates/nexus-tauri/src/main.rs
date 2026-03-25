@@ -62,11 +62,51 @@ fn main() {
         ])
         .setup(|app| {
             let state = app.state::<AppState>();
-            let mut core = state.core.lock().unwrap();
-            let cwd = std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-            core.create_workspace("nexus", &cwd);
+            let bus_arc;
+            {
+                let mut core = state.core.lock().unwrap();
+                let cwd = std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                core.create_workspace("nexus", &cwd);
+                bus_arc = core.bus.clone();
+            }
+            // Core lock is dropped — safe to lock bus without nesting.
+
+            // Bridge engine events to Tauri frontend
+            let app_handle = app.handle().clone();
+            {
+                let mut bus = bus_arc.lock().unwrap();
+
+                // PTY events -> pty-output / pty-exit
+                let app_pty = app_handle.clone();
+                bus.subscribe("pty.*", move |event| {
+                    use tauri::Emitter;
+                    let tauri_event = match event.source.as_str() {
+                        "pty.output" => "pty-output",
+                        "pty.exit" => "pty-exit",
+                        _ => return,
+                    };
+                    let _ = app_pty.emit(tauri_event, &event.payload);
+                });
+
+                // Agent/chat events -> agent-output
+                let app_agent = app_handle.clone();
+                bus.subscribe("agent.*", move |event| {
+                    use tauri::Emitter;
+                    let event_type = match event.source.as_str() {
+                        "agent.start" => "start",
+                        "agent.text" => "text",
+                        "agent.done" => "done",
+                        "agent.error" => "error",
+                        _ => return,
+                    };
+                    let mut payload = event.payload.clone();
+                    payload.insert("type".to_string(), serde_json::json!(event_type));
+                    let _ = app_agent.emit("agent-output", &payload);
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
