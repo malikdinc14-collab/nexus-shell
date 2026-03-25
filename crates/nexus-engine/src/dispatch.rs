@@ -10,6 +10,7 @@ use nexus_core::NexusError;
 
 use crate::core::NexusCore;
 use crate::layout::{Direction, Nav, PaneType};
+use crate::persistence;
 
 /// Route a `domain.action` command to the appropriate engine operation.
 ///
@@ -66,6 +67,7 @@ fn handle_navigate(
     };
 
     core.layout.navigate(nav);
+    core.mark_dirty();
     Ok(core.layout.to_json())
 }
 
@@ -106,6 +108,7 @@ fn handle_pane(
                 .unwrap_or(PaneType::Terminal);
 
             let new_id = core.layout.split_focused(direction, pane_type);
+            core.mark_dirty();
             Ok(serde_json::json!({ "pane_id": new_id }))
         }
 
@@ -115,6 +118,7 @@ fn handle_pane(
                 .unwrap_or_else(|| core.layout.focused.clone());
 
             if core.layout.close_pane(&pane_id) {
+                core.mark_dirty();
                 Ok(serde_json::json!({ "closed": pane_id }))
             } else {
                 Err(NexusError::InvalidState(format!(
@@ -126,6 +130,7 @@ fn handle_pane(
         // -- zoom ------------------------------------------------------------
         "zoom" => {
             core.layout.toggle_zoom();
+            core.mark_dirty();
             Ok(core.layout.to_json())
         }
 
@@ -136,6 +141,7 @@ fn handle_pane(
             })?;
 
             if core.layout.set_focus(&pane_id) {
+                core.mark_dirty();
                 Ok(core.layout.to_json())
             } else {
                 Err(NexusError::NotFound(format!("pane not found: {pane_id}")))
@@ -156,6 +162,7 @@ fn handle_pane(
                 })?;
 
             if core.layout.set_ratio(&pane_id, ratio) {
+                core.mark_dirty();
                 Ok(core.layout.to_json())
             } else {
                 Err(NexusError::NotFound(format!("pane not found: {pane_id}")))
@@ -167,6 +174,7 @@ fn handle_pane(
             let sub = action.strip_prefix("new.").unwrap_or("terminal");
             let pane_type = PaneType::from_str(sub);
             let new_id = core.layout.split_focused(Direction::Vertical, pane_type);
+            core.mark_dirty();
             Ok(serde_json::json!({ "pane_id": new_id }))
         }
 
@@ -198,6 +206,10 @@ fn handle_stack(
         .collect();
 
     let result = core.handle_stack_op(action, &string_args);
+
+    if result.status == "ok" {
+        core.mark_dirty();
+    }
 
     let mut out = serde_json::json!({ "status": result.status });
     for (k, v) in result.data {
@@ -263,6 +275,7 @@ fn handle_pty(
                 core.pty_spawn(&pane_id, cwd.as_deref())
                     .map_err(|e| NexusError::InvalidState(e))?;
             }
+            core.mark_dirty();
             Ok(serde_json::Value::Null)
         }
         "write" => {
@@ -297,6 +310,7 @@ fn handle_pty(
             })?;
             core.pty_kill(&pane_id)
                 .map_err(|e| NexusError::InvalidState(e))?;
+            core.mark_dirty();
             Ok(serde_json::Value::Null)
         }
         _ => Err(NexusError::NotFound(format!("unknown pty action: {action}"))),
@@ -307,23 +321,87 @@ fn handle_pty(
 // session.*
 // ---------------------------------------------------------------------------
 
+fn resolve_nexus_home(args: &HashMap<String, serde_json::Value>) -> std::path::PathBuf {
+    if let Some(path) = args.get("_nexus_home").and_then(|v| v.as_str()) {
+        return std::path::PathBuf::from(path);
+    }
+    persistence::nexus_home()
+}
+
 fn handle_session(
     core: &mut NexusCore,
     action: &str,
     args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    let ws_name = core.session().unwrap_or("unnamed").to_string();
+
     match action {
         "create" => {
-            let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("nexus");
-            let cwd = args.get("cwd").and_then(|v| v.as_str()).unwrap_or("/tmp");
-            let session_id = core.create_workspace(name, cwd);
+            let name = str_arg("name").unwrap_or_else(|| "nexus".to_string());
+            let cwd = str_arg("cwd").unwrap_or_else(|| "/tmp".to_string());
+            let session_id = core.create_workspace(&name, &cwd);
             Ok(serde_json::json!({"session_id": session_id}))
         }
         "info" => {
-            Ok(serde_json::json!({"name": core.session()}))
+            Ok(serde_json::json!({
+                "name": core.session(),
+                "cwd": core.cwd(),
+            }))
         }
         "list" => {
             Ok(serde_json::Value::Array(core.session_list()))
+        }
+        "snapshots" => {
+            let home = resolve_nexus_home(args);
+            let dir = home.join("sessions").join(&ws_name);
+            let snapshots = persistence::list_snapshots(&dir)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::Value::Array(snapshots))
+        }
+        "save" => {
+            let name = str_arg("name").ok_or_else(|| {
+                NexusError::InvalidState("session.save requires name".into())
+            })?;
+            let snap = core.snapshot();
+            let home = resolve_nexus_home(args);
+            let dir = home.join("sessions").join(&ws_name);
+            let path = persistence::save_snapshot(&dir, &name, &snap)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            core.clear_dirty();
+            Ok(serde_json::json!({"path": path}))
+        }
+        "restore" => {
+            let name = str_arg("name").ok_or_else(|| {
+                NexusError::InvalidState("session.restore requires name".into())
+            })?;
+            let home = resolve_nexus_home(args);
+            let dir = home.join("sessions").join(&ws_name);
+            let save = persistence::load_snapshot(&dir, &name)
+                .map_err(|e| NexusError::InvalidState(e))?;
+
+            let old_pane_ids = core.layout.root.leaf_ids();
+            for pane_id in &old_pane_ids {
+                let _ = core.pty_kill(pane_id);
+            }
+
+            core.layout = save.layout;
+            core.stacks = save.stacks;
+            core.clear_dirty();
+            Ok(serde_json::json!({"status": "ok"}))
+        }
+        "delete" => {
+            let name = str_arg("name").ok_or_else(|| {
+                NexusError::InvalidState("session.delete requires name".into())
+            })?;
+            let home = resolve_nexus_home(args);
+            let dir = home.join("sessions").join(&ws_name);
+            persistence::delete_snapshot(&dir, &name)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::json!({"status": "ok"}))
         }
         _ => Err(NexusError::NotFound(format!("unknown session action: {action}"))),
     }
@@ -370,10 +448,86 @@ fn handle_commands(
 fn handle_layout(
     core: &mut NexusCore,
     action: &str,
-    _args: &HashMap<String, serde_json::Value>,
+    args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
     match action {
         "show" => Ok(core.layout.to_json()),
+
+        "export" => {
+            let name = str_arg("name").ok_or_else(|| {
+                NexusError::InvalidState("layout.export requires name".into())
+            })?;
+            let description = str_arg("description");
+            let scope = str_arg("scope").unwrap_or_else(|| "global".to_string());
+
+            let export = persistence::LayoutExport {
+                name: name.clone(),
+                description,
+                root: core.layout.root.clone(),
+            };
+
+            let layouts_dir = if scope == "project" {
+                persistence::project_layouts_dir(core.cwd())
+            } else {
+                let home = resolve_nexus_home(args);
+                home.join("layouts")
+            };
+
+            let path = persistence::save_layout_export(&layouts_dir, &export)
+                .map_err(|e| NexusError::InvalidState(e))?;
+            Ok(serde_json::json!({"path": path}))
+        }
+
+        "import" => {
+            let name = str_arg("name").ok_or_else(|| {
+                NexusError::InvalidState("layout.import requires name".into())
+            })?;
+
+            let project_dir = persistence::project_layouts_dir(core.cwd());
+            let home = resolve_nexus_home(args);
+            let global_dir = home.join("layouts");
+
+            let export = persistence::load_layout_export(&project_dir, &name)
+                .or_else(|_| persistence::load_layout_export(&global_dir, &name))
+                .map_err(|e| NexusError::NotFound(format!("layout '{name}' not found: {e}")))?;
+
+            let old_pane_ids = core.layout.root.leaf_ids();
+            for pane_id in &old_pane_ids {
+                let _ = core.pty_kill(pane_id);
+            }
+
+            core.layout = crate::layout::LayoutTree::from_export(export.root);
+            core.stacks = crate::stack_manager::StackManager::new();
+            core.mark_dirty();
+
+            Ok(serde_json::json!({"status": "ok"}))
+        }
+
+        "list" => {
+            let project_dir = persistence::project_layouts_dir(core.cwd());
+            let home = resolve_nexus_home(args);
+            let global_dir = home.join("layouts");
+
+            let mut results: Vec<serde_json::Value> = Vec::new();
+
+            if let Ok(names) = persistence::list_layout_exports(&project_dir) {
+                for name in names {
+                    results.push(serde_json::json!({"name": name, "source": "project"}));
+                }
+            }
+            if let Ok(names) = persistence::list_layout_exports(&global_dir) {
+                for name in names {
+                    results.push(serde_json::json!({"name": name, "source": "global"}));
+                }
+            }
+
+            Ok(serde_json::Value::Array(results))
+        }
+
         _ => Err(NexusError::NotFound(format!("unknown layout action: {action}"))),
     }
 }
@@ -559,6 +713,127 @@ mod tests {
 
         let kill = dispatch(&mut core, "pty.kill", &args);
         assert!(kill.is_ok());
+    }
+
+    #[test]
+    fn dispatch_session_save_and_restore() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut core = make_core();
+        let mut save_args = HashMap::new();
+        save_args.insert("name".to_string(), serde_json::json!("my-snapshot"));
+        save_args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+
+        let result = dispatch(&mut core, "session.save", &save_args);
+        assert!(result.is_ok());
+        assert!(result.unwrap().get("path").is_some());
+
+        core.layout.split_focused(Direction::Vertical, PaneType::Terminal);
+        assert_eq!(core.layout.root.leaf_ids().len(), 5);
+
+        let mut restore_args = HashMap::new();
+        restore_args.insert("name".to_string(), serde_json::json!("my-snapshot"));
+        restore_args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        let result = dispatch(&mut core, "session.restore", &restore_args);
+        assert!(result.is_ok());
+        assert_eq!(core.layout.root.leaf_ids().len(), 4);
+    }
+
+    #[test]
+    fn dispatch_session_save_missing_name() {
+        let mut core = make_core();
+        let result = dispatch(&mut core, "session.save", &HashMap::new());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn dispatch_session_snapshots() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut core = make_core();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("test-snap"));
+        args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        dispatch(&mut core, "session.save", &args).unwrap();
+
+        let mut list_args = HashMap::new();
+        list_args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        let result = dispatch(&mut core, "session.snapshots", &list_args);
+        assert!(result.is_ok());
+        let arr = result.unwrap();
+        assert!(arr.is_array());
+        assert_eq!(arr.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dispatch_session_delete() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut core = make_core();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("doomed"));
+        args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        dispatch(&mut core, "session.save", &args).unwrap();
+        let result = dispatch(&mut core, "session.delete", &args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_layout_export() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut core = make_core();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("my-layout"));
+        args.insert("description".to_string(), serde_json::json!("test layout"));
+        args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        let result = dispatch(&mut core, "layout.export", &args);
+        assert!(result.is_ok());
+        assert!(result.unwrap().get("path").is_some());
+    }
+
+    #[test]
+    fn dispatch_layout_import() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut core = make_core();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("importable"));
+        args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        dispatch(&mut core, "layout.export", &args).unwrap();
+
+        core.layout.split_focused(Direction::Vertical, PaneType::Terminal);
+        assert_eq!(core.layout.root.leaf_ids().len(), 5);
+
+        let result = dispatch(&mut core, "layout.import", &args);
+        assert!(result.is_ok());
+        assert_eq!(core.layout.root.leaf_ids().len(), 4);
+    }
+
+    #[test]
+    fn dispatch_layout_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut core = make_core();
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), serde_json::json!("list-test"));
+        args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        dispatch(&mut core, "layout.export", &args).unwrap();
+
+        let mut list_args = HashMap::new();
+        list_args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
+        let result = dispatch(&mut core, "layout.list", &list_args);
+        assert!(result.is_ok());
+        assert!(!result.unwrap().as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn state_mutations_set_dirty_flag() {
+        let mut core = make_core();
+        assert!(!core.is_dirty());
+
+        let mut args = HashMap::new();
+        args.insert("direction".to_string(), serde_json::json!("vertical"));
+        dispatch(&mut core, "pane.split", &args).unwrap();
+        assert!(core.is_dirty());
+
+        core.clear_dirty();
+        dispatch(&mut core, "navigate.left", &HashMap::new()).unwrap();
+        assert!(core.is_dirty());
     }
 
     #[test]
