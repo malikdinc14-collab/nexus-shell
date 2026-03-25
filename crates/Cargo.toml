@@ -3,4 +3,7 @@ resolver = "2"
 members = [
     "nexus-engine",
     "nexus-tauri",
+    "nexus-cli",
+    "nexus-daemon",
+    "nexus-core",
 ]
