@@ -4,10 +4,14 @@ use nexus_client::{JsonRpcRequest, JsonRpcResponse};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Start a daemon on a temp socket, return socket paths and child process.
 fn start_test_daemon() -> (PathBuf, PathBuf, std::process::Child) {
-    let dir = std::env::temp_dir().join(format!("nexus-test-{}", std::process::id()));
+    let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("nexus-test-{}-{}", std::process::id(), id));
     std::fs::create_dir_all(&dir).unwrap();
 
     let cmd_socket = dir.join("nexus.sock");
@@ -20,9 +24,9 @@ fn start_test_daemon() -> (PathBuf, PathBuf, std::process::Child) {
     // Find the daemon binary — it should be built by cargo before running tests
     // Use CARGO_BIN_EXE_nexus-daemon if available (cargo test sets this for integration tests
     // of the same package), otherwise look next to the test binary.
-    let daemon = option_env!("CARGO_BIN_EXE_nexus-daemon")
+    let daemon = std::env::var("CARGO_BIN_EXE_nexus-daemon")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
+        .unwrap_or_else(|_| {
             std::env::current_exe().unwrap()
                 .parent().unwrap()
                 .parent().unwrap()
