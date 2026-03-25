@@ -3,4 +3,7 @@
 //! All Mux-related types now live in nexus-core::mux so that adapter
 //! crates (nexus-tmux, etc.) can depend on the trait without pulling
 //! in the full engine.
-pub use nexus_core::mux::*;
+pub use nexus_core::mux::{
+    ContainerInfo, Dimensions, Geometry, HudModule, MenuItem,
+    Mux, NullMux, SplitDirection,
+};

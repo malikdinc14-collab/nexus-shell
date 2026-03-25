@@ -231,6 +231,7 @@ pub trait Mux: Send + Sync {
 // ---------------------------------------------------------------------------
 
 /// No-op mux for testing and headless operation.
+#[derive(Debug, Clone)]
 pub struct NullMux {
     counter: u64,
     tags: HashMap<(String, String), String>,
@@ -288,6 +289,8 @@ impl Mux for NullMux {
     }
 
     fn container_exists(&self, _handle: &str) -> bool {
+        // NullMux does not track issued handles — always returns true.
+        // This is intentional: the null backend relaxes this invariant for test simplicity.
         true
     }
 
