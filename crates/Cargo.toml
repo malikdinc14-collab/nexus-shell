@@ -6,4 +6,5 @@ members = [
     "nexus-cli",
     "nexus-daemon",
     "nexus-core",
+    "nexus-editor",
 ]

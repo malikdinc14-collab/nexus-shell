@@ -1,0 +1,8 @@
+[package]
+name = "nexus-editor"
+version = "0.1.0"
+edition = "2021"
+description = "EditorBackend trait and adapters for Nexus Shell"
+
+[dependencies]
+nexus-core = { path = "../nexus-core" }
