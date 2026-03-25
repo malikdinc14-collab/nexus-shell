@@ -4,11 +4,16 @@
 //! construction time. All state lives here; the mux is a dumb backend.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use crate::bus::{EventBus, EventType, TypedEvent};
+use crate::layout::LayoutTree;
+use crate::pty::PtyManager;
+use crate::registry::CapabilityRegistry;
 use crate::stack::{Tab, TabStack, TabStatus};
 use crate::stack_manager::StackManager;
 use crate::surface::Mux;
+use nexus_core::capability::SystemContext;
 
 /// Find the visible container in a stack given the focused pane.
 fn get_visible_container(stack: &TabStack, focused_id: &str) -> Option<String> {
@@ -65,8 +70,11 @@ impl OpResult {
 /// Facade wrapping all engine modules behind a mux-agnostic API.
 pub struct NexusCore {
     pub mux: Box<dyn Mux>,
+    pub registry: Option<CapabilityRegistry>,
     pub stacks: StackManager,
-    pub bus: EventBus,
+    pub bus: Arc<Mutex<EventBus>>,
+    pub layout: LayoutTree,
+    pty: PtyManager,
     session: Option<String>,
 }
 
@@ -74,8 +82,23 @@ impl NexusCore {
     pub fn new(mux: Box<dyn Mux>) -> Self {
         Self {
             mux,
+            registry: None,
             stacks: StackManager::new(),
-            bus: EventBus::new(),
+            bus: Arc::new(Mutex::new(EventBus::new())),
+            layout: LayoutTree::default_layout(),
+            pty: PtyManager::new(),
+            session: None,
+        }
+    }
+
+    pub fn with_registry(mux: Box<dyn Mux>, ctx: SystemContext) -> Self {
+        Self {
+            mux,
+            registry: Some(CapabilityRegistry::new(ctx)),
+            stacks: StackManager::new(),
+            bus: Arc::new(Mutex::new(EventBus::new())),
+            layout: LayoutTree::default_layout(),
+            pty: PtyManager::new(),
             session: None,
         }
     }
@@ -86,7 +109,7 @@ impl NexusCore {
     pub fn create_workspace(&mut self, name: &str, cwd: &str) -> String {
         let session = self.mux.initialize(name, cwd);
         self.session = Some(session.clone());
-        self.bus.publish(
+        self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::Custom, "workspace.created")
                 .with_payload("name", name),
         );
@@ -195,7 +218,7 @@ impl NexusCore {
 
         self.mux.set_tag(&new_pane_id, "nexus_stack_id", &sid);
 
-        self.bus.publish(
+        self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackPush, "stack.push")
                 .with_payload("stack_id", sid.as_str())
                 .with_payload("pane", new_pane_id.as_str())
@@ -278,7 +301,7 @@ impl NexusCore {
         }
         stack.active_index = index;
 
-        self.bus.publish(
+        self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackSwitch, "stack.switch")
                 .with_payload("stack_id", sid.as_str())
                 .with_payload("pane", target_id.as_str())
@@ -349,7 +372,7 @@ impl NexusCore {
         let stack = self.stacks.get_stack_mut(&sid).unwrap();
         stack.tabs[idx] = new_tab;
 
-        self.bus.publish(
+        self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackReplace, "stack.replace")
                 .with_payload("stack_id", sid.as_str())
                 .with_payload("new_pane", new_pane_id.as_str()),
@@ -421,7 +444,7 @@ impl NexusCore {
             tab.is_active = i == 0;
         }
 
-        self.bus.publish(
+        self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackClose, "stack.close")
                 .with_payload("stack_id", sid.as_str()),
         );
@@ -509,7 +532,104 @@ impl NexusCore {
     pub fn publish(&mut self, source: &str, payload: HashMap<String, serde_json::Value>) {
         let mut event = TypedEvent::new(EventType::Custom, source);
         event.payload = payload;
-        self.bus.publish(event);
+        self.bus.lock().unwrap().publish(event);
+    }
+
+    // -- PTY -----------------------------------------------------------------
+
+    pub fn pty_spawn(&mut self, pane_id: &str, cwd: Option<&str>) -> Result<(), String> {
+        let cwd = cwd.unwrap_or("/tmp");
+        self.pty.spawn(pane_id, cwd, self.bus.clone())
+    }
+
+    pub fn pty_spawn_cmd(
+        &mut self,
+        pane_id: &str,
+        cwd: &str,
+        program: &str,
+        args: &[String],
+    ) -> Result<(), String> {
+        self.pty.spawn_cmd(pane_id, cwd, program, args, self.bus.clone())
+    }
+
+    pub fn pty_write(&mut self, pane_id: &str, data: &str) -> Result<(), String> {
+        self.pty.write(pane_id, data)
+    }
+
+    pub fn pty_resize(&mut self, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+        self.pty.resize(pane_id, cols, rows)
+    }
+
+    pub fn pty_kill(&mut self, pane_id: &str) -> Result<(), String> {
+        self.pty.kill(pane_id)
+    }
+
+    // -- Chat ----------------------------------------------------------------
+
+    pub fn chat_send(&mut self, pane_id: &str, message: &str, cwd: &str) -> Result<(), String> {
+        let registry = self.registry.as_ref().ok_or("No capability registry")?;
+        let chat = registry.best_chat().ok_or("No chat adapter available")?;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        chat.send_message(message, cwd, tx).map_err(|e| e.to_string())?;
+
+        let bus = self.bus.clone();
+        let pid = pane_id.to_string();
+        std::thread::spawn(move || {
+            use nexus_core::capability::ChatEvent;
+            while let Ok(event) = rx.recv() {
+                if let Ok(mut b) = bus.lock() {
+                    match &event {
+                        ChatEvent::Start { backend } => {
+                            b.publish(
+                                TypedEvent::new(EventType::Custom, "agent.start")
+                                    .with_payload("paneId", pid.as_str())
+                                    .with_payload("backend", backend.as_str()),
+                            );
+                        }
+                        ChatEvent::Text { chunk } => {
+                            b.publish(
+                                TypedEvent::new(EventType::Custom, "agent.text")
+                                    .with_payload("paneId", pid.as_str())
+                                    .with_payload("text", chunk.as_str()),
+                            );
+                        }
+                        ChatEvent::Done { exit_code, full_text } => {
+                            b.publish(
+                                TypedEvent::new(EventType::Custom, "agent.done")
+                                    .with_payload("paneId", pid.as_str())
+                                    .with_payload("exitCode", *exit_code as i64)
+                                    .with_payload("fullText", full_text.as_str()),
+                            );
+                            return;
+                        }
+                        ChatEvent::Error { message } => {
+                            b.publish(
+                                TypedEvent::new(EventType::Custom, "agent.error")
+                                    .with_payload("paneId", pid.as_str())
+                                    .with_payload("message", message.as_str()),
+                            );
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    // -- Keymap --------------------------------------------------------------
+
+    pub fn get_keymap(&self) -> Vec<nexus_core::keymap::KeyBinding> {
+        nexus_core::keymap::default_keymap()
+    }
+
+    pub fn get_commands(&self) -> Vec<nexus_core::keymap::CommandEntry> {
+        let mut cmds = nexus_core::keymap::default_commands();
+        let km = self.get_keymap();
+        nexus_core::keymap::merge_bindings(&mut cmds, &km);
+        cmds
     }
 }
 
@@ -624,5 +744,37 @@ mod tests {
         let mut core = make_core();
         let result = core.handle_stack_op("bogus", &HashMap::new());
         assert_eq!(result.status, "error");
+    }
+
+    #[test]
+    fn with_registry_constructor() {
+        let ctx = nexus_core::capability::SystemContext {
+            path: String::new(),
+            shell: String::new(),
+        };
+        let core = NexusCore::with_registry(Box::new(NullMux::new()), ctx);
+        assert!(core.session().is_none());
+    }
+
+    #[test]
+    fn pty_spawn_on_core() {
+        let ctx = nexus_core::capability::SystemContext {
+            path: std::env::var("PATH").unwrap_or_default(),
+            shell: "/bin/zsh".into(),
+        };
+        let mut core = NexusCore::with_registry(Box::new(NullMux::new()), ctx);
+        let result = core.pty_spawn("test-pane", None);
+        assert!(result.is_ok());
+        let _ = core.pty_kill("test-pane");
+    }
+
+    #[test]
+    fn pty_write_nonexistent_errors() {
+        let ctx = nexus_core::capability::SystemContext {
+            path: String::new(),
+            shell: String::new(),
+        };
+        let mut core = NexusCore::with_registry(Box::new(NullMux::new()), ctx);
+        assert!(core.pty_write("nonexistent", "hello").is_err());
     }
 }
