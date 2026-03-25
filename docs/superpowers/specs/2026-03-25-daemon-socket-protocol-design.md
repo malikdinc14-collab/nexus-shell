@@ -6,6 +6,8 @@
 
 The capability model port moved all tool logic into the engine. But Tauri still embeds `NexusCore` in-process — other surfaces (CLI, tmux, future OS-window panes) can't reach it. The daemon socket protocol makes the engine a shared service that all surfaces connect to as equal peers.
 
+**Supersedes capability model spec deployment model.** The capability model spec described "Approach C" where Tauri embeds the engine in-process AND exposes a socket. This spec replaces that with a cleaner architecture: the engine lives exclusively in `nexus-daemon`, and Tauri becomes a pure client. This eliminates the two-mode complexity (embedded vs. standalone) in favor of a single deployment model.
+
 ## Architecture
 
 ```
@@ -36,14 +38,15 @@ Fallback (no `XDG_RUNTIME_DIR`): `/tmp/nexus-<uid>/nexus.sock` and `/tmp/nexus-<
 
 Client library tries to connect to the command socket. If no socket exists:
 
-1. Spawn `nexus-daemon` as a detached background process
-2. Poll for socket existence (50ms intervals, up to 3s)
-3. Connect once socket appears
-4. If socket never appears → `NexusError::Protocol("daemon failed to start")`
+1. Locate `nexus-daemon` binary: check `NEXUS_DAEMON_BIN` env var first, then look in the same directory as the client binary (`current_exe().parent()`), then fall back to PATH
+2. Spawn as a detached background process
+3. Poll for socket existence (50ms intervals, up to 3s)
+4. Connect once socket appears
+5. If socket never appears → `NexusError::Protocol("daemon failed to start")`
 
 ### Idle shutdown
 
-Daemon shuts down after 30 seconds with no connected clients AND no active PTYs. A PID file at `$XDG_RUNTIME_DIR/nexus/nexus.pid` (or `/tmp/nexus-<uid>/nexus.pid`) tracks the daemon process.
+Daemon shuts down after 30 seconds with no connected clients AND no active PTYs. Shutdown sequence: (1) stop accepting new connections, (2) re-check idle conditions, (3) if still idle proceed with cleanup. A PID file at `$XDG_RUNTIME_DIR/nexus/nexus.pid` (or `/tmp/nexus-<uid>/nexus.pid`) tracks the daemon process.
 
 ## Wire Protocol
 
@@ -53,9 +56,9 @@ Daemon shuts down after 30 seconds with no connected clients AND no active PTYs.
 
 Each client opens up to two connections:
 
-1. **Command connection** (`nexus.sock`) — request/response, multiplexed by `id`. Client sends requests, server sends responses. Multiple requests can be in-flight simultaneously.
+1. **Command connection** (`nexus.sock`) — request/response. Client sends one request, waits for the response, then sends the next. The `id` field enables future multiplexing if needed, but the sync client is serial.
 
-2. **Event connection** (`nexus-events.sock`) — server-push only. Client sends a single `subscribe` message, then receives a filtered stream of notifications. The event connection is optional — one-shot CLI commands don't need it.
+2. **Event connection** (`nexus-events.sock`) — server-push only. Client sends a `subscribe` request, receives acknowledgment, then receives a filtered stream of notifications. The event connection is optional — one-shot CLI commands don't need it. Multiple `subscribe` requests can be sent to replace the active subscription (e.g., to watch a new pane).
 
 **Why two connections:** Backpressure isolation. A pane dumping megabytes of PTY output must not delay command responses. The event connection can buffer or drop independently of the command channel.
 
@@ -68,7 +71,7 @@ Request (client → server):
 
 Success response (server → client):
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"pane_id":"pane-5","layout":{...}}}
+{"jsonrpc":"2.0","id":1,"result":{"pane_id":"pane-5"}}
 ```
 
 Error response (server → client):
@@ -80,28 +83,26 @@ The `id` field is a monotonically increasing integer assigned by the client. Res
 
 ### Event connection messages
 
-Subscribe (client → server, sent once after connecting):
+Subscribe (client → server — proper JSON-RPC request with `id`):
 ```json
-{"jsonrpc":"2.0","method":"subscribe","params":{"patterns":["pty.output","pty.exit"],"filter":{"pane_id":"pane-5"}}}
+{"jsonrpc":"2.0","id":1,"method":"subscribe","params":{"patterns":["pty.output","pty.exit"],"filter":{"pane_id":"pane-5"}}}
 ```
 
-Acknowledgment (server → client):
+Acknowledgment (server → client — JSON-RPC response):
 ```json
-{"jsonrpc":"2.0","method":"subscribed","params":{"patterns":["pty.output","pty.exit"],"filter":{"pane_id":"pane-5"}}}
+{"jsonrpc":"2.0","id":1,"result":{"patterns":["pty.output","pty.exit"],"filter":{"pane_id":"pane-5"}}}
 ```
 
-Event notification (server → client, continuous):
+Event notification (server → client, continuous — JSON-RPC notification, no `id`):
 ```json
-{"jsonrpc":"2.0","method":"pty.output","params":{"pane_id":"pane-5","data":[27,91,72]}}
+{"jsonrpc":"2.0","method":"pty.output","params":{"pane_id":"pane-5","data":"G1tI"}}
 ```
 
-Notifications have no `id` field — they are fire-and-forget from server to client.
-
-**Filter semantics:** The `filter` field is optional. If present, each key-value pair must match the event's params for the event to be forwarded. Pattern matching uses the same glob syntax as `EventBus` (`pty.*` matches `pty.output` and `pty.exit`).
+**Filter semantics:** The `filter` field is optional. If present, each key-value pair must match the event's params for the event to be forwarded. Pattern matching uses glob syntax (`pty.*` matches `pty.output` and `pty.exit`). Patterns match against the event name (the `source` field of `TypedEvent`).
 
 ## Method Surface
 
-All methods map 1:1 to existing `dispatch()` + engine methods.
+The daemon server routes methods through `nexus_engine::dispatch()` where possible. Methods not yet handled by `dispatch()` (PTY, session, keymap, commands, layout) are routed directly to `NexusCore` methods by the server. As `dispatch()` grows to cover these domains, the direct routes can be replaced.
 
 ### Navigation
 
@@ -116,14 +117,15 @@ All methods map 1:1 to existing `dispatch()` + engine methods.
 
 | Method | Params | Returns |
 |---|---|---|
-| `pane.split` | `direction: "vertical" \| "horizontal"` | `{pane_id, layout}` |
-| `pane.close` | `pane_id?: String` | `{layout}` |
-| `pane.zoom` | — | `{layout}` |
-| `pane.focus` | `pane_id: String` | `{layout}` |
-| `pane.resize` | `pane_id: String, ratio: f64` | `{layout}` |
-| `pane.new.terminal` | — | `{pane_id, layout}` |
-| `pane.new.chat` | — | `{pane_id, layout}` |
-| `pane.new.explorer` | — | `{pane_id, layout}` |
+| `pane.split` | `direction: "vertical" \| "horizontal"` | `{pane_id: String}` |
+| `pane.close` | `pane_id?: String` | `null` |
+| `pane.zoom` | — | `null` |
+| `pane.focus` | `pane_id: String` | `null` |
+| `pane.resize` | `pane_id: String, ratio: f64` | `null` |
+| `pane.new.terminal` | — | `{pane_id: String}` |
+| `pane.new.chat` | — | `{pane_id: String}` |
+| `pane.new.explorer` | — | `{pane_id: String}` |
+| `pane.list` | — | `[{pane_id: String, pane_type: String}]` |
 
 ### PTY
 
@@ -134,7 +136,7 @@ All methods map 1:1 to existing `dispatch()` + engine methods.
 | `pty.resize` | `pane_id: String, cols: u16, rows: u16` | `null` |
 | `pty.kill` | `pane_id: String` | `null` |
 
-`pty.write` `data` is base64-encoded bytes.
+`pty.write` `data` is base64-encoded bytes. The client library handles encoding.
 
 ### Chat
 
@@ -142,7 +144,7 @@ All methods map 1:1 to existing `dispatch()` + engine methods.
 |---|---|---|
 | `chat.send` | `pane_id: String, message: String, cwd?: String` | `null` |
 
-Chat output arrives as events on the event connection, not as the method response.
+Chat output arrives as events on the event connection, not as the method response. The server routes this to `NexusCore::chat_send()` directly (the `chat` domain in `dispatch()` needs wiring — this is implementation work for this spec).
 
 ### Stack
 
@@ -150,10 +152,14 @@ Chat output arrives as events on the event connection, not as the method respons
 |---|---|---|
 | `stack.push` | `identity: String, name: String, command?: String, cwd?: String` | `{status, data}` |
 | `stack.switch` | `identity: String, index?: u32` | `{status, data}` |
+| `stack.replace` | `identity: String, name: String, command?: String` | `{status, data}` |
 | `stack.close` | `identity: String` | `{status, data}` |
-| `stack.list` | `identity: String` | `{status, data}` |
+| `stack.adopt` | `identity: String, pane_handle: String` | `{status, data}` |
 | `stack.tag` | `identity: String, tag: String` | `{status, data}` |
+| `stack.untag` | `identity: String, tag: String` | `{status, data}` |
 | `stack.rename` | `identity: String, name: String` | `{status, data}` |
+
+All stack methods delegate to `core.handle_stack_op()`.
 
 ### Session
 
@@ -173,7 +179,7 @@ Chat output arrives as events on the event connection, not as the method respons
 
 | Method | Params | Returns |
 |---|---|---|
-| `layout.show` | — | `{layout: Value}` |
+| `layout.show` | — | `Value` (layout tree JSON) |
 
 ### Generic dispatch
 
@@ -181,7 +187,7 @@ Chat output arrives as events on the event connection, not as the method respons
 |---|---|---|
 | `dispatch` | `command: String, args?: Object` | `Value` |
 
-Catch-all that routes through `nexus_engine::dispatch()`. All the above methods are convenience aliases — they all route through dispatch internally.
+Catch-all that routes through `nexus_engine::dispatch()`. Useful for future commands not yet exposed as named methods.
 
 ## Event Types
 
@@ -189,7 +195,7 @@ Pushed on the event connection to subscribed clients.
 
 | Event | Params |
 |---|---|
-| `pty.output` | `pane_id: String, data: [u8]` |
+| `pty.output` | `pane_id: String, data: String` (base64-encoded bytes) |
 | `pty.exit` | `pane_id: String, exit_code: i32` |
 | `agent.start` | `pane_id: String, backend: String` |
 | `agent.text` | `pane_id: String, chunk: String` |
@@ -198,13 +204,62 @@ Pushed on the event connection to subscribed clients.
 | `layout.changed` | `layout: Value` |
 | `stack.changed` | `stack_id: String, op: String` |
 
+PTY output uses base64 encoding on the wire (consistent with `pty.write`). The client library decodes to bytes.
+
+## Event Bridge Architecture
+
+The `EventBus` uses synchronous `Fn(&TypedEvent)` subscriber callbacks that fire inside `publish()` while the bus mutex is held. This is incompatible with async socket writes.
+
+**Solution:** The event bridge uses an `mpsc` channel as a decoupling layer:
+
+1. At daemon startup, create a `tokio::sync::mpsc::unbounded_channel::<TypedEvent>()`
+2. Subscribe to `*.*` on the `EventBus` with a callback that clones the event and sends it through the `UnboundedSender` (non-blocking, never fails unless receiver dropped)
+3. A tokio task reads from the `UnboundedReceiver` and fans out to active event connections, applying per-connection pattern + filter matching
+
+This keeps the `EventBus` callback trivial (clone + send) and moves all async I/O to the tokio task.
+
+```rust
+// In daemon startup:
+let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<TypedEvent>();
+
+// Subscribe on EventBus (sync callback):
+bus.lock().unwrap().subscribe("*.*", move |event| {
+    let _ = event_tx.send(event.clone());
+});
+
+// Tokio task fans out to connections:
+tokio::spawn(async move {
+    while let Some(event) = event_rx.recv().await {
+        for conn in connections.lock().await.iter_mut() {
+            if conn.matches(&event) {
+                conn.write_event(&event).await;
+            }
+        }
+    }
+});
+```
+
+## Threading Model
+
+`NexusCore` is behind `Arc<std::sync::Mutex<NexusCore>>` (not `tokio::sync::Mutex`). The daemon uses `tokio::task::spawn_blocking` for all engine calls to avoid blocking the tokio runtime:
+
+```rust
+let core = core.clone(); // Arc<Mutex<NexusCore>>
+let result = tokio::task::spawn_blocking(move || {
+    let mut core = core.lock().unwrap();
+    dispatch(&mut core, &method, &params)
+}).await??;
+```
+
+This is critical because `chat_send()` spawns background threads and `pty_spawn()` creates PTY processes — both can block briefly.
+
 ## Client Library (`nexus-daemon/src/client.rs`)
 
 Synchronous client for use by CLI, tmux adapter, and any non-async surface.
 
 ```rust
 pub struct NexusClient {
-    cmd_stream: UnixStream,
+    cmd_stream: BufReader<UnixStream> + UnixStream writer,
     next_id: AtomicU64,
 }
 
@@ -224,17 +279,20 @@ impl NexusClient {
     pub fn pty_spawn(&self, pane_id: &str, cwd: Option<&str>) -> Result<(), NexusError>;
     pub fn pty_write(&self, pane_id: &str, data: &[u8]) -> Result<(), NexusError>;
     pub fn pty_resize(&self, pane_id: &str, cols: u16, rows: u16) -> Result<(), NexusError>;
+    pub fn pty_kill(&self, pane_id: &str) -> Result<(), NexusError>;
     pub fn chat_send(&self, pane_id: &str, message: &str, cwd: Option<&str>) -> Result<(), NexusError>;
     pub fn stack_op(&self, op: &str, payload: HashMap<String, String>) -> Result<Value, NexusError>;
     pub fn layout(&self) -> Result<Value, NexusError>;
     pub fn keymap(&self) -> Result<Value, NexusError>;
     pub fn commands(&self) -> Result<Value, NexusError>;
+    pub fn pane_list(&self) -> Result<Value, NexusError>;
 }
 ```
 
 ```rust
 pub struct EventSubscription {
-    stream: UnixStream,
+    stream: BufReader<UnixStream> + UnixStream writer,
+    next_id: AtomicU64,
 }
 
 impl EventSubscription {
@@ -244,6 +302,13 @@ impl EventSubscription {
         filter: Option<HashMap<String, Value>>,
     ) -> Result<Self, NexusError>;
 
+    /// Update subscription (replaces current patterns/filter).
+    pub fn resubscribe(
+        &self,
+        patterns: &[&str],
+        filter: Option<HashMap<String, Value>>,
+    ) -> Result<(), NexusError>;
+
     /// Block until next event arrives. Returns the JSON-RPC notification.
     pub fn next_event(&self) -> Result<Notification, NexusError>;
 }
@@ -252,11 +317,27 @@ impl EventSubscription {
 ### Auto-launch implementation
 
 ```rust
+fn find_daemon_bin() -> Result<std::path::PathBuf, NexusError> {
+    // 1. Check NEXUS_DAEMON_BIN env var
+    if let Ok(path) = std::env::var("NEXUS_DAEMON_BIN") {
+        return Ok(path.into());
+    }
+    // 2. Check sibling of current executable
+    if let Ok(exe) = std::env::current_exe() {
+        let sibling = exe.parent().unwrap().join("nexus-daemon");
+        if sibling.is_file() {
+            return Ok(sibling);
+        }
+    }
+    // 3. Fall back to PATH
+    let ctx = SystemContext::from_login_shell();
+    ctx.resolve_binary("nexus-daemon")
+        .map(Into::into)
+        .ok_or_else(|| NexusError::NotFound("nexus-daemon binary not found".into()))
+}
+
 fn auto_launch() -> Result<(), NexusError> {
-    let daemon_bin = std::env::current_exe()?
-        .parent()
-        .unwrap()
-        .join("nexus-daemon");
+    let daemon_bin = find_daemon_bin()?;
     std::process::Command::new(&daemon_bin)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -283,32 +364,28 @@ Tokio-based. Two `UnixListener`s bound to the command and event socket paths.
 Per-connection tokio task:
 1. Read lines from socket (NDJSON)
 2. Parse as JSON-RPC request
-3. Lock `NexusCore`, call `dispatch(core, method, params)`
+3. `spawn_blocking` → lock `NexusCore`, route to `dispatch()` or direct engine method
 4. Serialize result as JSON-RPC response
 5. Write response line to socket
 
-### Event bridge (`nexus-daemon/src/event_bridge.rs`)
+### Event connection handler
 
-Bridges `EventBus` → event socket connections.
-
-The daemon subscribes to `*.*` on the `EventBus`. When an event fires, it iterates all active event connections, checks each connection's pattern + filter against the event, and writes matching events as JSON-RPC notifications.
-
-Each event connection is tracked in a shared `Vec<EventConnection>` behind an `Arc<Mutex<>>`:
-
-```rust
-struct EventConnection {
-    patterns: Vec<String>,
-    filter: HashMap<String, Value>,
-    writer: tokio::io::WriteHalf<UnixStream>,
-}
-```
+Per-connection tokio task:
+1. Read first line — parse as `subscribe` JSON-RPC request
+2. Register connection in shared `Vec<EventConnection>` with patterns + filter
+3. Send JSON-RPC response (acknowledgment)
+4. Read subsequent lines — handle `subscribe` requests to update patterns/filter
+5. On disconnect, remove from connection list
 
 ### Idle shutdown
 
 A tokio task checks every 5s:
 - Number of connected command clients (tracked via connection/drop counting)
 - Number of active PTYs (`PtyManager` state)
-- If both are zero for 30 consecutive seconds → graceful shutdown
+- If both are zero for 30 consecutive seconds:
+  1. Stop accepting new connections (drop listeners)
+  2. Re-check conditions
+  3. If still idle → graceful shutdown, cleanup socket + PID files
 
 ### Startup
 
@@ -323,11 +400,22 @@ async fn main() {
     // 6. Construct adapters, register in CapabilityRegistry
     // 7. NexusCore::with_registry(NullMux, ctx)
     // 8. Create workspace "nexus"
-    // 9. Bind command + event listeners
-    // 10. tokio::select! { accept loops, ctrl_c, idle_shutdown }
-    // 11. Cleanup: remove socket files, PID file
+    // 9. Set up event bridge (mpsc channel + EventBus subscriber)
+    // 10. Bind command + event listeners
+    // 11. tokio::select! { accept loops, ctrl_c, idle_shutdown }
+    // 12. Cleanup: remove socket files, PID file
 }
 ```
+
+## Implementation Work Required in Existing Code
+
+These changes to existing code are part of this spec's implementation scope:
+
+1. **Wire `chat` domain in `dispatch.rs`** — Currently a stub. Route `chat.send` to `core.chat_send()`.
+2. **Add PTY, session, keymap, commands, layout domains to `dispatch.rs`** — Or handle directly in the daemon server. Recommended: extend `dispatch()` so all surfaces benefit.
+3. **Add `events_socket_path()` to `constants.rs`** — Alongside existing `socket_path()`.
+4. **Add `pane_list()` method to `LayoutTree`** — Flat list of pane IDs + types from the tree.
+5. **Make `TypedEvent` implement `Clone`** — Required for the mpsc bridge pattern.
 
 ## Crate Changes
 
@@ -336,15 +424,15 @@ async fn main() {
 | File | Change |
 |---|---|
 | `protocol.rs` | Replace custom Request/Response with JSON-RPC 2.0 types |
-| `server.rs` | Two listeners, per-connection tokio tasks, dispatch through engine |
-| `client.rs` | `NexusClient` (sync, command connection) + `EventSubscription` |
-| `event_bridge.rs` | NEW — bridges EventBus to filtered event connections |
-| `main.rs` | Bootstrap engine with registry, start listeners, idle shutdown |
+| `server.rs` | Two listeners, per-connection tokio tasks, spawn_blocking for engine calls |
+| `client.rs` | `NexusClient` (sync) + `EventSubscription` with auto-launch |
+| `event_bridge.rs` | NEW — mpsc-based bridge from EventBus to filtered event connections |
+| `main.rs` | Bootstrap engine with registry, set up event bridge, start listeners, idle shutdown |
 | `lib.rs` | Add `pub mod event_bridge` |
 
 ### `nexus-cli` — Thin client
 
-Replace in-process `NexusCore` with `NexusClient::connect()`. Each subcommand becomes a single `client.request()` call. Remove `nexus-engine` dependency, add `nexus-daemon` dependency.
+Replace in-process `NexusCore` with `NexusClient::connect()`. Each subcommand becomes a single `client.request()` call.
 
 | Before | After |
 |---|---|
@@ -358,19 +446,19 @@ Replace `NexusCore` ownership with `NexusClient`. Commands delegate to `client.r
 
 | Before | After |
 |---|---|
-| `AppState { core: Mutex<NexusCore> }` | `AppState { client: NexusClient, events: EventSubscription }` |
+| `AppState { core: Mutex<NexusCore> }` | `AppState { client: NexusClient }` |
 | `core.lock().layout.navigate(Nav::Left)` | `client.navigate("left")` |
 | `core.lock().pty_spawn(...)` | `client.pty_spawn(...)` |
-| Bus subscription in `setup()` | `EventSubscription::subscribe(["pty.*", "agent.*"])` in `setup()` |
+| Bus subscription in `setup()` | `EventSubscription` in background thread, emits Tauri events |
 | `nexus-engine` dep | `nexus-daemon` dep (for client) |
 
-### `nexus-engine` — No changes
+### `nexus-engine` — Extend dispatch
 
-Engine doesn't know about sockets. It remains a library embedded by the daemon.
+Add domains to `dispatch()`: `pty`, `session`, `keymap`, `commands`, `layout`. Wire `chat` domain to `core.chat_send()`.
 
 ### `nexus-core` — Minimal changes
 
-Add `events_socket_path()` to `constants.rs` alongside existing `socket_path()`.
+Add `events_socket_path()` to `constants.rs`. Ensure `TypedEvent` derives `Clone`.
 
 ## Dependency Graph (After)
 
@@ -392,6 +480,7 @@ nexus-editor        → nexus-core
 4. **Auto-launch is transparent.** First client to connect starts the daemon. No manual setup required.
 5. **JSON-RPC 2.0 everywhere.** Both connections use the same wire format. No custom envelope.
 6. **Event filtering is server-side.** Clients declare what they want. Server only sends matching events. No wasted bandwidth.
+7. **spawn_blocking for engine calls.** Never hold the engine lock on a tokio worker thread.
 
 ## Not In Scope
 
