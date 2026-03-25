@@ -5,6 +5,7 @@ edition = "2021"
 description = "Nexus Shell desktop app — Tauri surface with embedded engine"
 
 [dependencies]
+nexus-core = { path = "../nexus-core" }
 nexus-engine = { path = "../nexus-engine" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
