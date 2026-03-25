@@ -354,6 +354,46 @@ impl LayoutTree {
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap_or(serde_json::Value::Null)
     }
+
+    /// Build a new LayoutTree from an exported root, regenerating all pane IDs.
+    ///
+    /// Used by `layout.import` to apply a template without carrying over
+    /// workspace-specific IDs from the export.
+    pub fn from_export(root: LayoutNode) -> Self {
+        let mut next_id: u32 = 1;
+        let new_root = Self::regen_ids(&root, &mut next_id);
+        let focused = new_root.leaf_ids().first().cloned().unwrap_or_default();
+        LayoutTree {
+            root: new_root,
+            focused,
+            zoomed: None,
+            next_id,
+        }
+    }
+
+    fn regen_ids(node: &LayoutNode, next_id: &mut u32) -> LayoutNode {
+        match node {
+            LayoutNode::Leaf { pane_type, .. } => {
+                let id = format!("pane-{}", *next_id);
+                *next_id += 1;
+                LayoutNode::Leaf {
+                    id,
+                    pane_type: *pane_type,
+                }
+            }
+            LayoutNode::Split {
+                direction,
+                ratio,
+                left,
+                right,
+            } => LayoutNode::Split {
+                direction: *direction,
+                ratio: *ratio,
+                left: Box::new(Self::regen_ids(left, next_id)),
+                right: Box::new(Self::regen_ids(right, next_id)),
+            },
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -459,6 +499,31 @@ mod tests {
         assert_eq!(leaves.len(), 2);
         assert_eq!(leaves[0], ("p1".into(), PaneType::Terminal));
         assert_eq!(leaves[1], ("p2".into(), PaneType::Chat));
+    }
+
+    #[test]
+    fn from_export_regenerates_ids() {
+        let export_root = LayoutNode::split(
+            Direction::Horizontal,
+            0.3,
+            LayoutNode::leaf("old-1", PaneType::Explorer),
+            LayoutNode::split(
+                Direction::Vertical,
+                0.7,
+                LayoutNode::leaf("old-2", PaneType::Editor),
+                LayoutNode::leaf("old-3", PaneType::Terminal),
+            ),
+        );
+
+        let tree = LayoutTree::from_export(export_root);
+        let ids = tree.root.leaf_ids();
+
+        assert_eq!(ids.len(), 3);
+        for id in &ids {
+            assert!(id.starts_with("pane-"), "expected pane-N, got {id}");
+        }
+        assert_eq!(tree.focused, ids[0]);
+        assert!(tree.zoomed.is_none());
     }
 
     #[test]
