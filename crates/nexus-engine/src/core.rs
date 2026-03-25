@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::bus::{EventBus, EventType, TypedEvent};
 use crate::layout::LayoutTree;
+use crate::persistence::{PaneState, WorkspaceSave};
 use crate::pty::PtyManager;
 use crate::registry::CapabilityRegistry;
 use crate::stack::{Tab, TabStack, TabStatus};
@@ -76,6 +77,8 @@ pub struct NexusCore {
     pub layout: LayoutTree,
     pty: PtyManager,
     session: Option<String>,
+    dirty: bool,
+    cwd: String,
 }
 
 impl NexusCore {
@@ -88,6 +91,8 @@ impl NexusCore {
             layout: LayoutTree::default_layout(),
             pty: PtyManager::new(),
             session: None,
+            dirty: false,
+            cwd: String::new(),
         }
     }
 
@@ -100,6 +105,8 @@ impl NexusCore {
             layout: LayoutTree::default_layout(),
             pty: PtyManager::new(),
             session: None,
+            dirty: false,
+            cwd: String::new(),
         }
     }
 
@@ -109,6 +116,7 @@ impl NexusCore {
     pub fn create_workspace(&mut self, name: &str, cwd: &str) -> String {
         let session = self.mux.initialize(name, cwd);
         self.session = Some(session.clone());
+        self.cwd = cwd.to_string();
         self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::Custom, "workspace.created")
                 .with_payload("name", name),
@@ -119,6 +127,53 @@ impl NexusCore {
     /// Current session handle.
     pub fn session(&self) -> Option<&str> {
         self.session.as_deref()
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    pub fn clear_dirty(&mut self) {
+        self.dirty = false;
+    }
+
+    pub fn cwd(&self) -> &str {
+        &self.cwd
+    }
+
+    /// Create a serializable snapshot of the current workspace state.
+    pub fn snapshot(&self) -> WorkspaceSave {
+        let panes: HashMap<String, PaneState> = self
+            .layout
+            .root
+            .leaves()
+            .into_iter()
+            .map(|(id, pane_type)| {
+                (
+                    id,
+                    PaneState {
+                        pane_type,
+                        cwd: Some(self.cwd.clone()),
+                        command: None,
+                        args: vec![],
+                    },
+                )
+            })
+            .collect();
+
+        WorkspaceSave {
+            version: 1,
+            name: self.session.clone().unwrap_or_else(|| "unnamed".to_string()),
+            cwd: self.cwd.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            layout: self.layout.clone(),
+            panes,
+            stacks: self.stacks.clone(),
+        }
     }
 
     // -- Stack operations ----------------------------------------------------
@@ -686,6 +741,36 @@ mod tests {
 
     fn payload(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn dirty_flag_starts_clean() {
+        let core = make_core();
+        assert!(!core.is_dirty());
+    }
+
+    #[test]
+    fn dirty_flag_set_and_clear() {
+        let mut core = make_core();
+        core.mark_dirty();
+        assert!(core.is_dirty());
+        core.clear_dirty();
+        assert!(!core.is_dirty());
+    }
+
+    #[test]
+    fn snapshot_captures_state() {
+        let core = make_core();
+        let snap = core.snapshot();
+        assert_eq!(snap.version, 1);
+        assert_eq!(snap.layout.root.leaf_ids().len(), 4);
+        assert_eq!(snap.cwd, "/tmp");
+    }
+
+    #[test]
+    fn cwd_tracked_on_core() {
+        let core = make_core();
+        assert_eq!(core.cwd(), "/tmp");
     }
 
     #[test]
