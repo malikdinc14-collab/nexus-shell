@@ -136,6 +136,7 @@ impl NexusCore {
             "tag" => self.stack_tag(payload),
             "untag" => self.stack_untag(payload),
             "rename" => self.stack_rename(payload),
+            "list" => self.stack_list(payload),
             _ => OpResult::error("unknown_op"),
         }
     }
@@ -511,6 +512,24 @@ impl NexusCore {
         }
     }
 
+    fn stack_list(&self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        match self.stacks.get_by_identity(identity) {
+            Some((_sid, stack)) => {
+                let tabs: Vec<serde_json::Value> = stack.tabs.iter().enumerate().map(|(i, tab)| {
+                    serde_json::json!({
+                        "index": i,
+                        "name": tab.name,
+                        "pane_handle": tab.pane_handle,
+                        "is_active": tab.is_active,
+                    })
+                }).collect();
+                OpResult::ok_with("tabs", serde_json::Value::Array(tabs))
+            }
+            None => OpResult::error("not_found"),
+        }
+    }
+
     fn stack_rename(&mut self, payload: &HashMap<String, String>) -> OpResult {
         let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
         let name = match payload.get("name") {
@@ -630,6 +649,27 @@ impl NexusCore {
         let km = self.get_keymap();
         nexus_core::keymap::merge_bindings(&mut cmds, &km);
         cmds
+    }
+
+    /// List all registered adapters with availability.
+    pub fn capabilities_list(&self, type_filter: Option<&str>) -> serde_json::Value {
+        match &self.registry {
+            Some(reg) => reg.capabilities_list(type_filter),
+            None => serde_json::json!([]),
+        }
+    }
+
+    /// List active sessions.
+    pub fn session_list(&self) -> Vec<serde_json::Value> {
+        match &self.session {
+            Some(name) => vec![serde_json::json!({"name": name})],
+            None => vec![],
+        }
+    }
+
+    /// Number of active PTY processes.
+    pub fn active_pty_count(&self) -> usize {
+        self.pty.active_count()
     }
 }
 

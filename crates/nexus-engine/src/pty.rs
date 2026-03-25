@@ -163,6 +163,11 @@ impl PtyManager {
         Ok(())
     }
 
+    /// Number of active PTY sessions.
+    pub fn active_count(&self) -> usize {
+        self.sessions.len()
+    }
+
     /// Kill a PTY session. Dropping master/writer closes the PTY.
     pub fn kill(&mut self, pane_id: &str) -> Result<(), String> {
         self.sessions
@@ -181,6 +186,12 @@ impl Default for PtyManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_count_starts_at_zero() {
+        let mgr = PtyManager::new();
+        assert_eq!(mgr.active_count(), 0);
+    }
 
     #[test]
     fn pty_manager_new() {

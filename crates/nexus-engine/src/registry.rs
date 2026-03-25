@@ -5,7 +5,8 @@
 //! enabling graceful fallback when a preferred backend is absent.
 
 use nexus_core::capability::{
-    Capability, ChatCapability, EditorCapability, ExplorerCapability, SystemContext,
+    Capability, CapabilityType, ChatCapability, EditorCapability, ExplorerCapability,
+    SystemContext,
 };
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,44 @@ impl CapabilityRegistry {
 
     pub fn list_explorer(&self) -> &[Box<dyn ExplorerCapability>] {
         &self.explorer
+    }
+
+    /// Return all registered adapters as JSON, optionally filtered by type.
+    pub fn capabilities_list(&self, type_filter: Option<&str>) -> serde_json::Value {
+        let mut result = Vec::new();
+        let add = |result: &mut Vec<serde_json::Value>, cap: &dyn Capability| {
+            let m = cap.manifest();
+            result.push(serde_json::json!({
+                "name": m.name,
+                "type": match m.capability_type {
+                    CapabilityType::Chat => "chat",
+                    CapabilityType::Editor => "editor",
+                    CapabilityType::Explorer => "explorer",
+                    CapabilityType::Multiplexer => "multiplexer",
+                },
+                "priority": m.priority,
+                "binary": m.binary,
+                "available": cap.is_available(),
+            }));
+        };
+
+        if type_filter.is_none() || type_filter == Some("chat") {
+            for c in &self.chat {
+                add(&mut result, c.as_ref());
+            }
+        }
+        if type_filter.is_none() || type_filter == Some("editor") {
+            for c in &self.editor {
+                add(&mut result, c.as_ref());
+            }
+        }
+        if type_filter.is_none() || type_filter == Some("explorer") {
+            for c in &self.explorer {
+                add(&mut result, c.as_ref());
+            }
+        }
+
+        serde_json::Value::Array(result)
     }
 }
 
@@ -229,5 +268,34 @@ mod tests {
             },
         }));
         assert!(reg.best_explorer().is_some());
+    }
+
+    #[test]
+    fn capabilities_list_all() {
+        let mut reg = CapabilityRegistry::new(empty_ctx());
+        reg.register_chat(Box::new(StubChat::new("claude", 100, true)));
+        let list = reg.capabilities_list(None);
+        let arr = list.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["name"], "claude");
+        assert_eq!(arr[0]["available"], true);
+    }
+
+    #[test]
+    fn capabilities_list_filtered() {
+        let mut reg = CapabilityRegistry::new(empty_ctx());
+        reg.register_chat(Box::new(StubChat::new("claude", 100, true)));
+        reg.register_explorer(Box::new(StubExplorer {
+            manifest: AdapterManifest {
+                name: "fs",
+                capability_type: CapabilityType::Explorer,
+                priority: 50,
+                binary: "",
+            },
+        }));
+        let chat_only = reg.capabilities_list(Some("chat"));
+        assert_eq!(chat_only.as_array().unwrap().len(), 1);
+        let explorer_only = reg.capabilities_list(Some("explorer"));
+        assert_eq!(explorer_only.as_array().unwrap().len(), 1);
     }
 }
