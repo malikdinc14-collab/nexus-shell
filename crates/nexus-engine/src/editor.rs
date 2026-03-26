@@ -7,6 +7,7 @@
 //! NativeAdapter is a simple built-in fallback (read-only file viewer).
 //! Real editing power comes from nvim (headless RPC) or helix adapters.
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -45,10 +46,10 @@ pub trait EditorBackend: Send {
     fn is_available(&self) -> bool;
 
     /// Read file contents. Returns (content, line_count).
-    fn read(&self, path: &str) -> Result<(String, usize), String>;
+    fn read(&self, path: &str) -> Result<(String, usize), NexusError>;
 
     /// Write content to file.
-    fn write(&self, path: &str, content: &str) -> Result<(), String>;
+    fn write(&self, path: &str, content: &str) -> Result<(), NexusError>;
 
     /// Detect language from file extension.
     fn detect_language(&self, path: &str) -> Option<String> {
@@ -96,16 +97,16 @@ impl EditorBackend for NativeAdapter {
 
     fn is_available(&self) -> bool { true }
 
-    fn read(&self, path: &str) -> Result<(String, usize), String> {
+    fn read(&self, path: &str) -> Result<(String, usize), NexusError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("{path}: {e}"))?;
+            .map_err(|e| NexusError::Io(format!("{path}: {e}")))?;
         let line_count = content.lines().count();
         Ok((content, line_count))
     }
 
-    fn write(&self, path: &str, content: &str) -> Result<(), String> {
+    fn write(&self, path: &str, content: &str) -> Result<(), NexusError> {
         std::fs::write(path, content)
-            .map_err(|e| format!("{path}: {e}"))
+            .map_err(|e| NexusError::Io(format!("{path}: {e}")))
     }
 }
 
@@ -170,16 +171,16 @@ impl EditorBackend for NvimAdapter {
             .unwrap_or(false)
     }
 
-    fn read(&self, path: &str) -> Result<(String, usize), String> {
+    fn read(&self, path: &str) -> Result<(String, usize), NexusError> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("{path}: {e}"))?;
+            .map_err(|e| NexusError::Io(format!("{path}: {e}")))?;
         let line_count = content.lines().count();
         Ok((content, line_count))
     }
 
-    fn write(&self, path: &str, content: &str) -> Result<(), String> {
+    fn write(&self, path: &str, content: &str) -> Result<(), NexusError> {
         std::fs::write(path, content)
-            .map_err(|e| format!("{path}: {e}"))
+            .map_err(|e| NexusError::Io(format!("{path}: {e}")))
     }
 }
 
@@ -275,7 +276,7 @@ impl Editor {
 
     /// Open a file in a pane. If already open, switches to it.
     /// Returns the buffer.
-    pub fn open(&mut self, pane_id: &str, path: &str) -> Result<Buffer, String> {
+    pub fn open(&mut self, pane_id: &str, path: &str) -> Result<Buffer, NexusError> {
         let pane = self.buffers.entry(pane_id.to_string()).or_insert_with(PaneBuffers::new);
 
         // Already open? Switch to it.
@@ -319,11 +320,11 @@ impl Editor {
     }
 
     /// Update active buffer content (local edit, not yet saved).
-    pub fn edit(&mut self, pane_id: &str, content: &str) -> Result<(), String> {
+    pub fn edit(&mut self, pane_id: &str, content: &str) -> Result<(), NexusError> {
         let pane = self.buffers.get_mut(pane_id)
-            .ok_or_else(|| format!("no buffers open in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no buffers open in {pane_id}")))?;
         let buf = pane.active_buffer_mut()
-            .ok_or_else(|| format!("no active buffer in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no active buffer in {pane_id}")))?;
         buf.content = content.to_string();
         buf.line_count = content.lines().count();
         buf.modified = true;
@@ -331,11 +332,11 @@ impl Editor {
     }
 
     /// Save active buffer to disk via backend.
-    pub fn save(&mut self, pane_id: &str) -> Result<(), String> {
+    pub fn save(&mut self, pane_id: &str) -> Result<(), NexusError> {
         let pane = self.buffers.get(pane_id)
-            .ok_or_else(|| format!("no buffers open in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no buffers open in {pane_id}")))?;
         let buf = pane.active_buffer()
-            .ok_or_else(|| format!("no active buffer in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no active buffer in {pane_id}")))?;
         self.backend.write(&buf.path, &buf.content)?;
         // Mark clean
         let buf = self.buffers.get_mut(pane_id).unwrap().active_buffer_mut().unwrap();
@@ -411,21 +412,21 @@ impl TabProvider for Editor {
         })
     }
 
-    fn switch_content_tab(&mut self, pane_id: &str, index: usize) -> Result<ContentTabState, String> {
+    fn switch_content_tab(&mut self, pane_id: &str, index: usize) -> Result<ContentTabState, NexusError> {
         let pane = self.buffers.get_mut(pane_id)
-            .ok_or_else(|| format!("no buffers in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no buffers in {pane_id}")))?;
         if index >= pane.items.len() {
-            return Err(format!("index {index} out of range ({})", pane.items.len()));
+            return Err(NexusError::InvalidState(format!("index {index} out of range ({})", pane.items.len())));
         }
         pane.active = index;
-        self.content_tabs(pane_id).ok_or_else(|| "unreachable".into())
+        self.content_tabs(pane_id).ok_or_else(|| NexusError::Other("unreachable".into()))
     }
 
-    fn close_content_tab(&mut self, pane_id: &str, index: usize) -> Result<Option<ContentTabState>, String> {
+    fn close_content_tab(&mut self, pane_id: &str, index: usize) -> Result<Option<ContentTabState>, NexusError> {
         let pane = self.buffers.get_mut(pane_id)
-            .ok_or_else(|| format!("no buffers in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no buffers in {pane_id}")))?;
         if index >= pane.items.len() {
-            return Err(format!("index {index} out of range ({})", pane.items.len()));
+            return Err(NexusError::InvalidState(format!("index {index} out of range ({})", pane.items.len())));
         }
         pane.items.remove(index);
         if pane.items.is_empty() {
@@ -640,10 +641,10 @@ mod tests {
                 EditorBackendInfo { name: "nvim".into(), version: Some("0.10".into()), supports_lsp: true, supports_syntax: true }
             }
             fn is_available(&self) -> bool { true }
-            fn read(&self, _path: &str) -> Result<(String, usize), String> {
+            fn read(&self, _path: &str) -> Result<(String, usize), NexusError> {
                 Ok(("mock content".into(), 1))
             }
-            fn write(&self, _path: &str, _content: &str) -> Result<(), String> { Ok(()) }
+            fn write(&self, _path: &str, _content: &str) -> Result<(), NexusError> { Ok(()) }
         }
 
         let mut editor = Editor::new();

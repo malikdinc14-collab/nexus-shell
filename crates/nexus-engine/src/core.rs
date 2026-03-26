@@ -18,6 +18,7 @@ use crate::hud::HUDManager;
 use serde::{Deserialize, Serialize};
 
 use nexus_core::capability::SystemContext;
+use nexus_core::NexusError;
 
 // ---------------------------------------------------------------------------
 // Display settings — engine-owned, synced to all surfaces
@@ -828,7 +829,7 @@ impl NexusCore {
 
     // -- PTY -----------------------------------------------------------------
 
-    pub fn pty_spawn(&mut self, pane_id: &str, cwd: Option<&str>) -> Result<(), String> {
+    pub fn pty_spawn(&mut self, pane_id: &str, cwd: Option<&str>) -> Result<(), NexusError> {
         let cwd = cwd.unwrap_or("/tmp");
         self.pty.spawn(pane_id, cwd, self.bus.clone())
     }
@@ -839,31 +840,33 @@ impl NexusCore {
         cwd: &str,
         program: &str,
         args: &[String],
-    ) -> Result<(), String> {
+    ) -> Result<(), NexusError> {
         self.pty.spawn_cmd(pane_id, cwd, program, args, self.bus.clone())
     }
 
-    pub fn pty_write(&mut self, pane_id: &str, data: &str) -> Result<(), String> {
+    pub fn pty_write(&mut self, pane_id: &str, data: &str) -> Result<(), NexusError> {
         self.pty.write(pane_id, data)
     }
 
-    pub fn pty_resize(&mut self, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+    pub fn pty_resize(&mut self, pane_id: &str, cols: u16, rows: u16) -> Result<(), NexusError> {
         self.pty.resize(pane_id, cols, rows)
     }
 
-    pub fn pty_kill(&mut self, pane_id: &str) -> Result<(), String> {
+    pub fn pty_kill(&mut self, pane_id: &str) -> Result<(), NexusError> {
         self.pty.kill(pane_id)
     }
 
     // -- Chat ----------------------------------------------------------------
 
-    pub fn chat_send(&mut self, pane_id: &str, message: &str, cwd: &str) -> Result<(), String> {
-        let registry_lock = self.registry.as_ref().ok_or("No capability registry")?;
+    pub fn chat_send(&mut self, pane_id: &str, message: &str, cwd: &str) -> Result<(), NexusError> {
+        let registry_lock = self.registry.as_ref()
+            .ok_or_else(|| NexusError::CapabilityNotFound("no capability registry".into()))?;
         let registry = registry_lock.read().unwrap();
-        let chat = registry.best_chat().ok_or("No chat adapter available")?;
+        let chat = registry.best_chat()
+            .ok_or_else(|| NexusError::CapabilityNotFound("no chat adapter available".into()))?;
 
         let (tx, rx): (std::sync::mpsc::Sender<nexus_core::capability::ChatEvent>, std::sync::mpsc::Receiver<nexus_core::capability::ChatEvent>) = std::sync::mpsc::channel();
-        chat.send_message(message, cwd, tx).map_err(|e| e.to_string())?;
+        chat.send_message(message, cwd, tx).map_err(|e| NexusError::AdapterError(e.to_string()))?;
 
         let bus = self.bus.clone();
         let pid = pane_id.to_string();

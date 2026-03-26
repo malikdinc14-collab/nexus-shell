@@ -94,8 +94,7 @@ pub fn handle_explorer(
     match action {
         // Full tree state — surface renders this directly
         "tree" => {
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
@@ -104,8 +103,7 @@ pub fn handle_explorer(
         "list" => {
             let path = str_arg("path")
                 .unwrap_or_else(|| core.explorer.root().to_string());
-            let entries = core.explorer.list(&path)
-                .map_err(NexusError::InvalidState)?;
+            let entries = core.explorer.list(&path)?;
             serde_json::to_value(&entries)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
@@ -116,8 +114,7 @@ pub fn handle_explorer(
                 NexusError::InvalidState("explorer.navigate requires path".into())
             })?;
             core.explorer.navigate(&path);
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
@@ -125,8 +122,7 @@ pub fn handle_explorer(
         // Go up one directory
         "up" => {
             core.explorer.up();
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
@@ -137,8 +133,7 @@ pub fn handle_explorer(
                 NexusError::InvalidState("explorer.toggle requires path".into())
             })?;
             let expanded = core.explorer.toggle(&path);
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             let mut val = serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))?;
             val["toggled"] = serde_json::json!(expanded);
@@ -148,8 +143,7 @@ pub fn handle_explorer(
         // Toggle hidden files
         "hidden" => {
             let show = core.explorer.toggle_hidden();
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             let mut val = serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))?;
             val["show_hidden"] = serde_json::json!(show);
@@ -161,36 +155,30 @@ pub fn handle_explorer(
             let query = str_arg("query").ok_or_else(|| {
                 NexusError::InvalidState("explorer.search requires query".into())
             })?;
-            let entries = core.explorer.search(&query)
-                .map_err(NexusError::InvalidState)?;
+            let entries = core.explorer.search(&query)?;
             serde_json::to_value(&entries)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
 
         // Cursor navigation — keyboard-driven file tree browsing
         "cursor_down" => {
-            let count = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?
-                .entries.len();
+            let count = core.explorer.tree()?.entries.len();
             core.explorer.cursor_down(count);
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
 
         "cursor_up" => {
             core.explorer.cursor_up();
-            let state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.tree()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
 
         "cursor_toggle" => {
             // Get entry at cursor before toggling
-            let pre_state = core.explorer.tree()
-                .map_err(NexusError::InvalidState)?;
+            let pre_state = core.explorer.tree()?;
             let entry = pre_state.entries.get(core.explorer.cursor_index()).cloned();
 
             if let Some(ref e) = entry {
@@ -201,23 +189,20 @@ pub fn handle_explorer(
                     ed_args.insert("raw".to_string(), serde_json::json!(format!("e {path}")));
                     let _ = dispatch(core, "command_line.execute", &ed_args);
                     // Return current state unchanged
-                    let state = core.explorer.tree()
-                        .map_err(NexusError::InvalidState)?;
+                    let state = core.explorer.tree()?;
                     return serde_json::to_value(&state)
                         .map_err(|e| NexusError::InvalidState(e.to_string()));
                 }
             }
 
             // Directory — toggle expand/collapse
-            let state = core.explorer.cursor_toggle()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.cursor_toggle()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
 
         "cursor_collapse" => {
-            let state = core.explorer.cursor_collapse()
-                .map_err(NexusError::InvalidState)?;
+            let state = core.explorer.cursor_collapse()?;
             serde_json::to_value(&state)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }

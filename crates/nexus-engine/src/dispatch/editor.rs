@@ -23,8 +23,7 @@ pub fn handle_editor(
             let pane_id = str_arg("pane_id")
                 .unwrap_or_else(|| core.layout.focused.clone());
 
-            let buffer = core.editor.open(&pane_id, &path)
-                .map_err(NexusError::InvalidState)?;
+            let buffer = core.editor.open(&pane_id, &path)?;
 
             // Emit event so surfaces know a file was opened
             let mut payload = HashMap::new();
@@ -51,15 +50,13 @@ pub fn handle_editor(
             let content = str_arg("content").ok_or_else(|| {
                 NexusError::InvalidState("editor.edit requires content".into())
             })?;
-            core.editor.edit(&pane_id, &content)
-                .map_err(NexusError::InvalidState)?;
+            core.editor.edit(&pane_id, &content)?;
             Ok(serde_json::json!({"status": "ok", "modified": true}))
         }
         "save" => {
             let pane_id = str_arg("pane_id")
                 .unwrap_or_else(|| core.layout.focused.clone());
-            core.editor.save(&pane_id)
-                .map_err(NexusError::InvalidState)?;
+            core.editor.save(&pane_id)?;
             Ok(serde_json::json!({"status": "ok"}))
         }
         "close" => {

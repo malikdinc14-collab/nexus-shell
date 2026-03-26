@@ -336,8 +336,7 @@ pub fn handle_layout(
                 home.join("layouts")
             };
 
-            let path = persistence::save_layout_export(&layouts_dir, &export)
-                .map_err(NexusError::InvalidState)?;
+            let path = persistence::save_layout_export(&layouts_dir, &export)?;
             Ok(serde_json::json!({"path": path}))
         }
 
@@ -463,8 +462,7 @@ pub fn handle_surface(
                 .unwrap_or_default();
 
             let reg = SurfaceRegistration { id, name, mode, capabilities };
-            core.surfaces.register(reg)
-                .map_err(NexusError::InvalidState)?;
+            core.surfaces.register(reg)?;
 
             // Return EngineSnapshot — everything the surface needs to render
             Ok(serde_json::json!({

@@ -4,6 +4,7 @@
 //! are the real engines. We define the trait they must satisfy and a thin
 //! orchestrator that manages conversation state per pane.
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -40,7 +41,7 @@ pub trait ChatBackend: Send {
 
     /// Send a message synchronously, return the response.
     /// For v1, blocking is fine. Streaming comes in v2.
-    fn send(&self, messages: &[ChatMessage], cwd: &str) -> Result<String, String>;
+    fn send(&self, messages: &[ChatMessage], cwd: &str) -> Result<String, NexusError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +63,7 @@ impl ChatBackend for EchoBackend {
 
     fn is_available(&self) -> bool { true }
 
-    fn send(&self, messages: &[ChatMessage], _cwd: &str) -> Result<String, String> {
+    fn send(&self, messages: &[ChatMessage], _cwd: &str) -> Result<String, NexusError> {
         if let Some(last) = messages.last() {
             Ok(format!("[echo] {}", last.content))
         } else {
@@ -161,7 +162,7 @@ impl Chat {
     }
 
     /// Send a user message, get assistant response. Returns the full conversation.
-    pub fn send(&mut self, pane_id: &str, message: &str, cwd: &str) -> Result<Conversation, String> {
+    pub fn send(&mut self, pane_id: &str, message: &str, cwd: &str) -> Result<Conversation, NexusError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -262,21 +263,21 @@ impl TabProvider for Chat {
         })
     }
 
-    fn switch_content_tab(&mut self, pane_id: &str, index: usize) -> Result<ContentTabState, String> {
+    fn switch_content_tab(&mut self, pane_id: &str, index: usize) -> Result<ContentTabState, NexusError> {
         let pane = self.conversations.get_mut(pane_id)
-            .ok_or_else(|| format!("no conversations in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no conversations in {pane_id}")))?;
         if index >= pane.items.len() {
-            return Err(format!("index {index} out of range ({})", pane.items.len()));
+            return Err(NexusError::InvalidState(format!("index {index} out of range ({})", pane.items.len())));
         }
         pane.active = index;
-        self.content_tabs(pane_id).ok_or_else(|| "unreachable".into())
+        self.content_tabs(pane_id).ok_or_else(|| NexusError::Other("unreachable".into()))
     }
 
-    fn close_content_tab(&mut self, pane_id: &str, index: usize) -> Result<Option<ContentTabState>, String> {
+    fn close_content_tab(&mut self, pane_id: &str, index: usize) -> Result<Option<ContentTabState>, NexusError> {
         let pane = self.conversations.get_mut(pane_id)
-            .ok_or_else(|| format!("no conversations in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no conversations in {pane_id}")))?;
         if index >= pane.items.len() {
-            return Err(format!("index {index} out of range ({})", pane.items.len()));
+            return Err(NexusError::InvalidState(format!("index {index} out of range ({})", pane.items.len())));
         }
         pane.items.remove(index);
         if pane.items.is_empty() {
@@ -345,7 +346,7 @@ mod tests {
                 ChatBackendInfo { name: "mock-llm".into(), model: Some("test-7b".into()), streaming: false }
             }
             fn is_available(&self) -> bool { true }
-            fn send(&self, _msgs: &[ChatMessage], _cwd: &str) -> Result<String, String> {
+            fn send(&self, _msgs: &[ChatMessage], _cwd: &str) -> Result<String, NexusError> {
                 Ok("I am a mock LLM".into())
             }
         }

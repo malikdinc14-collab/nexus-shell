@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 
 use crate::layout::{LayoutNode, LayoutTree};
@@ -72,79 +73,79 @@ pub fn project_layouts_dir(cwd: &str) -> PathBuf {
 }
 
 /// Save the auto-save checkpoint to `<session_dir>/state.json`.
-pub fn save_workspace(session_dir: &Path, save: &WorkspaceSave) -> Result<(), String> {
+pub fn save_workspace(session_dir: &Path, save: &WorkspaceSave) -> Result<(), NexusError> {
     std::fs::create_dir_all(session_dir)
-        .map_err(|e| format!("create session dir: {e}"))?;
+        .map_err(|e| NexusError::Io(format!("create session dir: {e}")))?;
     let json = serde_json::to_string_pretty(save)
-        .map_err(|e| format!("serialize workspace: {e}"))?;
+        .map_err(|e| NexusError::Protocol(format!("serialize workspace: {e}")))?;
     let path = session_dir.join("state.json");
     std::fs::write(&path, json)
-        .map_err(|e| format!("write {}: {e}", path.display()))
+        .map_err(|e| NexusError::Io(format!("write {}: {e}", path.display())))
 }
 
 /// Load the auto-save checkpoint from `<session_dir>/state.json`.
-pub fn load_workspace(session_dir: &Path) -> Result<WorkspaceSave, String> {
+pub fn load_workspace(session_dir: &Path) -> Result<WorkspaceSave, NexusError> {
     let path = session_dir.join("state.json");
     let json = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Io(format!("read {}: {e}", path.display())))?;
     let save: WorkspaceSave = serde_json::from_str(&json)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Protocol(format!("parse {}: {e}", path.display())))?;
     if save.version != CURRENT_VERSION {
-        return Err(format!(
+        return Err(NexusError::Protocol(format!(
             "unsupported version: {} (expected {})",
             save.version, CURRENT_VERSION
-        ));
+        )));
     }
     Ok(save)
 }
 
 /// Save a named snapshot to `<session_dir>/snapshots/<name>.json`.
-pub fn save_snapshot(session_dir: &Path, name: &str, save: &WorkspaceSave) -> Result<String, String> {
+pub fn save_snapshot(session_dir: &Path, name: &str, save: &WorkspaceSave) -> Result<String, NexusError> {
     let snap_dir = session_dir.join("snapshots");
     std::fs::create_dir_all(&snap_dir)
-        .map_err(|e| format!("create snapshots dir: {e}"))?;
+        .map_err(|e| NexusError::Io(format!("create snapshots dir: {e}")))?;
     let path = snap_dir.join(format!("{name}.json"));
     let json = serde_json::to_string_pretty(save)
-        .map_err(|e| format!("serialize snapshot: {e}"))?;
+        .map_err(|e| NexusError::Protocol(format!("serialize snapshot: {e}")))?;
     std::fs::write(&path, &json)
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Io(format!("write {}: {e}", path.display())))?;
     Ok(path.to_string_lossy().to_string())
 }
 
 /// Load a named snapshot from `<session_dir>/snapshots/<name>.json`.
-pub fn load_snapshot(session_dir: &Path, name: &str) -> Result<WorkspaceSave, String> {
+pub fn load_snapshot(session_dir: &Path, name: &str) -> Result<WorkspaceSave, NexusError> {
     let path = session_dir.join("snapshots").join(format!("{name}.json"));
     let json = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Io(format!("read {}: {e}", path.display())))?;
     let save: WorkspaceSave = serde_json::from_str(&json)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Protocol(format!("parse {}: {e}", path.display())))?;
     if save.version != CURRENT_VERSION {
-        return Err(format!(
+        return Err(NexusError::Protocol(format!(
             "unsupported version: {} (expected {})",
             save.version, CURRENT_VERSION
-        ));
+        )));
     }
     Ok(save)
 }
 
 /// Delete a named snapshot.
-pub fn delete_snapshot(session_dir: &Path, name: &str) -> Result<(), String> {
+pub fn delete_snapshot(session_dir: &Path, name: &str) -> Result<(), NexusError> {
     let path = session_dir.join("snapshots").join(format!("{name}.json"));
     std::fs::remove_file(&path)
-        .map_err(|e| format!("delete {}: {e}", path.display()))
+        .map_err(|e| NexusError::Io(format!("delete {}: {e}", path.display())))
 }
 
 /// List available snapshots. Returns list of snapshot info (name, timestamp, cwd).
-pub fn list_snapshots(session_dir: &Path) -> Result<Vec<serde_json::Value>, String> {
+pub fn list_snapshots(session_dir: &Path) -> Result<Vec<serde_json::Value>, NexusError> {
     let snap_dir = session_dir.join("snapshots");
     if !snap_dir.exists() {
         return Ok(vec![]);
     }
     let mut results = Vec::new();
     let entries = std::fs::read_dir(&snap_dir)
-        .map_err(|e| format!("read snapshots dir: {e}"))?;
+        .map_err(|e| NexusError::Io(format!("read snapshots dir: {e}")))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
+        let entry = entry.map_err(|e| NexusError::Io(format!("read entry: {e}")))?;
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("json") {
             if let Ok(json) = std::fs::read_to_string(&path) {
@@ -167,36 +168,36 @@ pub fn list_snapshots(session_dir: &Path) -> Result<Vec<serde_json::Value>, Stri
 }
 
 /// Save a layout export to `<layouts_dir>/<name>.json`.
-pub fn save_layout_export(layouts_dir: &Path, export: &LayoutExport) -> Result<String, String> {
+pub fn save_layout_export(layouts_dir: &Path, export: &LayoutExport) -> Result<String, NexusError> {
     std::fs::create_dir_all(layouts_dir)
-        .map_err(|e| format!("create layouts dir: {e}"))?;
+        .map_err(|e| NexusError::Io(format!("create layouts dir: {e}")))?;
     let path = layouts_dir.join(format!("{}.json", export.name));
     let json = serde_json::to_string_pretty(export)
-        .map_err(|e| format!("serialize layout: {e}"))?;
+        .map_err(|e| NexusError::Protocol(format!("serialize layout: {e}")))?;
     std::fs::write(&path, &json)
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Io(format!("write {}: {e}", path.display())))?;
     Ok(path.to_string_lossy().to_string())
 }
 
 /// Load a layout export from `<layouts_dir>/<name>.json`.
-pub fn load_layout_export(layouts_dir: &Path, name: &str) -> Result<LayoutExport, String> {
+pub fn load_layout_export(layouts_dir: &Path, name: &str) -> Result<LayoutExport, NexusError> {
     let path = layouts_dir.join(format!("{name}.json"));
     let json = std::fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
+        .map_err(|e| NexusError::Io(format!("read {}: {e}", path.display())))?;
     serde_json::from_str(&json)
-        .map_err(|e| format!("parse {}: {e}", path.display()))
+        .map_err(|e| NexusError::Protocol(format!("parse {}: {e}", path.display())))
 }
 
 /// List available layout exports. Returns list of layout names.
-pub fn list_layout_exports(layouts_dir: &Path) -> Result<Vec<String>, String> {
+pub fn list_layout_exports(layouts_dir: &Path) -> Result<Vec<String>, NexusError> {
     if !layouts_dir.exists() {
         return Ok(vec![]);
     }
     let mut names = Vec::new();
     let entries = std::fs::read_dir(layouts_dir)
-        .map_err(|e| format!("read layouts dir: {e}"))?;
+        .map_err(|e| NexusError::Io(format!("read layouts dir: {e}")))?;
     for entry in entries {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
+        let entry = entry.map_err(|e| NexusError::Io(format!("read entry: {e}")))?;
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("json") {
             if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {

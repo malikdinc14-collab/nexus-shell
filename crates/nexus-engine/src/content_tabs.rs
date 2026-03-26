@@ -9,6 +9,7 @@
 //! Editor/Terminal/Chat). StackManager = which module; TabProvider = which
 //! item within that module.
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 
 /// Metadata for a single content tab within a module.
@@ -47,7 +48,7 @@ pub trait TabProvider: Send {
         &mut self,
         pane_id: &str,
         index: usize,
-    ) -> Result<ContentTabState, String>;
+    ) -> Result<ContentTabState, NexusError>;
 
     /// Close content tab by index. Returns updated state, or None if
     /// no tabs remain after closing.
@@ -55,7 +56,7 @@ pub trait TabProvider: Send {
         &mut self,
         pane_id: &str,
         index: usize,
-    ) -> Result<Option<ContentTabState>, String>;
+    ) -> Result<Option<ContentTabState>, NexusError>;
 
     /// Whether this module supports multiple content tabs per pane.
     fn supports_content_tabs(&self) -> bool {

@@ -5,6 +5,7 @@
 //!
 //! See `.gap/specs/surface-abc.md` for the full design spec.
 
+use crate::error::NexusError;
 use serde::{Deserialize, Serialize};
 
 /// How a surface renders panes.
@@ -131,9 +132,9 @@ impl SurfaceRegistry {
     }
 
     /// Register a surface. Returns error if a second Delegated surface is attempted.
-    pub fn register(&mut self, reg: SurfaceRegistration) -> Result<(), String> {
+    pub fn register(&mut self, reg: SurfaceRegistration) -> Result<(), NexusError> {
         if reg.mode == SurfaceMode::Delegated && self.has_delegated() {
-            return Err("only one Delegated surface allowed at a time".into());
+            return Err(NexusError::InvalidState("only one Delegated surface allowed at a time".into()));
         }
         // Replace if same id reconnects
         self.surfaces.retain(|s| s.id != reg.id);

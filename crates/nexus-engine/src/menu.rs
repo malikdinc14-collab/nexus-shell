@@ -9,6 +9,7 @@
 //! Each layer directory contains YAML files (submenus) and optional
 //! executable scripts (live data providers).
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -409,9 +410,9 @@ fn module_item(name: &str, icon: &str, desc: &str) -> MenuItem {
     }
 }
 
-fn load_yaml_menu(path: &Path) -> Result<MenuList, String> {
-    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    serde_yaml::from_str(&content).map_err(|e| e.to_string())
+fn load_yaml_menu(path: &Path) -> Result<MenuList, NexusError> {
+    let content = std::fs::read_to_string(path).map_err(|e| NexusError::Io(e.to_string()))?;
+    serde_yaml::from_str(&content).map_err(|e| NexusError::Protocol(e.to_string()))
 }
 
 fn is_executable(path: &Path) -> bool {
@@ -425,14 +426,14 @@ fn is_executable(path: &Path) -> bool {
     false
 }
 
-fn run_script_provider(path: &Path) -> Result<Vec<MenuItem>, String> {
+fn run_script_provider(path: &Path) -> Result<Vec<MenuItem>, NexusError> {
     let output = Command::new(path)
         .env("NEXUS_MENU", "1")
         .output()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| NexusError::Io(e.to_string()))?;
 
     if !output.status.success() {
-        return Err(format!("script exited with {}", output.status));
+        return Err(NexusError::Io(format!("script exited with {}", output.status)));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

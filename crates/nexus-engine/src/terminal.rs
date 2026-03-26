@@ -7,6 +7,7 @@
 //! The existing PtyManager handles low-level PTY I/O. This module adds
 //! the abstraction layer for shell selection and session metadata.
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -243,21 +244,21 @@ impl TabProvider for Terminal {
         })
     }
 
-    fn switch_content_tab(&mut self, pane_id: &str, index: usize) -> Result<ContentTabState, String> {
+    fn switch_content_tab(&mut self, pane_id: &str, index: usize) -> Result<ContentTabState, NexusError> {
         let pane = self.sessions.get_mut(pane_id)
-            .ok_or_else(|| format!("no sessions in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no sessions in {pane_id}")))?;
         if index >= pane.items.len() {
-            return Err(format!("index {index} out of range ({})", pane.items.len()));
+            return Err(NexusError::InvalidState(format!("index {index} out of range ({})", pane.items.len())));
         }
         pane.active = index;
-        self.content_tabs(pane_id).ok_or_else(|| "unreachable".into())
+        self.content_tabs(pane_id).ok_or_else(|| NexusError::Other("unreachable".into()))
     }
 
-    fn close_content_tab(&mut self, pane_id: &str, index: usize) -> Result<Option<ContentTabState>, String> {
+    fn close_content_tab(&mut self, pane_id: &str, index: usize) -> Result<Option<ContentTabState>, NexusError> {
         let pane = self.sessions.get_mut(pane_id)
-            .ok_or_else(|| format!("no sessions in {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no sessions in {pane_id}")))?;
         if index >= pane.items.len() {
-            return Err(format!("index {index} out of range ({})", pane.items.len()));
+            return Err(NexusError::InvalidState(format!("index {index} out of range ({})", pane.items.len())));
         }
         pane.items.remove(index);
         if pane.items.is_empty() {

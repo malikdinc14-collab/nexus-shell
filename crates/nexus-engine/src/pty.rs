@@ -9,6 +9,8 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use nexus_core::NexusError;
+
 use crate::bus::{EventBus, EventType, TypedEvent};
 
 /// A single PTY session.
@@ -37,7 +39,7 @@ impl PtyManager {
         pane_id: &str,
         cwd: &str,
         bus: Arc<Mutex<EventBus>>,
-    ) -> Result<(), String> {
+    ) -> Result<(), NexusError> {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
         self.spawn_cmd(pane_id, cwd, &shell, &[], bus)
     }
@@ -52,7 +54,7 @@ impl PtyManager {
         program: &str,
         args: &[String],
         bus: Arc<Mutex<EventBus>>,
-    ) -> Result<(), String> {
+    ) -> Result<(), NexusError> {
         if self.sessions.contains_key(pane_id) {
             return Ok(()); // Idempotent
         }
@@ -65,7 +67,7 @@ impl PtyManager {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| NexusError::Io(e.to_string()))?;
 
         let mut cmd = CommandBuilder::new(program);
         for arg in args {
@@ -76,7 +78,7 @@ impl PtyManager {
         let _child = pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| NexusError::Io(e.to_string()))?;
 
         // Drop slave side -- we only need the master
         drop(pair.slave);
@@ -84,12 +86,12 @@ impl PtyManager {
         let writer = pair
             .master
             .take_writer()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| NexusError::Io(e.to_string()))?;
 
         let mut reader = pair
             .master
             .try_clone_reader()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| NexusError::Io(e.to_string()))?;
 
         let id = pane_id.to_string();
         let reader_thread = thread::spawn(move || {
@@ -132,25 +134,25 @@ impl PtyManager {
     }
 
     /// Write data to a PTY (user keyboard input).
-    pub fn write(&mut self, pane_id: &str, data: &str) -> Result<(), String> {
+    pub fn write(&mut self, pane_id: &str, data: &str) -> Result<(), NexusError> {
         let session = self
             .sessions
             .get_mut(pane_id)
-            .ok_or_else(|| format!("No PTY for {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no PTY for {pane_id}")))?;
         session
             .writer
             .write_all(data.as_bytes())
-            .map_err(|e| e.to_string())?;
-        session.writer.flush().map_err(|e| e.to_string())?;
+            .map_err(|e| NexusError::Io(e.to_string()))?;
+        session.writer.flush().map_err(|e| NexusError::Io(e.to_string()))?;
         Ok(())
     }
 
     /// Resize a PTY.
-    pub fn resize(&mut self, pane_id: &str, cols: u16, rows: u16) -> Result<(), String> {
+    pub fn resize(&mut self, pane_id: &str, cols: u16, rows: u16) -> Result<(), NexusError> {
         let session = self
             .sessions
             .get(pane_id)
-            .ok_or_else(|| format!("No PTY for {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no PTY for {pane_id}")))?;
         session
             .master
             .resize(PtySize {
@@ -159,7 +161,7 @@ impl PtyManager {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| NexusError::Io(e.to_string()))?;
         Ok(())
     }
 
@@ -169,10 +171,10 @@ impl PtyManager {
     }
 
     /// Kill a PTY session. Dropping master/writer closes the PTY.
-    pub fn kill(&mut self, pane_id: &str) -> Result<(), String> {
+    pub fn kill(&mut self, pane_id: &str) -> Result<(), NexusError> {
         self.sessions
             .remove(pane_id)
-            .ok_or_else(|| format!("No PTY for {pane_id}"))?;
+            .ok_or_else(|| NexusError::NotFound(format!("no PTY for {pane_id}")))?;
         Ok(())
     }
 }

@@ -31,8 +31,7 @@ pub fn handle_chat(
                 let _ = core.chat_send(&pane_id, &message, &cwd);
             }
 
-            let conv = core.chat.send(&pane_id, &message, &cwd)
-                .map_err(NexusError::InvalidState)?;
+            let conv = core.chat.send(&pane_id, &message, &cwd)?;
             serde_json::to_value(&conv)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
@@ -197,11 +196,9 @@ pub fn handle_pty(
 
             if let Some(cmd) = command {
                 let cwd_str = cwd.as_deref().unwrap_or("/tmp");
-                core.pty_spawn_cmd(&pane_id, cwd_str, &cmd, &[])
-                    .map_err(NexusError::InvalidState)?;
+                core.pty_spawn_cmd(&pane_id, cwd_str, &cmd, &[])?;
             } else {
-                core.pty_spawn(&pane_id, cwd.as_deref())
-                    .map_err(NexusError::InvalidState)?;
+                core.pty_spawn(&pane_id, cwd.as_deref())?;
             }
             Ok(serde_json::json!({ "pane_id": pane_id, "status": "ok" }))
         }
@@ -212,8 +209,7 @@ pub fn handle_pty(
             let data = str_arg("data").ok_or_else(|| {
                 NexusError::InvalidState("pty.input requires data".into())
             })?;
-            core.pty_write(&pane_id, &data)
-                .map_err(NexusError::InvalidState)?;
+            core.pty_write(&pane_id, &data)?;
             Ok(serde_json::json!({"status": "ok"}))
         }
         "resize" => {
@@ -222,16 +218,14 @@ pub fn handle_pty(
             })?;
             let cols = args.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
             let rows = args.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
-            core.pty_resize(&pane_id, cols, rows)
-                .map_err(NexusError::InvalidState)?;
+            core.pty_resize(&pane_id, cols, rows)?;
             Ok(serde_json::json!({"status": "ok"}))
         }
         "kill" => {
             let pane_id = str_arg("pane_id").ok_or_else(|| {
                 NexusError::InvalidState("pty.kill requires pane_id".into())
             })?;
-            core.pty_kill(&pane_id)
-                .map_err(NexusError::InvalidState)?;
+            core.pty_kill(&pane_id)?;
             Ok(serde_json::json!({"status": "ok"}))
         }
         _ => Err(NexusError::NotFound(format!("unknown pty action: {action}"))),
@@ -256,8 +250,7 @@ pub fn handle_session(
             let name = str_arg("name").unwrap_or_else(|| "default".into());
             let session_dir = crate::persistence::session_dir(&name);
             let save = core.snapshot();
-            crate::persistence::save_workspace(&session_dir, &save)
-                .map_err(NexusError::InvalidState)?;
+            crate::persistence::save_workspace(&session_dir, &save)?;
             let path = session_dir.to_string_lossy().to_string();
             Ok(serde_json::json!({ "path": path }))
         }
@@ -455,8 +448,8 @@ pub fn handle_content(
                 "Editor" => core.editor.switch_content_tab(&pane_id, index),
                 "Terminal" => core.terminal.switch_content_tab(&pane_id, index),
                 "Chat" => core.chat.switch_content_tab(&pane_id, index),
-                _ => Err(format!("module {module} has no content tabs")),
-            }.map_err(NexusError::InvalidState)?;
+                _ => Err(NexusError::InvalidState(format!("module {module} has no content tabs"))),
+            }?;
 
             let mut payload = HashMap::new();
             payload.insert("pane_id".to_string(), serde_json::json!(pane_id));
@@ -477,8 +470,8 @@ pub fn handle_content(
                 "Editor" => core.editor.close_content_tab(&pane_id, index),
                 "Terminal" => core.terminal.close_content_tab(&pane_id, index),
                 "Chat" => core.chat.close_content_tab(&pane_id, index),
-                _ => Err(format!("module {module} has no content tabs")),
-            }.map_err(NexusError::InvalidState)?;
+                _ => Err(NexusError::InvalidState(format!("module {module} has no content tabs"))),
+            }?;
 
             let mut payload = HashMap::new();
             payload.insert("pane_id".to_string(), serde_json::json!(pane_id));

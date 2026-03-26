@@ -1,8 +1,9 @@
 //! Unified error type for all Nexus crates.
 
+use serde::Serialize;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum NexusError {
     /// Operation on a pane/container that does not exist.
     NotFound(String),
@@ -38,6 +39,23 @@ impl fmt::Display for NexusError {
 }
 
 impl std::error::Error for NexusError {}
+
+impl NexusError {
+    /// Stable category string for frontend error discrimination.
+    pub fn category(&self) -> &'static str {
+        match self {
+            NexusError::NotFound(_) => "not_found",
+            NexusError::InvalidState(_) => "invalid_state",
+            NexusError::Io(_) => "io",
+            NexusError::Protocol(_) => "protocol",
+            NexusError::CapabilityNotFound(_) => "capability_not_found",
+            NexusError::AdapterError(_) => "adapter",
+            NexusError::DispatchError(_) => "dispatch",
+            NexusError::Unimplemented(_) => "unimplemented",
+            NexusError::Other(_) => "other",
+        }
+    }
+}
 
 impl From<std::io::Error> for NexusError {
     fn from(e: std::io::Error) -> Self {

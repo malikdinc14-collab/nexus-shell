@@ -7,6 +7,7 @@
 //! FsExplorer (std::fs) is the built-in fallback when no external tool
 //! is available.
 
+use nexus_core::NexusError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -26,10 +27,10 @@ pub struct ExplorerEntry {
 /// Any explorer backend implements this trait.
 pub trait ExplorerBackend: Send {
     /// List entries at `path` (single level).
-    fn list(&self, path: &str, show_hidden: bool) -> Result<Vec<ExplorerEntry>, String>;
+    fn list(&self, path: &str, show_hidden: bool) -> Result<Vec<ExplorerEntry>, NexusError>;
 
     /// Search for files matching `query` under `root`.
-    fn search(&self, root: &str, query: &str) -> Result<Vec<ExplorerEntry>, String> {
+    fn search(&self, root: &str, query: &str) -> Result<Vec<ExplorerEntry>, NexusError> {
         // Default: no search support, return empty
         let _ = (root, query);
         Ok(vec![])
@@ -49,9 +50,9 @@ pub trait ExplorerBackend: Send {
 pub struct FsAdapter;
 
 impl ExplorerBackend for FsAdapter {
-    fn list(&self, path: &str, show_hidden: bool) -> Result<Vec<ExplorerEntry>, String> {
+    fn list(&self, path: &str, show_hidden: bool) -> Result<Vec<ExplorerEntry>, NexusError> {
         let read_dir = std::fs::read_dir(path)
-            .map_err(|e| format!("{path}: {e}"))?;
+            .map_err(|e| NexusError::Io(format!("{path}: {e}")))?;
 
         let mut entries: Vec<ExplorerEntry> = Vec::new();
 
@@ -65,7 +66,7 @@ impl ExplorerBackend for FsAdapter {
                 continue;
             }
 
-            let metadata = entry.metadata().map_err(|e| format!("{name}: {e}"))?;
+            let metadata = entry.metadata().map_err(|e| NexusError::Io(format!("{name}: {e}")))?;
             let is_dir = metadata.is_dir();
             let size = if is_dir { 0 } else { metadata.len() };
 
@@ -132,7 +133,7 @@ impl BrootAdapter {
 }
 
 impl ExplorerBackend for BrootAdapter {
-    fn list(&self, path: &str, show_hidden: bool) -> Result<Vec<ExplorerEntry>, String> {
+    fn list(&self, path: &str, show_hidden: bool) -> Result<Vec<ExplorerEntry>, NexusError> {
         // broot --cmd ":print_tree" --no-style outputs a flat tree.
         // For structured data, we use broot's --write-default-conf and parse.
         // Simplest approach: run `broot --sizes --dates --no-style -c ":pt" path`
@@ -144,7 +145,7 @@ impl ExplorerBackend for BrootAdapter {
         // For v1 listing: use std::fs (same as FsAdapter) — broot's real power
         // is search, not basic listing.
         let read_dir = std::fs::read_dir(path)
-            .map_err(|e| format!("{path}: {e}"))?;
+            .map_err(|e| NexusError::Io(format!("{path}: {e}")))?;
 
         let mut entries: Vec<ExplorerEntry> = Vec::new();
 
@@ -158,7 +159,7 @@ impl ExplorerBackend for BrootAdapter {
                 continue;
             }
 
-            let metadata = entry.metadata().map_err(|e| format!("{name}: {e}"))?;
+            let metadata = entry.metadata().map_err(|e| NexusError::Io(format!("{name}: {e}")))?;
             let is_dir = metadata.is_dir();
             let size = if is_dir { 0 } else { metadata.len() };
 
@@ -179,7 +180,7 @@ impl ExplorerBackend for BrootAdapter {
         Ok(entries)
     }
 
-    fn search(&self, root: &str, query: &str) -> Result<Vec<ExplorerEntry>, String> {
+    fn search(&self, root: &str, query: &str) -> Result<Vec<ExplorerEntry>, NexusError> {
         // This is where broot shines — fuzzy search across the tree.
         // `broot --cmd "<query> :print_tree" --color no --no-style <root>`
         let output = std::process::Command::new(&self.broot_path)
@@ -190,11 +191,11 @@ impl ExplorerBackend for BrootAdapter {
             .arg(format!("{query} :print_tree"))
             .arg(root)
             .output()
-            .map_err(|e| format!("broot failed: {e}"))?;
+            .map_err(|e| NexusError::Io(format!("broot failed: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("broot error: {stderr}"));
+            return Err(NexusError::Io(format!("broot error: {stderr}")));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -359,7 +360,7 @@ impl Explorer {
 
     /// Toggle the entry at cursor. Returns (is_dir, path).
     /// If it's a directory, toggle expand. If file, return path for opening.
-    pub fn cursor_toggle(&mut self) -> Result<ExplorerState, String> {
+    pub fn cursor_toggle(&mut self) -> Result<ExplorerState, NexusError> {
         let state = self.tree()?;
         if let Some(entry) = state.entries.get(self.cursor) {
             let path = entry.entry.path.clone();
@@ -371,7 +372,7 @@ impl Explorer {
     }
 
     /// Collapse the entry at cursor (if dir and expanded) or move to parent dir entry.
-    pub fn cursor_collapse(&mut self) -> Result<ExplorerState, String> {
+    pub fn cursor_collapse(&mut self) -> Result<ExplorerState, NexusError> {
         let state = self.tree()?;
         if let Some(entry) = state.entries.get(self.cursor) {
             let path = entry.entry.path.clone();
@@ -392,18 +393,18 @@ impl Explorer {
     }
 
     /// Flat listing of a single directory — delegates to backend.
-    pub fn list(&self, path: &str) -> Result<Vec<ExplorerEntry>, String> {
+    pub fn list(&self, path: &str) -> Result<Vec<ExplorerEntry>, NexusError> {
         self.backend.list(path, self.show_hidden)
     }
 
     /// Search — delegates to backend.
-    pub fn search(&self, query: &str) -> Result<Vec<ExplorerEntry>, String> {
+    pub fn search(&self, query: &str) -> Result<Vec<ExplorerEntry>, NexusError> {
         let root = self.root.to_string_lossy().to_string();
         self.backend.search(&root, query)
     }
 
     /// Build visible tree from root, expanding only toggled directories.
-    pub fn tree(&mut self) -> Result<ExplorerState, String> {
+    pub fn tree(&mut self) -> Result<ExplorerState, NexusError> {
         let mut entries = Vec::new();
         self.walk(&self.root, 0, &mut entries)?;
         // Clamp cursor to valid range
@@ -424,7 +425,7 @@ impl Explorer {
         dir: &std::path::Path,
         depth: u32,
         out: &mut Vec<ExplorerTreeEntry>,
-    ) -> Result<(), String> {
+    ) -> Result<(), NexusError> {
         let items = self.backend.list(
             dir.to_str().unwrap_or("/"),
             self.show_hidden,
@@ -532,7 +533,7 @@ mod tests {
     fn backend_is_swappable() {
         struct MockBackend;
         impl ExplorerBackend for MockBackend {
-            fn list(&self, _path: &str, _show_hidden: bool) -> Result<Vec<ExplorerEntry>, String> {
+            fn list(&self, _path: &str, _show_hidden: bool) -> Result<Vec<ExplorerEntry>, NexusError> {
                 Ok(vec![ExplorerEntry {
                     name: "mock.txt".into(),
                     path: "/mock.txt".into(),
