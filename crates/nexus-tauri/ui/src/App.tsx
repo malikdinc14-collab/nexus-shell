@@ -2,7 +2,7 @@
 // Renders layout tree from Rust engine, routes keyboard commands.
 // The UI is a dumb renderer. All state and logic lives in the engine.
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Component } from "react";
 import {
   getLayout,
   getSession,
@@ -37,6 +37,14 @@ import TabBar, { ContentTabItem } from "./components/TabBar";
 import useTabStack from "./hooks/useTabStack";
 import { listen } from "@tauri-apps/api/event";
 
+// ── Drag state for Alt+drag pane rearrangement ──────────────────
+interface DragState {
+  sourcePaneId: string;
+  startX: number;
+  startY: number;
+  active: boolean; // true once moved past threshold
+}
+
 export default function App() {
   const [layout, setLayout] = useState<LayoutData | null>(null);
   const [session, setSession] = useState<string | null>(null);
@@ -46,6 +54,8 @@ export default function App() {
   const [tabListOpen, setTabListOpen] = useState(false);
   const [keymap, setKeymap] = useState<KeyBinding[]>([]);
   const [commands, setCommands] = useState<CommandEntry[]>([]);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ paneId: string; zone: "center" | "left" | "right" | "top" | "bottom" } | null>(null);
   const [display, setDisplay] = useState<DisplaySettings>({
     gap: 0,
     background: "var(--bg)",
@@ -206,6 +216,57 @@ export default function App() {
     [],
   );
 
+  // ── Alt+drag handlers ───────────────────────────────────────────
+  const handlePaneDragStart = useCallback((paneId: string, e: React.MouseEvent) => {
+    if (!e.altKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragState({ sourcePaneId: paneId, startX: e.clientX, startY: e.clientY, active: false });
+  }, []);
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const onMove = (e: MouseEvent) => {
+      if (!dragState.active) {
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
+        if (Math.sqrt(dx * dx + dy * dy) > 8) {
+          setDragState({ ...dragState, active: true });
+        }
+      }
+    };
+
+    document.body.style.cursor = "grabbing";
+
+    const onUp = async () => {
+      document.body.style.cursor = "";
+      if (dragState.active && dropTarget && dropTarget.paneId !== dragState.sourcePaneId) {
+        try {
+          // All drop zones use direct swap — simple and predictable
+          const result = await dispatchCommand("pane.swap", {
+            pane_id: dragState.sourcePaneId,
+            target_id: dropTarget.paneId,
+          });
+          if (result && typeof result === "object" && "root" in result && "focused" in result) {
+            setLayout(result as LayoutData);
+          }
+        } catch (err) {
+          console.warn("Drag rearrange failed:", err);
+        }
+      }
+      setDragState(null);
+      setDropTarget(null);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [dragState, dropTarget]);
+
   if (!layout) {
     return (
       <div
@@ -274,6 +335,9 @@ export default function App() {
             cwd={cwd}
             session={session}
             display={display}
+            dragState={dragState}
+            onDragStart={handlePaneDragStart}
+            onDropTargetChange={setDropTarget}
           />
         )}
       </div>
@@ -336,6 +400,38 @@ export default function App() {
   );
 }
 
+// ── Per-pane error boundary ───────────────────────────────────────
+
+class PaneErrorBoundary extends Component<
+  { paneId: string; children: React.ReactNode },
+  { error: string | null }
+> {
+  constructor(props: { paneId: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`Pane ${this.props.paneId} crashed:`, error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, color: "var(--red)", fontSize: 11, overflow: "auto" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Pane error</div>
+          <div style={{ opacity: 0.7 }}>{this.state.error}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Recursive layout renderer ────────────────────────────────────
 
 function NodeRenderer({
@@ -346,6 +442,9 @@ function NodeRenderer({
   cwd,
   session,
   display,
+  dragState,
+  onDragStart,
+  onDropTargetChange,
 }: {
   node: LayoutNode;
   focused: string;
@@ -354,19 +453,29 @@ function NodeRenderer({
   cwd: string;
   session: string | null;
   display: DisplaySettings;
+  dragState: DragState | null;
+  onDragStart: (paneId: string, e: React.MouseEvent) => void;
+  onDropTargetChange: (target: { paneId: string; zone: "center" | "left" | "right" | "top" | "bottom" } | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   if (node.type === "Leaf") {
+    const isDragSource = dragState?.active && dragState.sourcePaneId === node.id;
     return (
-      <PaneComponent
-        node={node}
-        focused={node.id === focused}
-        onFocus={onFocus}
-        cwd={cwd}
-        session={session}
-        display={display}
-      />
+      <PaneErrorBoundary paneId={node.id!}>
+        <PaneComponent
+          node={node}
+          focused={node.id === focused}
+          onFocus={onFocus}
+          cwd={cwd}
+          session={session}
+          display={display}
+          isDragSource={!!isDragSource}
+          dragActive={!!dragState?.active}
+          onDragStart={onDragStart}
+          onDropTargetChange={onDropTargetChange}
+        />
+      </PaneErrorBoundary>
     );
   }
 
@@ -437,6 +546,7 @@ function NodeRenderer({
         }
       >
         <NodeRenderer
+          key={firstLeafId(node.left!)}
           node={node.left!}
           focused={focused}
           onFocus={onFocus}
@@ -444,6 +554,9 @@ function NodeRenderer({
           cwd={cwd}
           session={session}
           display={display}
+          dragState={dragState}
+          onDragStart={onDragStart}
+          onDropTargetChange={onDropTargetChange}
         />
       </div>
 
@@ -471,6 +584,7 @@ function NodeRenderer({
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         <NodeRenderer
+          key={firstLeafId(node.right!)}
           node={node.right!}
           focused={focused}
           onFocus={onFocus}
@@ -478,6 +592,9 @@ function NodeRenderer({
           cwd={cwd}
           session={session}
           display={display}
+          dragState={dragState}
+          onDragStart={onDragStart}
+          onDropTargetChange={onDropTargetChange}
         />
       </div>
     </div>
@@ -509,6 +626,8 @@ const PANE_REGISTRY: Record<string, React.ComponentType<PaneProps>> = {
 
 // ── Pane component (dispatches via registry) ─────────────────────
 
+type DropZone = "center" | "left" | "right" | "top" | "bottom";
+
 function PaneComponent({
   node,
   focused,
@@ -516,6 +635,10 @@ function PaneComponent({
   cwd,
   session,
   display,
+  isDragSource = false,
+  dragActive = false,
+  onDragStart,
+  onDropTargetChange,
 }: {
   node: LayoutNode;
   focused: boolean;
@@ -523,6 +646,10 @@ function PaneComponent({
   cwd: string;
   session: string | null;
   display: DisplaySettings;
+  isDragSource?: boolean;
+  dragActive?: boolean;
+  onDragStart?: (paneId: string, e: React.MouseEvent) => void;
+  onDropTargetChange?: (target: { paneId: string; zone: DropZone } | null) => void;
 }) {
   const paneId = node.id!;
   const stack = useTabStack(paneId);
@@ -631,8 +758,42 @@ function PaneComponent({
     }
   }, [refreshContent]);
 
+  // Drop zone detection for drag targets
+  const [localDropZone, setLocalDropZone] = useState<DropZone | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  const handleDragMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragActive || isDragSource || !paneRef.current) return;
+    const rect = paneRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    // Edge zones: 25% from each edge
+    let zone: DropZone = "center";
+    if (x < 0.25) zone = "left";
+    else if (x > 0.75) zone = "right";
+    else if (y < 0.25) zone = "top";
+    else if (y > 0.75) zone = "bottom";
+
+    setLocalDropZone(zone);
+    onDropTargetChange?.({ paneId, zone });
+  }, [dragActive, isDragSource, paneId, onDropTargetChange]);
+
+  const handleDragMouseLeave = useCallback(() => {
+    if (dragActive) {
+      setLocalDropZone(null);
+      onDropTargetChange?.(null);
+    }
+  }, [dragActive, onDropTargetChange]);
+
+  // Clear local drop zone when drag ends
+  useEffect(() => {
+    if (!dragActive) setLocalDropZone(null);
+  }, [dragActive]);
+
   return (
     <div
+      ref={paneRef}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -642,9 +803,19 @@ function PaneComponent({
         border: focused
           ? "2px solid var(--accent)"
           : "2px solid transparent",
-        transition: "border-color 0.15s, border-radius 0.2s",
+        opacity: isDragSource ? 0.4 : 1,
+        transition: "border-color 0.15s, border-radius 0.2s, opacity 0.15s",
+        position: "relative",
       }}
-      onMouseDown={() => onFocus(paneId)}
+      onMouseDown={(e) => {
+        if (e.altKey && onDragStart) {
+          onDragStart(paneId, e);
+        } else {
+          onFocus(paneId);
+        }
+      }}
+      onMouseMove={handleDragMouseMove}
+      onMouseLeave={handleDragMouseLeave}
     >
       {/* Unified tab bar: module tabs | content tabs */}
       <TabBar
@@ -667,6 +838,53 @@ function PaneComponent({
         }}
       >
         <PaneImpl paneId={paneId} cwd={cwd} session={session} isFocused={focused} />
+      </div>
+
+      {/* Drop zone overlay */}
+      {dragActive && !isDragSource && localDropZone && (
+        <DropZoneOverlay zone={localDropZone} />
+      )}
+    </div>
+  );
+}
+
+// ── Drop zone indicator ─────────────────────────────────────────
+
+function DropZoneOverlay({ zone }: { zone: DropZone }) {
+  const baseStyle: React.CSSProperties = {
+    position: "absolute",
+    background: "var(--accent)",
+    opacity: 0.2,
+    borderRadius: 4,
+    transition: "all 0.1s ease",
+    pointerEvents: "none",
+    zIndex: 20,
+  };
+
+  const positions: Record<DropZone, React.CSSProperties> = {
+    center: { inset: "10%", ...baseStyle },
+    left:   { top: 0, left: 0, bottom: 0, width: "30%", ...baseStyle },
+    right:  { top: 0, right: 0, bottom: 0, width: "30%", ...baseStyle },
+    top:    { top: 0, left: 0, right: 0, height: "30%", ...baseStyle },
+    bottom: { bottom: 0, left: 0, right: 0, height: "30%", ...baseStyle },
+  };
+
+  return (
+    <div style={positions[zone]}>
+      <div style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        fontSize: 11,
+        fontWeight: 700,
+        color: "var(--accent)",
+        opacity: 1,
+        textTransform: "uppercase",
+        letterSpacing: "0.05em",
+        pointerEvents: "none",
+      }}>
+        Swap
       </div>
     </div>
   );
@@ -698,8 +916,24 @@ function matchBinding(e: KeyboardEvent, keymap: KeyBinding[]): KeyBinding | null
     const needMeta = parts.some((p) => p === "Meta" || p === "Cmd");
     const needShift = parts.some((p) => p === "Shift");
 
+    // On macOS, Alt+key produces a special character in e.key (e.g. Alt+s → "ß").
+    // Use e.code (physical key, e.g. "KeyS") as fallback when Alt is held.
+    let pressedKey: string;
+    if (needAlt && e.altKey) {
+      if (e.code.startsWith("Key")) {
+        pressedKey = e.code.slice(3).toLowerCase();
+      } else if (e.code.startsWith("Digit")) {
+        pressedKey = e.code.slice(5);
+      } else {
+        // Non-alpha keys (Equal, Minus, etc.) — use e.key directly
+        pressedKey = e.key.toLowerCase();
+      }
+    } else {
+      pressedKey = e.key.toLowerCase();
+    }
+
     if (
-      e.key.toLowerCase() === key &&
+      pressedKey === key &&
       e.altKey === needAlt &&
       e.ctrlKey === needCtrl &&
       e.metaKey === needMeta &&

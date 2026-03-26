@@ -209,6 +209,63 @@ pub fn handle_pane(
             }
         }
 
+        // -- swap (direct: swap two panes by id) --------------------------------
+        "swap" => {
+            let pane_id = args.get("pane_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| NexusError::InvalidState("pane.swap requires pane_id".into()))?
+                .to_string();
+            let target_id = args.get("target_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| NexusError::InvalidState("pane.swap requires target_id".into()))?
+                .to_string();
+            core.layout.root.swap_leaves(&pane_id, &target_id);
+            core.mark_dirty();
+            Ok(core.layout.to_json())
+        }
+
+        // -- swap directional (swap focused with neighbor) ----------------------
+        "swap_left" | "swap_right" | "swap_up" | "swap_down" => {
+            let nav = match action {
+                "swap_left" => Nav::Left,
+                "swap_right" => Nav::Right,
+                "swap_up" => Nav::Up,
+                "swap_down" => Nav::Down,
+                _ => unreachable!(),
+            };
+            core.layout.swap_toward(nav);
+            core.mark_dirty();
+            Ok(core.layout.to_json())
+        }
+
+        // -- grow (keyboard resize) -------------------------------------------
+        "grow_left" | "grow_right" | "grow_up" | "grow_down" => {
+            let nav = match action {
+                "grow_left" => Nav::Left,
+                "grow_right" => Nav::Right,
+                "grow_up" => Nav::Up,
+                "grow_down" => Nav::Down,
+                _ => unreachable!(),
+            };
+            core.layout.grow(nav);
+            core.mark_dirty();
+            Ok(core.layout.to_json())
+        }
+
+        // -- move (detach + reinsert) -----------------------------------------
+        "move_left" | "move_right" | "move_up" | "move_down" => {
+            let nav = match action {
+                "move_left" => Nav::Left,
+                "move_right" => Nav::Right,
+                "move_up" => Nav::Up,
+                "move_down" => Nav::Down,
+                _ => unreachable!(),
+            };
+            core.layout.move_pane(nav);
+            core.mark_dirty();
+            Ok(core.layout.to_json())
+        }
+
         _ => Err(NexusError::NotFound(format!("unknown pane action: {action}"))),
     }
 }
@@ -429,6 +486,20 @@ pub fn handle_layout(
                 }))
                 .collect();
             Ok(serde_json::Value::Array(list))
+        }
+
+        // -- equalize (reset all ratios to 0.5) ------------------------------
+        "equalize" => {
+            core.layout.equalize();
+            core.mark_dirty();
+            Ok(core.layout.to_json())
+        }
+
+        // -- rotate (flip parent split H<->V) --------------------------------
+        "rotate" => {
+            core.layout.rotate();
+            core.mark_dirty();
+            Ok(core.layout.to_json())
         }
 
         _ => Err(NexusError::NotFound(format!("unknown layout action: {action}"))),

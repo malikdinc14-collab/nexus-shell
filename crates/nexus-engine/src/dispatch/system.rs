@@ -268,6 +268,10 @@ pub fn handle_session(
             let sessions = core.session_list();
             Ok(serde_json::Value::Array(sessions))
         }
+        "info" => {
+            let name = core.session().unwrap_or("unnamed").to_string();
+            Ok(serde_json::json!({ "name": name, "cwd": core.cwd() }))
+        }
         _ => Err(NexusError::NotFound(format!("unknown session action: {action}"))),
     }
 }
@@ -397,7 +401,8 @@ pub fn handle_info(
 ) -> Result<serde_json::Value, NexusError> {
     match action {
         "system" => {
-            Ok(serde_json::to_value(core.terminal.info()).unwrap_or_default())
+            let data = crate::info::collect(core);
+            serde_json::to_value(&data).map_err(|e| NexusError::InvalidState(e.to_string()))
         }
         _ => Err(NexusError::NotFound(format!("unknown info action: {action}"))),
     }
@@ -485,5 +490,39 @@ pub fn handle_content(
         }
 
         _ => Err(NexusError::NotFound(format!("unknown content action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// menu.*
+// ---------------------------------------------------------------------------
+
+pub fn handle_menu(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "get" => {
+            let context = str_arg("context").unwrap_or_else(|| "home".into());
+            let list = core.menu.get(&context);
+            serde_json::to_value(&list).map_err(|e| NexusError::Protocol(e.to_string()))
+        }
+        "navigate" => {
+            let context = str_arg("context").ok_or_else(|| {
+                NexusError::InvalidState("menu.navigate requires context".into())
+            })?;
+            let list = core.menu.navigate(&context);
+            serde_json::to_value(&list).map_err(|e| NexusError::Protocol(e.to_string()))
+        }
+        "back" => {
+            let list = core.menu.back();
+            serde_json::to_value(&list).map_err(|e| NexusError::Protocol(e.to_string()))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown menu action: {action}"))),
     }
 }

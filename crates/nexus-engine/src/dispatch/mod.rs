@@ -48,6 +48,7 @@ pub fn dispatch(
         "command_line" => system::handle_command_line(core, action, args),
         "info" => system::handle_info(core, action, args),
         "content" => system::handle_content(core, action, args),
+        "menu" => system::handle_menu(core, action, args),
 
         "hud" => match action {
             "frame" | "get" => core.hud.get_best_frame()

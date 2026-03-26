@@ -385,6 +385,194 @@ impl LayoutNode {
             _ => false,
         }
     }
+
+    /// Swap two leaves by ID in a single pass. Returns true if at least one
+    /// swap occurred.
+    pub fn swap_leaves(&mut self, id_a: &str, id_b: &str) -> bool {
+        match self {
+            LayoutNode::Leaf { id } => {
+                if id == id_a {
+                    *id = id_b.to_string();
+                    true
+                } else if id == id_b {
+                    *id = id_a.to_string();
+                    true
+                } else {
+                    false
+                }
+            }
+            LayoutNode::Split { left, right, .. } => {
+                let a = left.swap_leaves(id_a, id_b);
+                let b = right.swap_leaves(id_a, id_b);
+                a || b
+            }
+            LayoutNode::Grid { children, .. } => {
+                let mut swapped = false;
+                for child in children {
+                    swapped |= child.swap_leaves(id_a, id_b);
+                }
+                swapped
+            }
+            LayoutNode::Absolute { child, .. } => child.swap_leaves(id_a, id_b),
+        }
+    }
+
+    /// Equalize all split ratios to 0.5 and all grid weights to 1.0,
+    /// recursively.
+    pub fn equalize(&mut self) {
+        match self {
+            LayoutNode::Split {
+                ratio, left, right, ..
+            } => {
+                *ratio = 0.5;
+                left.equalize();
+                right.equalize();
+            }
+            LayoutNode::Grid {
+                weights, children, ..
+            } => {
+                for w in weights.iter_mut() {
+                    *w = 1.0;
+                }
+                for child in children {
+                    child.equalize();
+                }
+            }
+            LayoutNode::Absolute { child, .. } => child.equalize(),
+            _ => {}
+        }
+    }
+
+    /// Find the Split whose direct child is a Leaf with `pane_id` and toggle
+    /// its direction between Horizontal and Vertical. Returns true if found.
+    pub fn flip_parent_direction(&mut self, pane_id: &str) -> bool {
+        match self {
+            LayoutNode::Split {
+                direction,
+                left,
+                right,
+                ..
+            } => {
+                if left.is_leaf_with_id(pane_id) || right.is_leaf_with_id(pane_id) {
+                    *direction = match *direction {
+                        Direction::Horizontal => Direction::Vertical,
+                        Direction::Vertical => Direction::Horizontal,
+                    };
+                    return true;
+                }
+                left.flip_parent_direction(pane_id)
+                    || right.flip_parent_direction(pane_id)
+            }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.flip_parent_direction(pane_id) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => child.flip_parent_direction(pane_id),
+            _ => false,
+        }
+    }
+
+    /// Find the nearest ancestor Split whose direction matches `axis` and
+    /// whose subtree contains `pane_id`. Adjust ratio by `delta` (positive =
+    /// grow left child). Clamps to [0.1, 0.9]. Returns true if adjusted.
+    pub fn adjust_ratio_toward(
+        &mut self,
+        pane_id: &str,
+        delta: f64,
+        axis: Direction,
+    ) -> bool {
+        match self {
+            LayoutNode::Split {
+                direction,
+                ratio,
+                left,
+                right,
+                ..
+            } => {
+                if *direction == axis {
+                    let in_left = left.contains_leaf(pane_id);
+                    let in_right = right.contains_leaf(pane_id);
+                    if in_left {
+                        *ratio = (*ratio + delta).clamp(0.1, 0.9);
+                        return true;
+                    }
+                    if in_right {
+                        *ratio = (*ratio - delta).clamp(0.1, 0.9);
+                        return true;
+                    }
+                }
+                // Recurse even if direction doesn't match — the target split
+                // may be deeper in the tree.
+                left.adjust_ratio_toward(pane_id, delta, axis)
+                    || right.adjust_ratio_toward(pane_id, delta, axis)
+            }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.adjust_ratio_toward(pane_id, delta, axis) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                child.adjust_ratio_toward(pane_id, delta, axis)
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns true if a Leaf with the given ID exists anywhere in this subtree.
+    pub fn contains_leaf(&self, target_id: &str) -> bool {
+        match self {
+            LayoutNode::Leaf { id } => id == target_id,
+            LayoutNode::Split { left, right, .. } => {
+                left.contains_leaf(target_id) || right.contains_leaf(target_id)
+            }
+            LayoutNode::Grid { children, .. } => {
+                children.iter().any(|c| c.contains_leaf(target_id))
+            }
+            LayoutNode::Absolute { child, .. } => child.contains_leaf(target_id),
+        }
+    }
+
+    /// Like `insert_split` but places the new leaf as the LEFT (first) child
+    /// instead of the right. Returns true if the target was found.
+    pub fn insert_split_before(
+        &mut self,
+        target_id: &str,
+        direction: Direction,
+        new_id: &str,
+        ratio: f64,
+    ) -> bool {
+        match self {
+            LayoutNode::Leaf { id } if id == target_id => {
+                let original = LayoutNode::leaf(id);
+                let new_leaf = LayoutNode::leaf(new_id);
+                *self = LayoutNode::split(direction, ratio, new_leaf, original);
+                true
+            }
+            LayoutNode::Split { left, right, .. } => {
+                left.insert_split_before(target_id, direction, new_id, ratio)
+                    || right.insert_split_before(target_id, direction, new_id, ratio)
+            }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.insert_split_before(target_id, direction, new_id, ratio) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                child.insert_split_before(target_id, direction, new_id, ratio)
+            }
+            _ => false,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +783,162 @@ impl LayoutTree {
     /// Update the split ratio for the parent split of the given pane.
     pub fn set_ratio(&mut self, pane_id: &str, ratio: f64) -> bool {
         self.root.set_ratio_for(pane_id, ratio)
+    }
+
+    // -----------------------------------------------------------------------
+    // Tiling WM operations
+    // -----------------------------------------------------------------------
+
+    /// Find the spatial neighbor in `nav` direction and swap it with the
+    /// focused pane. Focus stays on `self.focused` (the ID travels with the
+    /// swap).
+    pub fn swap_toward(&mut self, nav: Nav) {
+        if let Some(neighbor) = self.find_spatial_neighbor(nav) {
+            self.root.swap_leaves(&self.focused, &neighbor);
+        }
+    }
+
+    /// Equalize all split ratios and grid weights in the tree.
+    pub fn equalize(&mut self) {
+        self.root.equalize();
+    }
+
+    /// Toggle the split direction of the focused pane's parent between
+    /// Horizontal and Vertical.
+    pub fn rotate(&mut self) {
+        self.root.flip_parent_direction(&self.focused);
+    }
+
+    /// Grow or shrink the focused pane toward `nav` by adjusting the nearest
+    /// matching ancestor split ratio.
+    pub fn grow(&mut self, nav: Nav) {
+        let (delta, axis) = match nav {
+            Nav::Left => (-0.05, Direction::Horizontal),
+            Nav::Right => (0.05, Direction::Horizontal),
+            Nav::Up => (-0.05, Direction::Vertical),
+            Nav::Down => (0.05, Direction::Vertical),
+        };
+        self.root.adjust_ratio_toward(&self.focused, delta, axis);
+    }
+
+    /// Move the focused pane next to its spatial neighbor in `nav` direction.
+    /// The focused pane is detached from its current position and re-inserted
+    /// adjacent to the neighbor.
+    pub fn move_pane(&mut self, nav: Nav) {
+        let neighbor = match self.find_spatial_neighbor(nav) {
+            Some(n) => n,
+            None => return,
+        };
+        let focused = self.focused.clone();
+
+        // Detach the focused pane
+        if !self.root.remove_leaf(&focused) {
+            return;
+        }
+
+        let direction = match nav {
+            Nav::Left | Nav::Right => Direction::Horizontal,
+            Nav::Up | Nav::Down => Direction::Vertical,
+        };
+
+        match nav {
+            Nav::Left | Nav::Up => {
+                self.root
+                    .insert_split_before(&neighbor, direction, &focused, 0.5);
+            }
+            Nav::Right | Nav::Down => {
+                self.root
+                    .insert_split(&neighbor, direction, &focused, 0.5);
+            }
+        }
+
+        self.focused = focused;
+    }
+
+    /// Shared helper: find the nearest spatial neighbor in `nav` direction
+    /// using bounding-box geometry (same algorithm as `navigate`).
+    fn find_spatial_neighbor(&self, nav: Nav) -> Option<String> {
+        let bounds = self
+            .root
+            .compute_bounds(Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 });
+        if bounds.len() <= 1 {
+            return None;
+        }
+
+        let current = match bounds.iter().find(|(id, _)| id == &self.focused) {
+            Some((_, r)) => *r,
+            None => return None,
+        };
+
+        let cx = current.x + current.w / 2.0;
+        let cy = current.y + current.h / 2.0;
+
+        let mut best: Option<(String, f64)> = None;
+
+        for (id, r) in &bounds {
+            if id == &self.focused {
+                continue;
+            }
+
+            let tx = r.x + r.w / 2.0;
+            let ty = r.y + r.h / 2.0;
+
+            let valid = match nav {
+                Nav::Left => {
+                    tx < cx - 0.001
+                        && ranges_overlap(
+                            r.y,
+                            r.y + r.h,
+                            current.y,
+                            current.y + current.h,
+                        )
+                }
+                Nav::Right => {
+                    tx > cx + 0.001
+                        && ranges_overlap(
+                            r.y,
+                            r.y + r.h,
+                            current.y,
+                            current.y + current.h,
+                        )
+                }
+                Nav::Up => {
+                    ty < cy - 0.001
+                        && ranges_overlap(
+                            r.x,
+                            r.x + r.w,
+                            current.x,
+                            current.x + current.w,
+                        )
+                }
+                Nav::Down => {
+                    ty > cy + 0.001
+                        && ranges_overlap(
+                            r.x,
+                            r.x + r.w,
+                            current.x,
+                            current.x + current.w,
+                        )
+                }
+            };
+
+            if !valid {
+                continue;
+            }
+
+            let dist = match nav {
+                Nav::Left => (cx - tx) + (cy - ty).abs() * 0.1,
+                Nav::Right => (tx - cx) + (cy - ty).abs() * 0.1,
+                Nav::Up => (cy - ty) + (cx - tx).abs() * 0.1,
+                Nav::Down => (ty - cy) + (cx - tx).abs() * 0.1,
+            };
+
+            if best.as_ref().map_or(true, |(_, d)| dist < *d) {
+                best = Some((id.clone(), dist));
+            }
+        }
+
+        best.map(|(id, _)| id)
     }
 
     /// Flat list of all panes as JSON: [{pane_id}, ...]
@@ -874,5 +1218,138 @@ mod tests {
         assert_eq!(bounds[0].1.y, 100.0);
         assert_eq!(bounds[0].1.w, 800.0);
         assert_eq!(bounds[0].1.h, 800.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tiling WM operation tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn swap_leaves_works() {
+        let mut node = LayoutNode::split(
+            Direction::Horizontal,
+            0.5,
+            LayoutNode::leaf("a"),
+            LayoutNode::leaf("b"),
+        );
+        assert!(node.swap_leaves("a", "b"));
+        let ids = node.leaf_ids();
+        assert_eq!(ids[0], "b");
+        assert_eq!(ids[1], "a");
+    }
+
+    #[test]
+    fn equalize_resets_ratios() {
+        let mut node = LayoutNode::split(
+            Direction::Horizontal,
+            0.3,
+            LayoutNode::leaf("a"),
+            LayoutNode::split(
+                Direction::Vertical,
+                0.8,
+                LayoutNode::leaf("b"),
+                LayoutNode::leaf("c"),
+            ),
+        );
+        node.equalize();
+        match &node {
+            LayoutNode::Split { ratio, right, .. } => {
+                assert!((ratio - 0.5).abs() < f64::EPSILON);
+                match right.as_ref() {
+                    LayoutNode::Split { ratio: inner, .. } => {
+                        assert!((inner - 0.5).abs() < f64::EPSILON);
+                    }
+                    _ => panic!("expected inner split"),
+                }
+            }
+            _ => panic!("expected split"),
+        }
+    }
+
+    #[test]
+    fn rotate_flips_direction() {
+        let mut tree = LayoutTree {
+            root: LayoutNode::split(
+                Direction::Horizontal,
+                0.5,
+                LayoutNode::leaf("pane-1"),
+                LayoutNode::leaf("pane-2"),
+            ),
+            focused: "pane-1".into(),
+            zoomed: None,
+            next_id: 3,
+        };
+        tree.rotate();
+        match &tree.root {
+            LayoutNode::Split { direction, .. } => {
+                assert_eq!(*direction, Direction::Vertical);
+            }
+            _ => panic!("expected split"),
+        }
+    }
+
+    #[test]
+    fn grow_adjusts_ratio() {
+        let mut tree = LayoutTree {
+            root: LayoutNode::split(
+                Direction::Horizontal,
+                0.5,
+                LayoutNode::leaf("pane-1"),
+                LayoutNode::leaf("pane-2"),
+            ),
+            focused: "pane-1".into(),
+            zoomed: None,
+            next_id: 3,
+        };
+        // Growing left means the left child shrinks (delta = -0.05 on left
+        // subtree means ratio decreases).
+        tree.grow(Nav::Left);
+        match &tree.root {
+            LayoutNode::Split { ratio, .. } => {
+                assert!((*ratio - 0.45).abs() < f64::EPSILON);
+            }
+            _ => panic!("expected split"),
+        }
+        // Growing right from the left pane means ratio increases.
+        tree.grow(Nav::Right);
+        match &tree.root {
+            LayoutNode::Split { ratio, .. } => {
+                assert!((*ratio - 0.5).abs() < f64::EPSILON);
+            }
+            _ => panic!("expected split"),
+        }
+    }
+
+    #[test]
+    fn move_pane_repositions() {
+        // 3-pane layout: Split(H, [A, Split(V, [B, C])])
+        let mut tree = LayoutTree {
+            root: LayoutNode::split(
+                Direction::Horizontal,
+                0.5,
+                LayoutNode::leaf("a"),
+                LayoutNode::split(
+                    Direction::Vertical,
+                    0.5,
+                    LayoutNode::leaf("b"),
+                    LayoutNode::leaf("c"),
+                ),
+            ),
+            focused: "b".into(),
+            zoomed: None,
+            next_id: 4,
+        };
+        // Move B to the left of A
+        tree.move_pane(Nav::Left);
+        let ids = tree.root.leaf_ids();
+        // B should now appear before A in tree order
+        assert_eq!(ids.len(), 3);
+        let b_pos = ids.iter().position(|id| id == "b").unwrap();
+        let a_pos = ids.iter().position(|id| id == "a").unwrap();
+        assert!(
+            b_pos < a_pos,
+            "expected b before a, got b@{b_pos} a@{a_pos} in {ids:?}"
+        );
+        assert_eq!(tree.focused, "b");
     }
 }

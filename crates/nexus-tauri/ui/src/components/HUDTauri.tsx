@@ -24,7 +24,7 @@ export default function HUDTauri() {
   useEffect(() => {
     const interval = setInterval(async () => {
         try {
-            const result = await dispatchCommand("hud.list", {});
+            const result = await dispatchCommand("hud.frames", {});
             if (Array.isArray(result)) {
                 setFrames(result as HUDFrame[]);
             }

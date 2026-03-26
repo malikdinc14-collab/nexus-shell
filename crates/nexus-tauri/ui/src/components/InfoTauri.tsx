@@ -50,7 +50,7 @@ export default function InfoTauri({ paneId }: Props) {
   const [info, setInfo] = useState<InfoData | null>(null);
 
   useEffect(() => {
-    dispatchCommand("info.get")
+    dispatchCommand("info.system")
       .then((result: any) => {
         if (result && typeof result === "object") {
           setInfo(result as InfoData);

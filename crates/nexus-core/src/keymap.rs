@@ -106,6 +106,22 @@ Alt+w = pane.close
 Alt+q = pane.close
 Alt+- = pane.minimize
 
+# Swap panes
+Alt+Shift+h = pane.swap_left
+Alt+Shift+j = pane.swap_down
+Alt+Shift+k = pane.swap_up
+Alt+Shift+l = pane.swap_right
+
+# Resize panes
+Alt+Ctrl+h = pane.grow_left
+Alt+Ctrl+j = pane.grow_down
+Alt+Ctrl+k = pane.grow_up
+Alt+Ctrl+l = pane.grow_right
+
+# Layout
+Alt+= = layout.equalize
+Alt+r = layout.rotate
+
 # Stack (tab) operations
 Alt+n = stack.push
 Alt+[ = stack.prev
@@ -201,6 +217,21 @@ pub fn default_commands() -> Vec<CommandEntry> {
             category: "Pane".into(),
             binding: None,
         },
+        // Swap
+        CommandEntry { id: "pane.swap_left".into(), label: "Swap Pane Left".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.swap_right".into(), label: "Swap Pane Right".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.swap_up".into(), label: "Swap Pane Up".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.swap_down".into(), label: "Swap Pane Down".into(), category: "Pane".into(), binding: None },
+        // Resize
+        CommandEntry { id: "pane.grow_left".into(), label: "Grow Pane Left".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.grow_right".into(), label: "Grow Pane Right".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.grow_up".into(), label: "Grow Pane Up".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.grow_down".into(), label: "Grow Pane Down".into(), category: "Pane".into(), binding: None },
+        // Move
+        CommandEntry { id: "pane.move_left".into(), label: "Move Pane Left".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.move_right".into(), label: "Move Pane Right".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.move_up".into(), label: "Move Pane Up".into(), category: "Pane".into(), binding: None },
+        CommandEntry { id: "pane.move_down".into(), label: "Move Pane Down".into(), category: "Pane".into(), binding: None },
         CommandEntry {
             id: "pane.new.terminal".into(),
             label: "New Terminal Pane".into(),
@@ -275,6 +306,9 @@ pub fn default_commands() -> Vec<CommandEntry> {
             category: "Layout".into(),
             binding: None,
         },
+        // Layout (tiling)
+        CommandEntry { id: "layout.equalize".into(), label: "Equalize Layout".into(), category: "Layout".into(), binding: None },
+        CommandEntry { id: "layout.rotate".into(), label: "Rotate Split".into(), category: "Layout".into(), binding: None },
         // Display
         CommandEntry {
             id: "display.gaps".into(),
