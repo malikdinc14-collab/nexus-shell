@@ -51,7 +51,7 @@ fn layout_export_import_roundtrip() {
     let loaded = persistence::load_layout_export(&layouts_dir, "test-layout").unwrap();
     let imported_tree = LayoutTree::from_export(loaded.root);
 
-    assert_eq!(imported_tree.root.leaf_ids().len(), 4);
+    assert_eq!(imported_tree.root.leaf_ids().len(), 1);
     assert_eq!(imported_tree.root.leaf_ids()[0], "pane-1");
 }
 

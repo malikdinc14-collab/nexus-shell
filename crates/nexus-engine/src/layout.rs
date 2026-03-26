@@ -206,23 +206,11 @@ impl LayoutTree {
     ///       └── Leaf(chat)
     /// ```
     pub fn default_layout() -> Self {
-        let explorer = LayoutNode::leaf("pane-1");
-        let editor = LayoutNode::leaf("pane-2");
-        let terminal = LayoutNode::leaf("pane-3");
-        let chat = LayoutNode::leaf("pane-4");
-
-        let editor_terminal =
-            LayoutNode::split(Direction::Vertical, 0.7, editor, terminal);
-        let main_chat =
-            LayoutNode::split(Direction::Horizontal, 0.75, editor_terminal, chat);
-        let root =
-            LayoutNode::split(Direction::Horizontal, 0.18, explorer, main_chat);
-
         LayoutTree {
-            root,
-            focused: "pane-2".into(),
+            root: LayoutNode::leaf("pane-1"),
+            focused: "pane-1".into(),
             zoomed: None,
-            next_id: 5,
+            next_id: 2,
         }
     }
 
@@ -444,16 +432,38 @@ impl LayoutTree {
 mod tests {
     use super::*;
 
+    /// 4-pane layout for tests: explorer | editor+terminal | chat
+    fn test_layout() -> LayoutTree {
+        let explorer = LayoutNode::leaf("pane-1");
+        let editor = LayoutNode::leaf("pane-2");
+        let terminal = LayoutNode::leaf("pane-3");
+        let chat = LayoutNode::leaf("pane-4");
+
+        let editor_terminal =
+            LayoutNode::split(Direction::Vertical, 0.7, editor, terminal);
+        let main_chat =
+            LayoutNode::split(Direction::Horizontal, 0.75, editor_terminal, chat);
+        let root =
+            LayoutNode::split(Direction::Horizontal, 0.18, explorer, main_chat);
+
+        LayoutTree {
+            root,
+            focused: "pane-2".into(),
+            zoomed: None,
+            next_id: 5,
+        }
+    }
+
     #[test]
-    fn default_layout_has_four_panes() {
+    fn default_layout_is_single_pane() {
         let tree = LayoutTree::default_layout();
-        assert_eq!(tree.root.leaf_ids().len(), 4);
-        assert_eq!(tree.focused, "pane-2");
+        assert_eq!(tree.root.leaf_ids().len(), 1);
+        assert_eq!(tree.focused, "pane-1");
     }
 
     #[test]
     fn split_focused_creates_new_pane() {
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
         let new_id = tree.split_focused(Direction::Vertical);
         assert_eq!(tree.root.leaf_ids().len(), 5);
         assert_eq!(tree.focused, new_id);
@@ -461,7 +471,7 @@ mod tests {
 
     #[test]
     fn close_pane_removes_and_refocuses() {
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
         tree.set_focus("pane-3");
         assert!(tree.close_pane("pane-3"));
         assert_eq!(tree.root.leaf_ids().len(), 3);
@@ -481,47 +491,39 @@ mod tests {
 
     #[test]
     fn navigate_geometric_horizontal() {
-        // Default layout: explorer(left) | editor(top-center) | chat(right)
-        //                                | terminal(bottom-center)
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
 
-        // Start at editor (pane-2), go right should reach chat (pane-4)
         tree.set_focus("pane-2");
         tree.navigate(Nav::Right);
         assert_eq!(tree.focused, "pane-4");
 
-        // From chat, go left should reach editor or terminal
         tree.navigate(Nav::Left);
         assert!(tree.focused == "pane-2" || tree.focused == "pane-3");
     }
 
     #[test]
     fn navigate_geometric_vertical() {
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
 
-        // Start at editor (pane-2), go down should reach terminal (pane-3)
         tree.set_focus("pane-2");
         tree.navigate(Nav::Down);
         assert_eq!(tree.focused, "pane-3");
 
-        // From terminal, go up should reach editor
         tree.navigate(Nav::Up);
         assert_eq!(tree.focused, "pane-2");
     }
 
     #[test]
     fn navigate_wraps_around() {
-        let mut tree = LayoutTree::default_layout();
-        // Start at explorer (leftmost), go left should wrap
+        let mut tree = test_layout();
         tree.set_focus("pane-1");
         tree.navigate(Nav::Left);
-        // Should wrap to rightmost pane (chat)
         assert_eq!(tree.focused, "pane-4");
     }
 
     #[test]
     fn zoom_toggles() {
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
         assert!(tree.zoomed.is_none());
         tree.toggle_zoom();
         assert_eq!(tree.zoomed, Some("pane-2".into()));
@@ -531,7 +533,7 @@ mod tests {
 
     #[test]
     fn set_focus_unzooms_on_different_pane() {
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
         tree.toggle_zoom();
         assert!(tree.zoomed.is_some());
         tree.set_focus("pane-1");
@@ -540,9 +542,8 @@ mod tests {
 
     #[test]
     fn set_ratio_clamps() {
-        let mut tree = LayoutTree::default_layout();
+        let mut tree = test_layout();
         assert!(tree.set_ratio("pane-1", 0.05));
-        // Should be clamped to 0.1
     }
 
     #[test]
@@ -581,8 +582,8 @@ mod tests {
 
     #[test]
     fn pane_list_returns_json_array() {
-        let mut tree = LayoutTree::default_layout();
-        // default_layout has 4 panes; split adds a 5th
+        let mut tree = test_layout();
+        // test_layout has 4 panes; split adds a 5th
         tree.split_focused(Direction::Vertical);
         let list = tree.pane_list();
         assert!(list.is_array());

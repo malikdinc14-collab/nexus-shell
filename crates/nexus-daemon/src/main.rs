@@ -51,6 +51,7 @@ async fn main() {
         println!("Options:");
         println!("  --socket PATH    Command socket path override");
         println!("  --mux MODE       Mux backend: null (default) or tmux");
+        println!("  --default        Skip session restore, start with fresh layout");
         println!("  -h, --help       Print this help");
         return;
     }
@@ -123,9 +124,16 @@ async fn main() {
     let claude = ClaudeAdapter::new(ctx.clone());
     let fs_explorer = FsExplorer::new();
 
-    let cwd = std::env::current_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "/tmp".into());
+    // Use --cwd arg if provided, otherwise current directory
+    let cwd = args
+        .windows(2)
+        .find(|w| w[0] == "--cwd")
+        .map(|w| w[1].clone())
+        .unwrap_or_else(|| {
+            std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| "/tmp".into())
+        });
 
     let mux: Box<dyn Mux> = match mux_mode {
         "tmux" => {
@@ -146,15 +154,20 @@ async fn main() {
     core.create_workspace("nexus", &cwd);
 
     // -- Attempt restore from previous session --
-    let session_dir = persistence::session_dir("nexus");
-    match persistence::load_workspace(&session_dir) {
-        Ok(save) => {
-            eprintln!("  restored session from {}", session_dir.display());
-            core.layout = save.layout;
-            core.stacks = save.stacks;
-        }
-        Err(_) => {
-            // No previous session or corrupt — start fresh
+    let skip_restore = args.iter().any(|a| a == "--default");
+    if skip_restore {
+        eprintln!("  --default: starting with fresh layout");
+    } else {
+        let session_dir = persistence::session_dir("nexus");
+        match persistence::load_workspace(&session_dir) {
+            Ok(save) => {
+                eprintln!("  restored session from {}", session_dir.display());
+                core.layout = save.layout;
+                core.stacks = save.stacks;
+            }
+            Err(_) => {
+                // No previous session or corrupt — start fresh
+            }
         }
     }
 
