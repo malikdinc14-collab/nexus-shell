@@ -25,6 +25,12 @@ body {
   overflow: hidden;
 }
 
+/* When Tauri transparency is active and display.background = "transparent",
+   JS sets body.dataset.transparent = "true" */
+body[data-transparent="true"] {
+  background: transparent;
+}
+
 #root {
   height: 100vh;
   display: flex;

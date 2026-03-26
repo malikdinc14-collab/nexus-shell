@@ -1,0 +1,22 @@
+# Mission: Project Boot Lists
+# Status: Alignment
+
+active_gate: gate_intent
+gates:
+  gate_intent:
+    status: active
+    artifact: proposals/idea.md
+  gate_invariant:
+    status: locked
+    artifact: proposals/requirements.md
+  gate_path:
+    status: locked
+    artifact: proposals/design.md
+  gate_synthesis:
+    status: locked
+    artifact: proposals/tasks.md
+
+metadata:
+  created_at: 2026-03-22T20:30:00Z
+  priority: 0
+  tags: ["core", "project-config", "phase-4a"]

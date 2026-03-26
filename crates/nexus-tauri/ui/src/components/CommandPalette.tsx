@@ -1,4 +1,4 @@
-// Command palette — Ctrl+\ to open.
+// Command palette — Alt+P to open.
 // Commands fetched from engine, grouped by category.
 
 import { useEffect, useMemo } from "react";
@@ -13,15 +13,11 @@ interface Props {
 }
 
 export default function CommandPalette({ isOpen, setIsOpen, onCommand, commands }: Props) {
+  // Escape to close (open/close is managed by App.tsx keyboard handler)
   useEffect(() => {
+    if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+\ or Cmd+\ to toggle
-      if (e.key === "\\" && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setIsOpen(!isOpen);
-      }
-      // Escape to close
-      if (e.key === "Escape" && isOpen) {
+      if (e.key === "Escape") {
         setIsOpen(false);
       }
     };

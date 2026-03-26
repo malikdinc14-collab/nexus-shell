@@ -42,18 +42,26 @@ export default function useTabStack(paneId: string): TabStackState {
       });
   }, [paneId]);
 
-  // Subscribe to stack-changed events
+  // Subscribe to stack-changed events — re-fetch full state on any mutation
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     onStackChanged((data: any) => {
       // Only update if this event is for our pane
-      if (data?.identity === paneIdRef.current || data?.stack_id === paneIdRef.current) {
-        if (Array.isArray(data.tabs)) {
-          setTabs(data.tabs);
-          const active = data.tabs.findIndex((t: any) => t.is_active);
-          setActiveIndex(active >= 0 ? active : 0);
-        }
-      }
+      const isOurs = data?.identity === paneIdRef.current
+        || data?.stack_id === paneIdRef.current
+        || data?.pane === paneIdRef.current;
+      if (!isOurs) return;
+
+      // Re-fetch full stack state (event payloads don't include tab list)
+      dispatchCommand("stack.list", { identity: paneIdRef.current })
+        .then((result: any) => {
+          if (result?.status === "ok" && Array.isArray(result.tabs)) {
+            setTabs(result.tabs);
+            const active = result.tabs.findIndex((t: any) => t.is_active);
+            setActiveIndex(active >= 0 ? active : 0);
+          }
+        })
+        .catch(() => {});
     }).then((fn) => { unlisten = fn; });
     return () => { if (unlisten) unlisten(); };
   }, []);

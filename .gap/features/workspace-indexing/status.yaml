@@ -1,0 +1,19 @@
+# Mission: Workspace Embedding & Indexing
+# Status: Alignment
+
+active_gate: gate_intent
+gates:
+  gate_intent:
+    status: active
+    artifact: proposals/idea.md
+  gate_invariant:
+    status: locked
+  gate_path:
+    status: locked
+  gate_synthesis:
+    status: locked
+
+metadata:
+  created_at: 2026-03-22T21:30:00Z
+  priority: 1
+  tags: ["intelligence", "embeddings", "model-server", "phase-4b"]

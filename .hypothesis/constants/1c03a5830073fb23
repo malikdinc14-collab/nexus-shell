@@ -1,4 +1,0 @@
-# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/adapters/menu/textual_menu.py
-# hypothesis_version: 6.151.9
-
-['#grid-wrapper', '#header', '#menu-grid', '#menu-list', '#search-bar', '#status-bar', '-visible', '/', '/search...', 'ACTION', 'Back', 'DISABLED', 'Down', 'Left', 'NONE', 'NexusTile', 'Quit', 'Right', 'SEPARATOR', 'Search', 'Select', 'Select:', 'Unknown', 'Up', '_root', 'cursor_down', 'cursor_left', 'cursor_right', 'cursor_up', 'description', 'enter', 'escape', 'go_back', 'grid-wrapper', 'h', 'header', 'hidden', 'icon', 'j', 'k', 'l', 'label', 'layout', 'list', 'main-container', 'menu', 'menu-grid', 'menu-list', 'name', 'payload', 'q', 'quit', 'run_item', 'search-bar', 'status-bar', 'textual', 'tile-desc', 'tile-icon', 'tile-label', 'toggle_search', 'type', '📦']

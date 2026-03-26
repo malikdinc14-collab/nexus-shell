@@ -1,4 +1,0 @@
-# file: /home/ai-sb/projects/nexus-shell/core/engine/capabilities/registry.py
-# hypothesis_version: 6.151.9
-
-['/bin/bash', '/bin/cat', '/bin/ls', '/usr/bin/grep', '/usr/bin/vim', '/usr/bin/zsh', 'aider', 'bash', 'bat', 'cat', 'chat', 'echo', 'editor', 'explorer', 'get_launch_command', 'glow', 'grep', 'ls', 'mc', 'menu', 'micro', 'nano', 'nvim', 'opencode', 'ranger', 'rg', 'roles', 'search', 'sh', 'terminal', 'vi', 'viewer', 'vim', 'yazi', 'zsh']

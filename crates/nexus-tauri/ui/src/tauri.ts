@@ -173,3 +173,14 @@ export function onLayoutChanged(callback: (layout: LayoutData) => void): Promise
 export function onStackChanged(callback: (data: any) => void): Promise<() => void> {
   return listen("stack-changed", (event: any) => callback(event.payload));
 }
+
+export interface DisplaySettings {
+  gap: number;
+  background: string;
+  border_radius: number;
+  pane_opacity: number;
+}
+
+export function onDisplayChanged(callback: (settings: DisplaySettings) => void): Promise<() => void> {
+  return listen("display-changed", (event: any) => callback(event.payload));
+}

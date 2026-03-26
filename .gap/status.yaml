@@ -1,0 +1,17 @@
+steps:
+  design:
+    approver: user
+    status: complete
+    timestamp: '2026-03-22T15:26:54.054822'
+  idea:
+    approver: user
+    status: complete
+    timestamp: '2026-03-22T15:15:47.259426'
+  requirements:
+    approver: user
+    status: complete
+    timestamp: '2026-03-22T15:15:19.952565'
+  tasks:
+    approver: user
+    status: complete
+    timestamp: '2026-03-22T15:32:07.508428'

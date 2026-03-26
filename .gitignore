@@ -24,3 +24,17 @@ core/kernel/layout/*.bak
 templates
 Plans/
 crates/target/
+
+# Claude Code / AI tooling
+.claude/
+
+# Data caches
+data/
+data-gym-cache/
+
+# Editor artifacts
+.nvimlog
+.swp
+.rooignore
+*.swp
+*~
