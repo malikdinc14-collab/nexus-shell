@@ -7,6 +7,7 @@ pub mod constants;
 pub mod error;
 pub mod keymap;
 pub mod mux;
+pub mod surface;
 
 pub use adapters::{ClaudeAdapter, FsExplorer};
 pub use capability::{
@@ -21,3 +22,4 @@ pub use keymap::{CommandEntry, KeyBinding};
 pub use mux::{
     ContainerInfo, Dimensions, Geometry, HudModule, MenuItem, Mux, NullMux, SplitDirection,
 };
+pub use surface::{SurfaceCapabilities, SurfaceMode, SurfaceRegistration, SurfaceRegistry};

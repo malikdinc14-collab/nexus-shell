@@ -1,7 +1,7 @@
 //! Integration test: full save -> restore roundtrip.
 
 use nexus_engine::persistence;
-use nexus_engine::{Direction, LayoutTree, PaneType, StackManager};
+use nexus_engine::{Direction, LayoutTree, StackManager};
 use std::collections::HashMap;
 
 #[test]
@@ -10,7 +10,7 @@ fn full_save_restore_roundtrip() {
     let session_dir = dir.path().join("sessions").join("roundtrip");
 
     let mut layout = LayoutTree::default_layout();
-    layout.split_focused(Direction::Vertical, PaneType::Chat);
+    layout.split_focused(Direction::Vertical);
     let original_ids = layout.root.leaf_ids();
     let original_focused = layout.focused.clone();
 

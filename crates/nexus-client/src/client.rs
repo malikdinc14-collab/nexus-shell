@@ -151,6 +151,46 @@ impl NexusClient {
         self.request("session.create", serde_json::json!({"name": name, "cwd": cwd}))
     }
 
+    pub fn session_save(&mut self, name: &str) -> Result<serde_json::Value, NexusError> {
+        self.request("session.save", serde_json::json!({"name": name}))
+    }
+
+    pub fn session_restore(&mut self, name: &str) -> Result<serde_json::Value, NexusError> {
+        self.request("session.restore", serde_json::json!({"name": name}))
+    }
+
+    pub fn session_delete(&mut self, name: &str) -> Result<serde_json::Value, NexusError> {
+        self.request("session.delete", serde_json::json!({"name": name}))
+    }
+
+    pub fn session_snapshots(&mut self) -> Result<serde_json::Value, NexusError> {
+        self.request("session.snapshots", serde_json::Value::Null)
+    }
+
+    pub fn layout_export(
+        &mut self,
+        name: &str,
+        description: Option<&str>,
+        scope: Option<&str>,
+    ) -> Result<serde_json::Value, NexusError> {
+        let mut params = serde_json::json!({"name": name});
+        if let Some(desc) = description {
+            params["description"] = serde_json::json!(desc);
+        }
+        if let Some(s) = scope {
+            params["scope"] = serde_json::json!(s);
+        }
+        self.request("layout.export", params)
+    }
+
+    pub fn layout_import(&mut self, name: &str) -> Result<serde_json::Value, NexusError> {
+        self.request("layout.import", serde_json::json!({"name": name}))
+    }
+
+    pub fn layout_list(&mut self) -> Result<serde_json::Value, NexusError> {
+        self.request("layout.list", serde_json::Value::Null)
+    }
+
     pub fn close_pane(&mut self, pane_id: &str) -> Result<serde_json::Value, NexusError> {
         self.request("pane.close", serde_json::json!({"pane_id": pane_id}))
     }

@@ -30,7 +30,7 @@ pub use persistence::{WorkspaceSave, LayoutExport, PaneState};
 pub use dispatch::dispatch;
 pub use registry::CapabilityRegistry;
 pub use bus::{EventBus, EventType, TypedEvent};
-pub use layout::{Direction, LayoutNode, LayoutTree, Nav, PaneType};
+pub use layout::{Direction, LayoutNode, LayoutTree, Nav};
 pub use stack::{Tab, TabStack, TabStatus};
 pub use pty::PtyManager;
 pub use stack_manager::StackManager;

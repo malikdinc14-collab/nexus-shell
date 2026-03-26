@@ -92,18 +92,33 @@ pub fn cascade_keymaps(layers: &[Vec<KeyBinding>]) -> Vec<KeyBinding> {
 pub fn default_keymap() -> Vec<KeyBinding> {
     parse_keymap_str(
         "\
+# Navigation
 Alt+h = navigate.left
 Alt+j = navigate.down
 Alt+k = navigate.up
 Alt+l = navigate.right
+
+# Pane management
 Alt+v = pane.split.vertical
 Alt+s = pane.split.horizontal
-Alt+z = pane.zoom
+Alt+f = pane.zoom
 Alt+w = pane.close
-Alt+t = pane.new.terminal
-Alt+c = pane.new.chat
+Alt+q = pane.close
+Alt+- = pane.minimize
+
+# Stack (tab) operations
+Alt+n = stack.push
+Alt+[ = stack.prev
+Alt+] = stack.next
+Alt+t = stack.list
+
+# Pane creation
 Alt+e = pane.new.explorer
-Ctrl+\\ = command_palette.toggle
+Alt+c = pane.new.chat
+
+# UI
+Alt+p = command_palette.toggle
+Ctrl+\\ = command_line.toggle
 ",
     )
 }
@@ -162,6 +177,12 @@ pub fn default_commands() -> Vec<CommandEntry> {
             binding: None,
         },
         CommandEntry {
+            id: "pane.minimize".into(),
+            label: "Minimize Pane".into(),
+            category: "Pane".into(),
+            binding: None,
+        },
+        CommandEntry {
             id: "pane.new.terminal".into(),
             label: "New Terminal Pane".into(),
             category: "Pane".into(),
@@ -186,6 +207,12 @@ pub fn default_commands() -> Vec<CommandEntry> {
             category: "UI".into(),
             binding: None,
         },
+        CommandEntry {
+            id: "command_line.toggle".into(),
+            label: "Command Line".into(),
+            category: "UI".into(),
+            binding: None,
+        },
         // Stack
         CommandEntry {
             id: "stack.push".into(),
@@ -196,6 +223,24 @@ pub fn default_commands() -> Vec<CommandEntry> {
         CommandEntry {
             id: "stack.pop".into(),
             label: "Pop from Stack".into(),
+            category: "Stack".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "stack.prev".into(),
+            label: "Previous Tab".into(),
+            category: "Stack".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "stack.next".into(),
+            label: "Next Tab".into(),
+            category: "Stack".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "stack.list".into(),
+            label: "Show Stack".into(),
             category: "Stack".into(),
             binding: None,
         },

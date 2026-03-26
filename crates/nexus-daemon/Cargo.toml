@@ -8,6 +8,7 @@ description = "Nexus Shell daemon — shared NexusCore over unix socket for mult
 nexus-core = { path = "../nexus-core" }
 nexus-engine = { path = "../nexus-engine" }
 nexus-client = { path = "../nexus-client" }
+nexus-tmux = { path = "../nexus-tmux" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

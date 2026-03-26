@@ -80,8 +80,6 @@ enum LayoutAction {
     Split {
         #[arg(short, long, default_value = "vertical")]
         direction: String,
-        #[arg(short, long, default_value = "terminal")]
-        pane_type: String,
     },
     Navigate { direction: String },
     Focus { pane_id: String },
@@ -186,10 +184,9 @@ fn handle_stack(client: &mut NexusClient, action: StackAction) -> Result<serde_j
 fn handle_layout(client: &mut NexusClient, action: LayoutAction) -> Result<serde_json::Value, nexus_core::NexusError> {
     match action {
         LayoutAction::Show => client.layout(),
-        LayoutAction::Split { direction, pane_type } => {
+        LayoutAction::Split { direction } => {
             client.request("pane.split", serde_json::json!({
                 "direction": direction,
-                "pane_type": pane_type,
             }))
         }
         LayoutAction::Navigate { direction } => client.navigate(&direction),

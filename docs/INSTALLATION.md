@@ -1,51 +1,98 @@
-# Installation Guide 🛠️
+# Installation
 
-Nexus Shell is designed to be portable and isolated. You can install it on macOS (MacBook/iMac) or Linux (including the uConsole).
+## Prerequisites
 
-## 1. Quick Install (Scripted)
+**Required:**
+- Rust toolchain (rustup recommended): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- A Unix-like OS (Linux or macOS)
 
-The fastest way to get Nexus up and running is using the provided install script:
+**Optional (for specific surfaces):**
+
+| Surface | Requirements |
+|---------|-------------|
+| tmux | `tmux` (any recent version) |
+| Tauri desktop | `cargo install tauri-cli`, Node.js 18+, system WebView (WebKitGTK on Linux) |
+| Sway/i3 | `swaymsg` or `i3-msg` (planned) |
+
+**Optional (for full feature set):**
+- `fzf` — fuzzy finder (used by some capabilities)
+- `ripgrep` (`rg`) — fast search
+- `fd` — file discovery
+- Neovim — editor integration
+
+## Building from Source
 
 ```bash
-# Clone the repository
 git clone https://github.com/samir-alsayad/nexus-shell.git
-cd nexus-shell
-
-# Run the local installer
-./install_local.sh
+cd nexus-shell/crates
+cargo build --release
 ```
 
-## 2. Manual Prerequisites
+Binaries are in `crates/target/release/`:
+- `nexus-daemon` — the shared engine daemon
+- `nexus` — CLI client
 
-Nexus relies on a suite of high-performance CLI tools. Ensure the following are installed via `brew` or `apt`:
-
-- **Tmux** (The Orchestration Engine)
-- **Fzf** (Fuzzy Finder)
-- **Ripgrep (rg)** (Fast Search)
-- **Fd** (File Discovery)
-- **JQ & YQ** (JSON/YAML processing)
-- **Neovim** (The Core Editor)
-
-## 3. Post-Installation
-
-Once installed, you can launch Nexus by calling the `nxs` binary (added to your PATH by the installer):
+### Install to PATH
 
 ```bash
-nxs
+cd crates
+cargo install --path nexus-daemon
+cargo install --path nexus-cli
 ```
 
-## 4. Tooling Strategy: System vs. Isolated
+### Tauri Desktop App
 
-Nexus uses a dual-path execution strategy for its modular workstation:
+```bash
+cd crates/nexus-tauri/ui
+npm install
 
-- **System Tools (Global)**: By default, Nexus checks your system `PATH`. If you have `lazygit` or `btop` installed via `brew`, Nexus will use them.
-- **Isolated Modules (Local)**: For specialized creative tools or custom AI dispatchers, Nexus can use "Internal" versions located in the `services/` or `lib/` directories. 
-- **Portability**: This allows you to have a production-grade IDE on your MacBook while maintaining a lightweight, self-contained set of scripts on the **uConsole**.
+cd ..
+cargo tauri build    # production build
+# or
+cargo tauri dev      # development mode with hot-reload
+```
 
-## 5. Hardware Optimization
+## Quick Start
 
-### MacBook & Desktop
-For maximum performance, ensure `iTerm2` or `Ghostty` is used. Nexus leverages Ghostty's GPU-native features for future rich-media rendering.
+```bash
+# Option A: Just start using it (daemon auto-launches)
+nexus hello
 
-### uConsole
-If you are running on the **uConsole**, Nexus will auto-detect the terminal dimensions. A minimum of 80x24 is recommended for the specialized creative compositions.
+# Option B: Start daemon explicitly
+nexus-daemon                # headless (for Tauri/web)
+nexus-daemon --mux tmux    # with tmux backend
+
+# Use the CLI
+nexus session info
+nexus pane list
+nexus layout show
+```
+
+See [USAGE.md](USAGE.md) for detailed usage across all surfaces.
+
+## Linux (WebKitGTK for Tauri)
+
+On Debian/Ubuntu:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget \
+  libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+On Arch:
+
+```bash
+sudo pacman -S webkit2gtk-4.1 base-devel curl wget openssl gtk3 librsvg libayatana-appindicator
+```
+
+## Verify Installation
+
+```bash
+# Check binaries
+nexus-daemon --help
+nexus --help
+
+# Run tests
+cd nexus-shell/crates
+cargo test --workspace
+```

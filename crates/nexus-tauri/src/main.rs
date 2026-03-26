@@ -72,6 +72,7 @@ fn main() {
                                 s if s.starts_with("agent.") => "agent-output",
                                 "layout.changed" => "layout-changed",
                                 "stack.changed" => "stack-changed",
+                                "editor.file_opened" => "editor-file-opened",
                                 _ => continue,
                             };
 

@@ -3,9 +3,7 @@
 //! Each command locks the NexusClient and sends a JSON-RPC request.
 
 use crate::AppState;
-use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use tauri::State;
 
 // -- Engine commands (delegated to daemon) -----------------------------------
@@ -54,57 +52,24 @@ pub fn get_session(state: State<AppState>) -> Result<Option<String>, String> {
     Ok(result.get("name").and_then(|v| v.as_str()).map(String::from))
 }
 
-// -- Filesystem commands (local, not through daemon) -------------------------
+// -- Filesystem commands (routed through daemon engine) ----------------------
 
-#[derive(Serialize)]
-pub struct DirEntry {
-    name: String,
-    path: String,
-    is_dir: bool,
+#[tauri::command]
+pub fn read_dir(state: State<AppState>, path: String) -> Result<serde_json::Value, String> {
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.request("fs.list", serde_json::json!({"path": path})).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
-    let dir = PathBuf::from(&path);
-    if !dir.is_dir() {
-        return Err(format!("Not a directory: {path}"));
-    }
-
-    let mut entries: Vec<DirEntry> = std::fs::read_dir(&dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            !name.starts_with('.') && name != "target" && name != "node_modules"
-                && name != "__pycache__"
-        })
-        .map(|e| {
-            let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            DirEntry {
-                name: e.file_name().to_string_lossy().to_string(),
-                path: e.path().to_string_lossy().to_string(),
-                is_dir,
-            }
-        })
-        .collect();
-
-    entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
-
-    Ok(entries)
+pub fn read_file(state: State<AppState>, path: String) -> Result<serde_json::Value, String> {
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.request("fs.read", serde_json::json!({"path": path})).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn read_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
-}
-
-#[tauri::command]
-pub fn get_cwd() -> Result<String, String> {
-    std::env::current_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .map_err(|e| e.to_string())
+pub fn get_cwd(state: State<AppState>) -> Result<serde_json::Value, String> {
+    let mut client = state.client.lock().map_err(|e| e.to_string())?;
+    client.request("fs.cwd", serde_json::json!({})).map_err(|e| e.to_string())
 }
 
 // -- Layout commands ---------------------------------------------------------
@@ -119,12 +84,10 @@ pub fn get_layout(state: State<AppState>) -> Result<serde_json::Value, String> {
 pub fn split_pane(
     state: State<AppState>,
     direction: String,
-    pane_type: String,
 ) -> Result<serde_json::Value, String> {
     let mut client = state.client.lock().map_err(|e| e.to_string())?;
     client.request("pane.split", serde_json::json!({
         "direction": direction,
-        "pane_type": pane_type,
     })).map_err(|e| e.to_string())
 }
 

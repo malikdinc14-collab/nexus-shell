@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::layout::{LayoutNode, LayoutTree, PaneType};
+use crate::layout::{LayoutNode, LayoutTree};
 use crate::stack_manager::StackManager;
 
 /// Current schema version. Reject saves with a different version.
@@ -30,7 +30,6 @@ pub struct WorkspaceSave {
 /// Per-pane runtime metadata not captured by the layout tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaneState {
-    pub pane_type: PaneType,
     pub cwd: Option<String>,
     pub command: Option<String>,
     #[serde(default)]
@@ -211,7 +210,7 @@ pub fn list_layout_exports(layouts_dir: &Path) -> Result<Vec<String>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::layout::{Direction, PaneType};
+    use crate::layout::Direction;
 
     fn sample_layout() -> LayoutTree {
         LayoutTree::default_layout()
@@ -221,7 +220,6 @@ mod tests {
     fn workspace_save_roundtrip() {
         let mut panes = HashMap::new();
         panes.insert("pane-1".to_string(), PaneState {
-            pane_type: PaneType::Terminal,
             cwd: Some("/tmp".to_string()),
             command: Some("/bin/zsh".to_string()),
             args: vec![],
@@ -247,7 +245,7 @@ mod tests {
         assert_eq!(restored.name, "test-workspace");
         assert_eq!(restored.layout.focused, focused);
         assert_eq!(restored.panes.len(), 1);
-        assert_eq!(restored.panes["pane-1"].pane_type, PaneType::Terminal);
+        assert_eq!(restored.panes["pane-1"].cwd, Some("/tmp".to_string()));
     }
 
     #[test]
@@ -258,8 +256,8 @@ mod tests {
             root: LayoutNode::split(
                 Direction::Horizontal,
                 0.25,
-                LayoutNode::leaf("p0", PaneType::Explorer),
-                LayoutNode::leaf("p1", PaneType::Editor),
+                LayoutNode::leaf("p0"),
+                LayoutNode::leaf("p1"),
             ),
         };
 
@@ -273,7 +271,7 @@ mod tests {
 
     #[test]
     fn pane_state_defaults_empty_args() {
-        let json = r#"{"pane_type":"Terminal","cwd":null,"command":null}"#;
+        let json = r#"{"cwd":null,"command":null}"#;
         let state: PaneState = serde_json::from_str(json).unwrap();
         assert!(state.args.is_empty());
     }

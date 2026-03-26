@@ -4,8 +4,10 @@
 
 use nexus_core::adapters::{ClaudeAdapter, FsExplorer};
 use nexus_core::capability::SystemContext;
+use nexus_core::mux::Mux;
 use nexus_engine::persistence;
 use nexus_engine::{NexusCore, NullMux, TypedEvent};
+use nexus_tmux::TmuxMux;
 use std::sync::{Arc, Mutex as StdMutex};
 
 async fn auto_save_loop(core: Arc<StdMutex<NexusCore>>) {
@@ -44,10 +46,11 @@ async fn main() {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("nexus-daemon — shared NexusCore over unix socket");
         println!();
-        println!("Usage: nexus-daemon [--socket PATH]");
+        println!("Usage: nexus-daemon [--socket PATH] [--mux null|tmux]");
         println!();
         println!("Options:");
         println!("  --socket PATH    Command socket path override");
+        println!("  --mux MODE       Mux backend: null (default) or tmux");
         println!("  -h, --help       Print this help");
         return;
     }
@@ -110,6 +113,12 @@ async fn main() {
     eprintln!("  PID:      {}", std::process::id());
 
     // -- Initialize engine --
+    let mux_mode = args
+        .windows(2)
+        .find(|w| w[0] == "--mux")
+        .map(|w| w[1].as_str())
+        .unwrap_or("null");
+
     let ctx = SystemContext::from_login_shell();
     let claude = ClaudeAdapter::new(ctx.clone());
     let fs_explorer = FsExplorer::new();
@@ -118,7 +127,18 @@ async fn main() {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "/tmp".into());
 
-    let mut core = NexusCore::with_registry(Box::new(NullMux::new()), ctx);
+    let mux: Box<dyn Mux> = match mux_mode {
+        "tmux" => {
+            eprintln!("  mux: tmux");
+            Box::new(TmuxMux::new())
+        }
+        _ => {
+            eprintln!("  mux: null (headless)");
+            Box::new(NullMux::new())
+        }
+    };
+
+    let mut core = NexusCore::with_registry(mux, ctx);
     if let Some(ref mut reg) = core.registry {
         reg.register_chat(Box::new(claude));
         reg.register_explorer(Box::new(fs_explorer));

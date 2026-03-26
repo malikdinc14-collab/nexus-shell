@@ -1,8 +1,8 @@
 //! Layout tree — recursive binary split tree for WM-mode pane management.
 //!
 //! The layout tree determines *where* panes appear spatially. Each leaf holds
-//! a pane ID and type; each internal node is a split (horizontal or vertical)
-//! with a ratio. Focus tracking identifies exactly one active pane.
+//! a pane ID; each internal node is a split (horizontal or vertical) with a
+//! ratio. Focus tracking identifies exactly one active pane.
 //!
 //! This is the same model used by tmux, VS Code, and tiling WMs.
 
@@ -18,37 +18,6 @@ pub enum Direction {
     Vertical,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PaneType {
-    Explorer,
-    Editor,
-    Terminal,
-    Chat,
-    Info,
-}
-
-impl PaneType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            PaneType::Explorer => "explorer",
-            PaneType::Editor => "editor",
-            PaneType::Terminal => "terminal",
-            PaneType::Chat => "chat",
-            PaneType::Info => "info",
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "explorer" => PaneType::Explorer,
-            "editor" => PaneType::Editor,
-            "terminal" => PaneType::Terminal,
-            "chat" => PaneType::Chat,
-            _ => PaneType::Info,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Nav {
@@ -56,6 +25,20 @@ pub enum Nav {
     Down,
     Up,
     Right,
+}
+
+/// Normalized bounding rectangle for spatial navigation.
+#[derive(Debug, Clone, Copy)]
+pub struct Rect {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// Check if two 1D ranges [a0,a1) and [b0,b1) overlap.
+fn ranges_overlap(a0: f64, a1: f64, b0: f64, b1: f64) -> bool {
+    a0 < b1 - 0.001 && b0 < a1 - 0.001
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +50,6 @@ pub enum Nav {
 pub enum LayoutNode {
     Leaf {
         id: String,
-        pane_type: PaneType,
     },
     Split {
         direction: Direction,
@@ -78,10 +60,9 @@ pub enum LayoutNode {
 }
 
 impl LayoutNode {
-    pub fn leaf(id: &str, pane_type: PaneType) -> Self {
+    pub fn leaf(id: &str) -> Self {
         LayoutNode::Leaf {
             id: id.to_string(),
-            pane_type,
         }
     }
 
@@ -106,18 +87,6 @@ impl LayoutNode {
         }
     }
 
-    /// Collect all leaves as (id, pane_type) pairs in tree order.
-    pub fn leaves(&self) -> Vec<(String, PaneType)> {
-        match self {
-            LayoutNode::Leaf { id, pane_type } => vec![(id.clone(), *pane_type)],
-            LayoutNode::Split { left, right, .. } => {
-                let mut out = left.leaves();
-                out.extend(right.leaves());
-                out
-            }
-        }
-    }
-
     /// Find a leaf by ID and replace it with a split containing the original
     /// leaf plus a new leaf. Returns true if the split was performed.
     pub fn insert_split(
@@ -125,19 +94,18 @@ impl LayoutNode {
         target_id: &str,
         direction: Direction,
         new_id: &str,
-        new_type: PaneType,
         ratio: f64,
     ) -> bool {
         match self {
-            LayoutNode::Leaf { id, pane_type } if id == target_id => {
-                let original = LayoutNode::leaf(id, *pane_type);
-                let new_leaf = LayoutNode::leaf(new_id, new_type);
+            LayoutNode::Leaf { id } if id == target_id => {
+                let original = LayoutNode::leaf(id);
+                let new_leaf = LayoutNode::leaf(new_id);
                 *self = LayoutNode::split(direction, ratio, original, new_leaf);
                 true
             }
             LayoutNode::Split { left, right, .. } => {
-                left.insert_split(target_id, direction, new_id, new_type, ratio)
-                    || right.insert_split(target_id, direction, new_id, new_type, ratio)
+                left.insert_split(target_id, direction, new_id, ratio)
+                    || right.insert_split(target_id, direction, new_id, ratio)
             }
             _ => false,
         }
@@ -166,6 +134,28 @@ impl LayoutNode {
 
     fn is_leaf_with_id(&self, target_id: &str) -> bool {
         matches!(self, LayoutNode::Leaf { id, .. } if id == target_id)
+    }
+
+    /// Compute normalized bounding rectangles for all leaves.
+    pub fn compute_bounds(&self, rect: Rect) -> Vec<(String, Rect)> {
+        match self {
+            LayoutNode::Leaf { id } => vec![(id.clone(), rect)],
+            LayoutNode::Split { direction, ratio, left, right } => {
+                let (left_rect, right_rect) = match direction {
+                    Direction::Horizontal => (
+                        Rect { x: rect.x, y: rect.y, w: rect.w * ratio, h: rect.h },
+                        Rect { x: rect.x + rect.w * ratio, y: rect.y, w: rect.w * (1.0 - ratio), h: rect.h },
+                    ),
+                    Direction::Vertical => (
+                        Rect { x: rect.x, y: rect.y, w: rect.w, h: rect.h * ratio },
+                        Rect { x: rect.x, y: rect.y + rect.h * ratio, w: rect.w, h: rect.h * (1.0 - ratio) },
+                    ),
+                };
+                let mut out = left.compute_bounds(left_rect);
+                out.extend(right.compute_bounds(right_rect));
+                out
+            }
+        }
     }
 
     /// Update the split ratio for the split containing the given pane ID as a
@@ -216,10 +206,10 @@ impl LayoutTree {
     ///       └── Leaf(chat)
     /// ```
     pub fn default_layout() -> Self {
-        let explorer = LayoutNode::leaf("pane-1", PaneType::Explorer);
-        let editor = LayoutNode::leaf("pane-2", PaneType::Editor);
-        let terminal = LayoutNode::leaf("pane-3", PaneType::Terminal);
-        let chat = LayoutNode::leaf("pane-4", PaneType::Chat);
+        let explorer = LayoutNode::leaf("pane-1");
+        let editor = LayoutNode::leaf("pane-2");
+        let terminal = LayoutNode::leaf("pane-3");
+        let chat = LayoutNode::leaf("pane-4");
 
         let editor_terminal =
             LayoutNode::split(Direction::Vertical, 0.7, editor, terminal);
@@ -243,10 +233,10 @@ impl LayoutTree {
     }
 
     /// Split the focused pane. Returns the new pane's ID.
-    pub fn split_focused(&mut self, direction: Direction, pane_type: PaneType) -> String {
+    pub fn split_focused(&mut self, direction: Direction) -> String {
         let new_id = self.alloc_id();
         self.root
-            .insert_split(&self.focused, direction, &new_id, pane_type, 0.5);
+            .insert_split(&self.focused, direction, &new_id, 0.5);
         self.focused = new_id.clone();
         new_id
     }
@@ -276,40 +266,86 @@ impl LayoutTree {
         true
     }
 
-    /// Navigate focus in a direction. Uses spatial reasoning on the tree.
+    /// Navigate focus in a direction using spatial bounding-box reasoning.
+    ///
+    /// Computes normalized [0,1] x [0,1] rectangles for each leaf based on
+    /// tree structure and split ratios, then finds the nearest neighbor in
+    /// the given direction that overlaps on the perpendicular axis.
     pub fn navigate(&mut self, nav: Nav) {
-        let leaves = self.root.leaf_ids();
-        if leaves.len() <= 1 {
+        let bounds = self.root.compute_bounds(Rect { x: 0.0, y: 0.0, w: 1.0, h: 1.0 });
+        if bounds.len() <= 1 {
             return;
         }
 
-        let current_idx = leaves.iter().position(|id| id == &self.focused);
-        let current_idx = match current_idx {
-            Some(i) => i,
+        let current = match bounds.iter().find(|(id, _)| id == &self.focused) {
+            Some((_, r)) => *r,
             None => return,
         };
 
-        // For directional navigation, we walk the tree to find the
-        // nearest neighbor. Simplified version: use leaf order with
-        // direction mapping based on tree structure.
-        let new_idx = match nav {
-            Nav::Left | Nav::Up => {
-                if current_idx > 0 {
-                    current_idx - 1
-                } else {
-                    leaves.len() - 1 // wrap
-                }
-            }
-            Nav::Right | Nav::Down => {
-                if current_idx < leaves.len() - 1 {
-                    current_idx + 1
-                } else {
-                    0 // wrap
-                }
-            }
-        };
+        let cx = current.x + current.w / 2.0;
+        let cy = current.y + current.h / 2.0;
 
-        self.focused = leaves[new_idx].clone();
+        let mut best: Option<(String, f64)> = None;
+
+        for (id, r) in &bounds {
+            if id == &self.focused {
+                continue;
+            }
+
+            let tx = r.x + r.w / 2.0;
+            let ty = r.y + r.h / 2.0;
+
+            // Check direction and perpendicular overlap
+            let valid = match nav {
+                Nav::Left => tx < cx - 0.001 && ranges_overlap(r.y, r.y + r.h, current.y, current.y + current.h),
+                Nav::Right => tx > cx + 0.001 && ranges_overlap(r.y, r.y + r.h, current.y, current.y + current.h),
+                Nav::Up => ty < cy - 0.001 && ranges_overlap(r.x, r.x + r.w, current.x, current.x + current.w),
+                Nav::Down => ty > cy + 0.001 && ranges_overlap(r.x, r.x + r.w, current.x, current.x + current.w),
+            };
+
+            if !valid {
+                continue;
+            }
+
+            // Distance: primary axis distance + small perpendicular penalty
+            let dist = match nav {
+                Nav::Left => (cx - tx) + (cy - ty).abs() * 0.1,
+                Nav::Right => (tx - cx) + (cy - ty).abs() * 0.1,
+                Nav::Up => (cy - ty) + (cx - tx).abs() * 0.1,
+                Nav::Down => (ty - cy) + (cx - tx).abs() * 0.1,
+            };
+
+            if best.as_ref().map_or(true, |(_, d)| dist < *d) {
+                best = Some((id.clone(), dist));
+            }
+        }
+
+        // If no spatial neighbor found, wrap around
+        if let Some((id, _)) = best {
+            self.focused = id;
+        } else {
+            // Wrap: pick the farthest pane in the opposite direction
+            let wrap_target = bounds.iter()
+                .filter(|(id, _)| id != &self.focused)
+                .min_by(|(_, a), (_, b)| {
+                    let da = match nav {
+                        Nav::Left => -(a.x + a.w / 2.0),
+                        Nav::Right => a.x + a.w / 2.0,
+                        Nav::Up => -(a.y + a.h / 2.0),
+                        Nav::Down => a.y + a.h / 2.0,
+                    };
+                    let db = match nav {
+                        Nav::Left => -(b.x + b.w / 2.0),
+                        Nav::Right => b.x + b.w / 2.0,
+                        Nav::Up => -(b.y + b.h / 2.0),
+                        Nav::Down => b.y + b.h / 2.0,
+                    };
+                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                });
+            if let Some((id, _)) = wrap_target {
+                self.focused = id.clone();
+            }
+        }
     }
 
     /// Toggle zoom on the focused pane. When zoomed, only that pane is shown.
@@ -319,6 +355,12 @@ impl LayoutTree {
         } else {
             self.zoomed = Some(self.focused.clone());
         }
+    }
+
+    /// Minimize a pane by shrinking its split ratio to the minimum (0.1).
+    /// The pane remains in the layout but takes minimal space.
+    pub fn minimize_pane(&mut self, pane_id: &str) -> bool {
+        self.root.set_ratio_for(pane_id, 0.1)
     }
 
     /// Set focus to a specific pane ID. Returns false if not found.
@@ -341,12 +383,12 @@ impl LayoutTree {
         self.root.set_ratio_for(pane_id, ratio)
     }
 
-    /// Flat list of all panes as JSON: [{pane_id, pane_type}, ...]
+    /// Flat list of all panes as JSON: [{pane_id}, ...]
     pub fn pane_list(&self) -> serde_json::Value {
-        let leaves = self.root.leaves();
-        let arr: Vec<serde_json::Value> = leaves
+        let ids = self.root.leaf_ids();
+        let arr: Vec<serde_json::Value> = ids
             .into_iter()
-            .map(|(id, pt)| serde_json::json!({"pane_id": id, "pane_type": pt.as_str()}))
+            .map(|id| serde_json::json!({"pane_id": id}))
             .collect();
         serde_json::Value::Array(arr)
     }
@@ -374,13 +416,10 @@ impl LayoutTree {
 
     fn regen_ids(node: &LayoutNode, next_id: &mut u32) -> LayoutNode {
         match node {
-            LayoutNode::Leaf { pane_type, .. } => {
+            LayoutNode::Leaf { .. } => {
                 let id = format!("pane-{}", *next_id);
                 *next_id += 1;
-                LayoutNode::Leaf {
-                    id,
-                    pane_type: *pane_type,
-                }
+                LayoutNode::Leaf { id }
             }
             LayoutNode::Split {
                 direction,
@@ -415,7 +454,7 @@ mod tests {
     #[test]
     fn split_focused_creates_new_pane() {
         let mut tree = LayoutTree::default_layout();
-        let new_id = tree.split_focused(Direction::Vertical, PaneType::Terminal);
+        let new_id = tree.split_focused(Direction::Vertical);
         assert_eq!(tree.root.leaf_ids().len(), 5);
         assert_eq!(tree.focused, new_id);
     }
@@ -432,7 +471,7 @@ mod tests {
     #[test]
     fn close_last_pane_returns_false() {
         let mut tree = LayoutTree {
-            root: LayoutNode::leaf("only", PaneType::Editor),
+            root: LayoutNode::leaf("only"),
             focused: "only".into(),
             zoomed: None,
             next_id: 2,
@@ -441,16 +480,43 @@ mod tests {
     }
 
     #[test]
+    fn navigate_geometric_horizontal() {
+        // Default layout: explorer(left) | editor(top-center) | chat(right)
+        //                                | terminal(bottom-center)
+        let mut tree = LayoutTree::default_layout();
+
+        // Start at editor (pane-2), go right should reach chat (pane-4)
+        tree.set_focus("pane-2");
+        tree.navigate(Nav::Right);
+        assert_eq!(tree.focused, "pane-4");
+
+        // From chat, go left should reach editor or terminal
+        tree.navigate(Nav::Left);
+        assert!(tree.focused == "pane-2" || tree.focused == "pane-3");
+    }
+
+    #[test]
+    fn navigate_geometric_vertical() {
+        let mut tree = LayoutTree::default_layout();
+
+        // Start at editor (pane-2), go down should reach terminal (pane-3)
+        tree.set_focus("pane-2");
+        tree.navigate(Nav::Down);
+        assert_eq!(tree.focused, "pane-3");
+
+        // From terminal, go up should reach editor
+        tree.navigate(Nav::Up);
+        assert_eq!(tree.focused, "pane-2");
+    }
+
+    #[test]
     fn navigate_wraps_around() {
         let mut tree = LayoutTree::default_layout();
-        let leaves = tree.root.leaf_ids();
-        tree.set_focus(&leaves[0]);
-
+        // Start at explorer (leftmost), go left should wrap
+        tree.set_focus("pane-1");
         tree.navigate(Nav::Left);
-        assert_eq!(tree.focused, *leaves.last().unwrap());
-
-        tree.navigate(Nav::Right);
-        assert_eq!(tree.focused, leaves[0]);
+        // Should wrap to rightmost pane (chat)
+        assert_eq!(tree.focused, "pane-4");
     }
 
     #[test]
@@ -481,25 +547,11 @@ mod tests {
 
     #[test]
     fn insert_split_preserves_original() {
-        let mut node = LayoutNode::leaf("a", PaneType::Editor);
-        node.insert_split("a", Direction::Horizontal, "b", PaneType::Terminal, 0.5);
+        let mut node = LayoutNode::leaf("a");
+        node.insert_split("a", Direction::Horizontal, "b", 0.5);
         let ids = node.leaf_ids();
         assert!(ids.contains(&"a".to_string()));
         assert!(ids.contains(&"b".to_string()));
-    }
-
-    #[test]
-    fn leaves_returns_id_and_type() {
-        let tree = LayoutNode::split(
-            Direction::Vertical,
-            0.5,
-            LayoutNode::leaf("p1", PaneType::Terminal),
-            LayoutNode::leaf("p2", PaneType::Chat),
-        );
-        let leaves = tree.leaves();
-        assert_eq!(leaves.len(), 2);
-        assert_eq!(leaves[0], ("p1".into(), PaneType::Terminal));
-        assert_eq!(leaves[1], ("p2".into(), PaneType::Chat));
     }
 
     #[test]
@@ -507,12 +559,12 @@ mod tests {
         let export_root = LayoutNode::split(
             Direction::Horizontal,
             0.3,
-            LayoutNode::leaf("old-1", PaneType::Explorer),
+            LayoutNode::leaf("old-1"),
             LayoutNode::split(
                 Direction::Vertical,
                 0.7,
-                LayoutNode::leaf("old-2", PaneType::Editor),
-                LayoutNode::leaf("old-3", PaneType::Terminal),
+                LayoutNode::leaf("old-2"),
+                LayoutNode::leaf("old-3"),
             ),
         );
 
@@ -531,12 +583,11 @@ mod tests {
     fn pane_list_returns_json_array() {
         let mut tree = LayoutTree::default_layout();
         // default_layout has 4 panes; split adds a 5th
-        tree.split_focused(Direction::Vertical, PaneType::Chat);
+        tree.split_focused(Direction::Vertical);
         let list = tree.pane_list();
         assert!(list.is_array());
         let arr = list.as_array().unwrap();
         assert_eq!(arr.len(), 5);
         assert!(arr[0].get("pane_id").is_some());
-        assert!(arr[0].get("pane_type").is_some());
     }
 }

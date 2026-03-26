@@ -13,7 +13,7 @@ use crate::pty::PtyManager;
 use crate::registry::CapabilityRegistry;
 use crate::stack::{Tab, TabStack, TabStatus};
 use crate::stack_manager::StackManager;
-use crate::surface::Mux;
+use crate::surface::{Mux, SurfaceRegistry};
 use nexus_core::capability::SystemContext;
 
 /// Find the visible container in a stack given the focused pane.
@@ -75,6 +75,7 @@ pub struct NexusCore {
     pub stacks: StackManager,
     pub bus: Arc<Mutex<EventBus>>,
     pub layout: LayoutTree,
+    pub surfaces: SurfaceRegistry,
     pty: PtyManager,
     session: Option<String>,
     dirty: bool,
@@ -89,6 +90,7 @@ impl NexusCore {
             stacks: StackManager::new(),
             bus: Arc::new(Mutex::new(EventBus::new())),
             layout: LayoutTree::default_layout(),
+            surfaces: SurfaceRegistry::new(),
             pty: PtyManager::new(),
             session: None,
             dirty: false,
@@ -103,6 +105,7 @@ impl NexusCore {
             stacks: StackManager::new(),
             bus: Arc::new(Mutex::new(EventBus::new())),
             layout: LayoutTree::default_layout(),
+            surfaces: SurfaceRegistry::new(),
             pty: PtyManager::new(),
             session: None,
             dirty: false,
@@ -150,13 +153,12 @@ impl NexusCore {
         let panes: HashMap<String, PaneState> = self
             .layout
             .root
-            .leaves()
+            .leaf_ids()
             .into_iter()
-            .map(|(id, pane_type)| {
+            .map(|id| {
                 (
                     id,
                     PaneState {
-                        pane_type,
                         cwd: Some(self.cwd.clone()),
                         command: None,
                         args: vec![],
@@ -192,6 +194,8 @@ impl NexusCore {
             "untag" => self.stack_untag(payload),
             "rename" => self.stack_rename(payload),
             "list" => self.stack_list(payload),
+            "prev" => self.stack_rotate(payload, -1),
+            "next" => self.stack_rotate(payload, 1),
             _ => OpResult::error("unknown_op"),
         }
     }
@@ -582,6 +586,25 @@ impl NexusCore {
                 OpResult::ok_with("tabs", serde_json::Value::Array(tabs))
             }
             None => OpResult::error("not_found"),
+        }
+    }
+
+    fn stack_rotate(&mut self, payload: &HashMap<String, String>, direction: i32) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str())
+            .unwrap_or_else(|| self.layout.focused.as_str());
+        let (sid, _) = match self.stacks.get_by_identity(identity) {
+            Some((sid, stack)) => (sid.to_string(), stack),
+            None => return OpResult::error("not_found"),
+        };
+        match self.stacks.rotate(&sid, direction) {
+            crate::stack_manager::StackOpResult::Ok(Some(tab)) => {
+                OpResult::ok_with("active_tab", serde_json::json!({
+                    "name": tab.name,
+                    "pane_handle": tab.pane_handle,
+                }))
+            }
+            crate::stack_manager::StackOpResult::Ok(None) => OpResult::ok(),
+            _ => OpResult::error("not_found"),
         }
     }
 
