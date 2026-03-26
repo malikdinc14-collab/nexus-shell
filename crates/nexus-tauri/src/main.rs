@@ -71,8 +71,10 @@ fn main() {
                                 "pty.exit" => "pty-exit",
                                 s if s.starts_with("agent.") => "agent-output",
                                 "layout.changed" => "layout-changed",
-                                "stack.changed" => "stack-changed",
+                                s if s.starts_with("stack.") => "stack-changed",
                                 "editor.file_opened" => "editor-file-opened",
+                                "content.changed" => "content-changed",
+                                s if s.starts_with("display.") => "display-changed",
                                 _ => continue,
                             };
 

@@ -36,6 +36,7 @@ pub fn dispatch(
         "pane" => handle_pane(core, action, args),
         "stack" => handle_stack(core, action, args),
         "chat" => handle_chat(core, action, args),
+        "terminal" => handle_terminal(core, action, args),
         "pty" => handle_pty(core, action, args),
         "session" => handle_session(core, action, args),
         "keymap" => handle_keymap(core, action),
@@ -43,9 +44,15 @@ pub fn dispatch(
         "layout" => handle_layout(core, action, args),
         "capabilities" => handle_capabilities(core, action, args),
         "nexus" => handle_nexus(action),
-        "fs" => handle_fs(action, args),
+        "fs" => handle_fs(core, action, args),
+        "content" => handle_content(core, action, args),
+        "explorer" => handle_explorer(core, action, args),
         "editor" => handle_editor(core, action, args),
         "surface" => handle_surface(core, action, args),
+        "display" => handle_display(core, action, args),
+        "command_line" => handle_command_line(core, action, args),
+        "menu" => handle_menu(core, action, args),
+        "info" => handle_info(core, action, args),
         _ => Err(NexusError::NotFound(format!("unknown domain: {domain}"))),
     }
 }
@@ -72,6 +79,10 @@ fn handle_navigate(
 
     core.layout.navigate(nav);
     core.mark_dirty();
+
+    // Track last-active module for this pane
+    update_last_active(core);
+
     Ok(core.layout.to_json())
 }
 
@@ -108,8 +119,14 @@ fn handle_pane(
             };
 
             let new_id = core.layout.split_focused(direction);
+            // Give the new pane a Chooser tab so user picks what goes there
+            let (sid, _) = core.stacks.get_or_create_by_identity(&new_id, None);
+            let sid = sid.clone();
+            let tab = crate::stack::Tab::new("Chooser")
+                .with_status(crate::stack::TabStatus::Visible, true);
+            core.stacks.push(&sid, tab);
             core.mark_dirty();
-            Ok(serde_json::json!({ "pane_id": new_id }))
+            Ok(core.layout.to_json())
         }
 
         // -- close -----------------------------------------------------------
@@ -156,6 +173,7 @@ fn handle_pane(
 
             if core.layout.set_focus(&pane_id) {
                 core.mark_dirty();
+                update_last_active(core);
                 Ok(core.layout.to_json())
             } else {
                 Err(NexusError::NotFound(format!("pane not found: {pane_id}")))
@@ -196,12 +214,50 @@ fn handle_pane(
                     Some(f) => f.to_uppercase().to_string() + c.as_str(),
                 }
             };
-            let mut tab = crate::stack::Tab::new(&tab_name);
-            tab.role = Some(role.to_string());
+            let tab = crate::stack::Tab::new(&tab_name);
             let (stack_id, _) = core.stacks.get_or_create_by_identity(&new_id, None);
             core.stacks.push(&stack_id, tab);
             core.mark_dirty();
-            Ok(serde_json::json!({ "pane_id": new_id }))
+            Ok(core.layout.to_json())
+        }
+
+        // -- role ----------------------------------------------------------------
+        "set_role" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            let role = str_arg("role").ok_or_else(|| {
+                NexusError::InvalidState("pane.set_role requires role".into())
+            })?;
+            match core.stacks.get_by_identity_mut(&pane_id) {
+                Some((_sid, stack)) => {
+                    stack.role = Some(role.clone());
+                    Ok(serde_json::json!({"status": "ok", "role": role}))
+                }
+                None => Err(NexusError::NotFound(format!("no stack for pane: {pane_id}"))),
+            }
+        }
+
+        "get_role" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            match core.stacks.get_by_identity(&pane_id) {
+                Some((_sid, stack)) => {
+                    Ok(serde_json::json!({"role": stack.role}))
+                }
+                None => Ok(serde_json::json!({"role": null})),
+            }
+        }
+
+        "clear_role" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            match core.stacks.get_by_identity_mut(&pane_id) {
+                Some((_sid, stack)) => {
+                    stack.role = None;
+                    Ok(serde_json::json!({"status": "ok"}))
+                }
+                None => Err(NexusError::NotFound(format!("no stack for pane: {pane_id}"))),
+            }
         }
 
         _ => Err(NexusError::NotFound(format!("unknown pane action: {action}"))),
@@ -217,6 +273,53 @@ fn handle_stack(
     action: &str,
     args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
+    // Unified prev/next: try content tabs first, fall through to module tabs
+    if action == "prev" || action == "next" {
+        let pane_id = args
+            .get("identity")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| core.layout.focused.clone());
+
+        let has_content_tabs = resolve_active_module(core, &pane_id)
+            .and_then(|module| {
+                use crate::content_tabs::TabProvider;
+                match module.as_str() {
+                    "Editor" => core.editor.content_tabs(&pane_id),
+                    "Terminal" => core.terminal.content_tabs(&pane_id),
+                    "Chat" => core.chat.content_tabs(&pane_id),
+                    _ => None,
+                }
+            })
+            .map(|s| s.tabs.len() > 1)
+            .unwrap_or(false);
+
+        if has_content_tabs {
+            let content_action = if action == "next" { "next" } else { "prev" };
+            let mut content_args = HashMap::new();
+            content_args.insert("pane_id".to_string(), serde_json::json!(pane_id));
+            return handle_content(core, content_action, &content_args);
+        }
+        // Fall through to module-level tab switching
+    }
+
+    // Auto-inject focused pane as identity if not provided (keyboard shortcuts omit it)
+    let mut args = args.clone();
+    if !args.contains_key("identity") {
+        args.insert(
+            "identity".to_string(),
+            serde_json::Value::String(core.layout.focused.clone()),
+        );
+    }
+
+    // Auto-generate pane_id for push if not provided (keyboard shortcuts omit it)
+    if action == "push" && !args.contains_key("pane_id") {
+        args.insert(
+            "pane_id".to_string(),
+            serde_json::Value::String(format!("pane_{}", uuid::Uuid::new_v4())),
+        );
+    }
+
     // Convert serde_json::Value args to HashMap<String, String> for handle_stack_op.
     let string_args: HashMap<String, String> = args
         .iter()
@@ -235,6 +338,10 @@ fn handle_stack(
 
     if result.status == "ok" {
         core.mark_dirty();
+        // Update last_active when module tab changes (e.g. set_content)
+        if action == "set_content" {
+            update_last_active(core);
+        }
     }
 
     let mut out = serde_json::json!({ "status": result.status });
@@ -253,25 +360,122 @@ fn handle_chat(
     action: &str,
     args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
     match action {
         "send" => {
-            let pane_id = args.get("pane_id").and_then(|v| v.as_str()).ok_or_else(|| {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
                 NexusError::InvalidState("chat.send requires pane_id".into())
             })?;
-            let message = args.get("message").and_then(|v| v.as_str()).ok_or_else(|| {
+            let message = str_arg("message").ok_or_else(|| {
                 NexusError::InvalidState("chat.send requires message".into())
             })?;
-            let cwd = args.get("cwd").and_then(|v| v.as_str()).unwrap_or("/tmp");
-            core.chat_send(pane_id, message, cwd)
+            let cwd = str_arg("cwd").unwrap_or_else(|| "/tmp".into());
+
+            // Also delegate to legacy chat_send if registry has a chat adapter
+            if core.registry.is_some() {
+                let _ = core.chat_send(&pane_id, &message, &cwd);
+            }
+
+            let conv = core.chat.send(&pane_id, &message, &cwd)
                 .map_err(NexusError::InvalidState)?;
-            Ok(serde_json::Value::Null)
+            serde_json::to_value(&conv)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "history" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("chat.history requires pane_id".into())
+            })?;
+            match core.chat.history(&pane_id) {
+                Some(conv) => serde_json::to_value(conv)
+                    .map_err(|e| NexusError::InvalidState(e.to_string())),
+                None => Ok(serde_json::json!({"messages": []})),
+            }
+        }
+        "clear" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("chat.clear requires pane_id".into())
+            })?;
+            let cleared = core.chat.clear(&pane_id);
+            Ok(serde_json::json!({"cleared": cleared}))
+        }
+        "state" => {
+            let state = core.chat.state();
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
         _ => Err(NexusError::NotFound(format!("unknown chat action: {action}"))),
     }
 }
 
 // ---------------------------------------------------------------------------
-// pty.*
+// terminal.*  (ABC orchestrator — session metadata + backend selection)
+// ---------------------------------------------------------------------------
+
+fn handle_terminal(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "state" => {
+            let state = core.terminal.state();
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "info" => {
+            let info = core.terminal.info();
+            serde_json::to_value(&info)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "session" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("terminal.session requires pane_id".into())
+            })?;
+            match core.terminal.session(&pane_id) {
+                Some(s) => serde_json::to_value(s)
+                    .map_err(|e| NexusError::InvalidState(e.to_string())),
+                None => Err(NexusError::NotFound(format!("no terminal session: {pane_id}"))),
+            }
+        }
+        "register" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("terminal.register requires pane_id".into())
+            })?;
+            let cwd = str_arg("cwd");
+            let session = core.terminal.register_session(&pane_id, cwd.as_deref());
+            serde_json::to_value(session)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "update" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("terminal.update requires pane_id".into())
+            })?;
+            let title = str_arg("title");
+            let pid = args.get("pid").and_then(|v| v.as_u64()).map(|p| p as u32);
+            let cwd = str_arg("cwd");
+            core.terminal.update_session(&pane_id, title.as_deref(), pid, cwd.as_deref());
+            Ok(serde_json::json!({"status": "ok"}))
+        }
+        "remove" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("terminal.remove requires pane_id".into())
+            })?;
+            let removed = core.terminal.remove_session(&pane_id);
+            Ok(serde_json::json!({"removed": removed}))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown terminal action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// pty.*  (low-level PTY I/O — kept for backward compat, delegates to Mux or PtyManager)
 // ---------------------------------------------------------------------------
 
 fn handle_pty(
@@ -593,6 +797,51 @@ fn handle_layout(
             Ok(serde_json::Value::Array(results))
         }
 
+        // -- template: apply a built-in layout template ----------------------
+        "template" => {
+            let name = str_arg("name").ok_or_else(|| {
+                NexusError::InvalidState("layout.template requires name".into())
+            })?;
+            let template = crate::templates::get_template(&name)
+                .ok_or_else(|| NexusError::NotFound(format!("template not found: {name}")))?;
+
+            // Clean up old PTYs
+            let old_pane_ids = core.layout.root.leaf_ids();
+            for pane_id in &old_pane_ids {
+                let _ = core.pty_kill(pane_id);
+            }
+
+            // Apply template layout (from_export regenerates IDs)
+            core.layout = crate::layout::LayoutTree::from_export(template.layout);
+
+            // Init stacks from template
+            core.stacks = crate::stack_manager::StackManager::new();
+            for (pane_id, tab_name) in &template.stacks {
+                let (sid, stack) = core.stacks.get_or_create_by_identity(pane_id, None);
+                let sid = sid.clone();
+                if stack.tabs.is_empty() {
+                    let tab = crate::stack::Tab::new(tab_name)
+                        .with_status(crate::stack::TabStatus::Visible, true);
+                    core.stacks.push(&sid, tab);
+                }
+            }
+
+            core.mark_dirty();
+            Ok(core.layout.to_json())
+        }
+
+        // -- templates: list available built-in templates --------------------
+        "templates" => {
+            let list: Vec<serde_json::Value> = crate::templates::builtin_templates()
+                .iter()
+                .map(|t| serde_json::json!({
+                    "name": t.name,
+                    "description": t.description,
+                }))
+                .collect();
+            Ok(serde_json::Value::Array(list))
+        }
+
         _ => Err(NexusError::NotFound(format!("unknown layout action: {action}"))),
     }
 }
@@ -636,6 +885,7 @@ fn handle_nexus(
 // ---------------------------------------------------------------------------
 
 fn handle_fs(
+    core: &NexusCore,
     action: &str,
     args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
@@ -645,9 +895,8 @@ fn handle_fs(
 
     match action {
         "cwd" => {
-            let cwd = std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .map_err(|e| NexusError::Io(e.to_string()))?;
+            // Return the engine's workspace CWD (set via --cwd), not process CWD
+            let cwd = core.cwd().to_string();
             Ok(serde_json::json!(cwd))
         }
 
@@ -707,6 +956,154 @@ fn handle_fs(
 }
 
 // ---------------------------------------------------------------------------
+// explorer.*
+// ---------------------------------------------------------------------------
+
+fn handle_explorer(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        // Full tree state — surface renders this directly
+        "tree" => {
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        // Flat listing of a single directory
+        "list" => {
+            let path = str_arg("path")
+                .unwrap_or_else(|| core.explorer.root().to_string());
+            let entries = core.explorer.list(&path)
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&entries)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        // Navigate to a new root
+        "navigate" => {
+            let path = str_arg("path").ok_or_else(|| {
+                NexusError::InvalidState("explorer.navigate requires path".into())
+            })?;
+            core.explorer.navigate(&path);
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        // Go up one directory
+        "up" => {
+            core.explorer.up();
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        // Toggle directory expanded/collapsed
+        "toggle" => {
+            let path = str_arg("path").ok_or_else(|| {
+                NexusError::InvalidState("explorer.toggle requires path".into())
+            })?;
+            let expanded = core.explorer.toggle(&path);
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            let mut val = serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))?;
+            val["toggled"] = serde_json::json!(expanded);
+            Ok(val)
+        }
+
+        // Toggle hidden files
+        "hidden" => {
+            let show = core.explorer.toggle_hidden();
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            let mut val = serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))?;
+            val["show_hidden"] = serde_json::json!(show);
+            Ok(val)
+        }
+
+        // Search — delegates to backend
+        "search" => {
+            let query = str_arg("query").ok_or_else(|| {
+                NexusError::InvalidState("explorer.search requires query".into())
+            })?;
+            let entries = core.explorer.search(&query)
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&entries)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        // Cursor navigation — keyboard-driven file tree browsing
+        "cursor_down" => {
+            let count = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?
+                .entries.len();
+            core.explorer.cursor_down(count);
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        "cursor_up" => {
+            core.explorer.cursor_up();
+            let state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        "cursor_toggle" => {
+            // Get entry at cursor before toggling
+            let pre_state = core.explorer.tree()
+                .map_err(NexusError::InvalidState)?;
+            let entry = pre_state.entries.get(core.explorer.cursor_index()).cloned();
+
+            if let Some(ref e) = entry {
+                if !e.entry.is_dir {
+                    // File — open in editor via command_line routing
+                    let path = e.entry.path.clone();
+                    let mut ed_args = HashMap::new();
+                    ed_args.insert("raw".to_string(), serde_json::json!(format!("e {path}")));
+                    let _ = dispatch(core, "command_line.execute", &ed_args);
+                    // Return current state unchanged
+                    let state = core.explorer.tree()
+                        .map_err(NexusError::InvalidState)?;
+                    return serde_json::to_value(&state)
+                        .map_err(|e| NexusError::InvalidState(e.to_string()));
+                }
+            }
+
+            // Directory — toggle expand/collapse
+            let state = core.explorer.cursor_toggle()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        "cursor_collapse" => {
+            let state = core.explorer.cursor_collapse()
+                .map_err(NexusError::InvalidState)?;
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        _ => Err(NexusError::NotFound(format!("unknown explorer action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // editor.*
 // ---------------------------------------------------------------------------
 
@@ -724,17 +1121,58 @@ fn handle_editor(
             let path = str_arg("path").ok_or_else(|| {
                 NexusError::InvalidState("editor.open requires path".into())
             })?;
-            let name = str_arg("name").unwrap_or_else(|| {
-                path.rsplit('/').next().unwrap_or(&path).to_string()
-            });
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
 
-            // Emit event so surfaces can handle the file open
+            let buffer = core.editor.open(&pane_id, &path)
+                .map_err(NexusError::InvalidState)?;
+
+            // Emit event so surfaces know a file was opened
             let mut payload = HashMap::new();
-            payload.insert("path".to_string(), serde_json::json!(path));
-            payload.insert("name".to_string(), serde_json::json!(name));
+            payload.insert("path".to_string(), serde_json::json!(buffer.path));
+            payload.insert("name".to_string(), serde_json::json!(buffer.name));
+            payload.insert("pane_id".to_string(), serde_json::json!(pane_id));
             core.publish("editor.file_opened", payload);
 
-            Ok(serde_json::json!({"path": path, "name": name}))
+            serde_json::to_value(&buffer)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "read" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            match core.editor.buffer(&pane_id) {
+                Some(buf) => serde_json::to_value(buf)
+                    .map_err(|e| NexusError::InvalidState(e.to_string())),
+                None => Err(NexusError::NotFound(format!("no buffer in {pane_id}"))),
+            }
+        }
+        "edit" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            let content = str_arg("content").ok_or_else(|| {
+                NexusError::InvalidState("editor.edit requires content".into())
+            })?;
+            core.editor.edit(&pane_id, &content)
+                .map_err(NexusError::InvalidState)?;
+            Ok(serde_json::json!({"status": "ok", "modified": true}))
+        }
+        "save" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            core.editor.save(&pane_id)
+                .map_err(NexusError::InvalidState)?;
+            Ok(serde_json::json!({"status": "ok"}))
+        }
+        "close" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            let closed = core.editor.close(&pane_id);
+            Ok(serde_json::json!({"closed": closed}))
+        }
+        "state" => {
+            let state = core.editor.state();
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
         _ => Err(NexusError::NotFound(format!("unknown editor action: {action}"))),
     }
@@ -803,6 +1241,366 @@ fn handle_surface(
         }
 
         _ => Err(NexusError::NotFound(format!("unknown surface action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// display.*
+// ---------------------------------------------------------------------------
+
+fn handle_display(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "get" => serde_json::to_value(core.get_display())
+            .map_err(|e| NexusError::InvalidState(e.to_string())),
+
+        "set" => {
+            let key = str_arg("key")
+                .ok_or_else(|| NexusError::InvalidState("display.set requires key".into()))?;
+            let value = str_arg("value")
+                .ok_or_else(|| NexusError::InvalidState("display.set requires value".into()))?;
+            core.set_display_key(&key, &value);
+            serde_json::to_value(core.get_display())
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        "gaps" => {
+            core.cycle_gaps();
+            serde_json::to_value(core.get_display())
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        "transparent" => {
+            core.toggle_transparent();
+            serde_json::to_value(core.get_display())
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        _ => Err(NexusError::NotFound(format!("unknown display action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// command_line.*
+// ---------------------------------------------------------------------------
+
+fn handle_command_line(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "execute" => {
+            let raw = args
+                .get("raw")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| NexusError::InvalidState("command_line.execute requires raw".into()))?;
+
+            let parts: Vec<&str> = raw.split_whitespace().collect();
+            if parts.is_empty() {
+                return Ok(serde_json::json!({"status": "empty"}));
+            }
+
+            match parts[0] {
+                "q" => dispatch(core, "pane.close", &HashMap::new()),
+                "wq" => {
+                    // Best-effort save, then close
+                    let _ = dispatch(core, "session.save", args);
+                    dispatch(core, "pane.close", &HashMap::new())
+                }
+                // :e <path> — open file in editor, routed to best pane
+                "e" | "edit" if parts.len() >= 2 => {
+                    let path = parts[1..].join(" ");
+                    let target_pane = resolve_editor_pane(core);
+
+                    let mut ed_args = HashMap::new();
+                    ed_args.insert("path".to_string(), serde_json::json!(path));
+                    ed_args.insert("pane_id".to_string(), serde_json::json!(&target_pane));
+                    let result = dispatch(core, "editor.open", &ed_args)?;
+
+                    // Ensure the target pane has Editor as active tab
+                    let mut set_args = HashMap::new();
+                    set_args.insert("identity".to_string(), serde_json::json!(&target_pane));
+                    set_args.insert("name".to_string(), serde_json::json!("Editor"));
+                    let _ = dispatch(core, "stack.set_content", &set_args);
+
+                    // Focus the target pane
+                    core.layout.set_focus(&target_pane);
+                    core.mark_dirty();
+
+                    Ok(result)
+                }
+                "set" if parts.len() >= 3 => {
+                    let mut set_args = HashMap::new();
+                    set_args.insert("key".to_string(), serde_json::json!(parts[1]));
+                    set_args.insert("value".to_string(), serde_json::json!(parts[2..].join(" ")));
+                    dispatch(core, "display.set", &set_args)
+                }
+                _ => {
+                    // Try as a domain.action passthrough
+                    dispatch(core, raw, &HashMap::new())
+                }
+            }
+        }
+        _ => Err(NexusError::NotFound(format!("unknown command_line action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// menu.*
+// ---------------------------------------------------------------------------
+
+fn handle_menu(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "get" => {
+            let context = str_arg("context").unwrap_or_else(|| "home".into());
+            let list = core.menu.get(&context);
+            Ok(serde_json::to_value(&list).unwrap_or_default())
+        }
+        "navigate" => {
+            let context = str_arg("context")
+                .ok_or_else(|| NexusError::InvalidState("menu.navigate requires context".into()))?;
+            let list = core.menu.navigate(&context);
+            Ok(serde_json::to_value(&list).unwrap_or_default())
+        }
+        "back" => {
+            let list = core.menu.back();
+            Ok(serde_json::to_value(&list).unwrap_or_default())
+        }
+        "execute" => {
+            let item_type = str_arg("type")
+                .ok_or_else(|| NexusError::InvalidState("menu.execute requires type".into()))?;
+            let payload = str_arg("payload").unwrap_or_default();
+
+            match item_type.as_str() {
+                "module" => {
+                    // Set the active tab's content to this module
+                    let mut set_args = HashMap::new();
+                    set_args.insert("identity".into(), serde_json::json!(core.layout.focused));
+                    set_args.insert("name".into(), serde_json::json!(payload));
+                    dispatch(core, "stack.set_content", &set_args)
+                }
+                "action" => {
+                    // Payload is a domain.action command — passthrough
+                    dispatch(core, &payload, &HashMap::new())
+                }
+                "folder" => {
+                    // Navigate into subfolder
+                    let list = core.menu.navigate(&payload);
+                    Ok(serde_json::to_value(&list).unwrap_or_default())
+                }
+                "settings" => {
+                    // Open file in editor — payload is the file path
+                    let mut ed_args = HashMap::new();
+                    ed_args.insert("path".into(), serde_json::json!(payload));
+                    dispatch(core, "editor.open", &ed_args)
+                }
+                _ => Ok(serde_json::json!({"status": "unknown_type", "type": item_type})),
+            }
+        }
+        _ => Err(NexusError::NotFound(format!("unknown menu action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// info.*
+// ---------------------------------------------------------------------------
+
+fn handle_info(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    match action {
+        "get" => {
+            let section = args
+                .get("section")
+                .and_then(|v| v.as_str())
+                .unwrap_or("all");
+            if section == "all" {
+                let data = crate::info::collect(core);
+                Ok(serde_json::to_value(&data).unwrap_or_default())
+            } else {
+                Ok(crate::info::collect_section(core, section))
+            }
+        }
+        _ => Err(NexusError::NotFound(format!("unknown info action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// content.*  (TabProvider — content tabs within modules)
+// ---------------------------------------------------------------------------
+
+fn resolve_active_module(core: &NexusCore, pane_id: &str) -> Option<String> {
+    let (_, stack) = core.stacks.get_by_identity(pane_id)?;
+    let tab = stack.tabs.get(stack.active_index)?;
+    Some(tab.name.clone())
+}
+
+/// Update last_active tracking for the currently focused pane's module.
+fn update_last_active(core: &mut NexusCore) {
+    let focused = core.layout.focused.clone();
+    if let Some(module) = resolve_active_module(core, &focused) {
+        core.last_active.insert(module, focused);
+    }
+}
+
+/// Find the best pane to open a file in.
+/// Priority: last_active["Editor"] > any stack with role "editor" > focused pane.
+fn resolve_editor_pane(core: &NexusCore) -> String {
+    // 1. Check last_active["Editor"] — verify it still has an Editor tab
+    if let Some(pane_id) = core.last_active.get("Editor") {
+        if let Some((_, stack)) = core.stacks.get_by_identity(pane_id) {
+            if stack.tabs.iter().any(|t| t.name == "Editor") {
+                return pane_id.clone();
+            }
+        }
+    }
+    // 2. Check any stack with role "editor"
+    for (_, stack) in core.stacks.all_stacks() {
+        if stack.role.as_deref() == Some("editor") {
+            if let Some(tab) = stack.tabs.first() {
+                if let Some(ref handle) = tab.pane_handle {
+                    return handle.clone();
+                }
+            }
+        }
+    }
+    // 3. Fallback: focused pane
+    core.layout.focused.clone()
+}
+
+fn handle_content(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    use crate::content_tabs::TabProvider;
+
+    let pane_id = args
+        .get("pane_id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| core.layout.focused.clone());
+
+    let module = resolve_active_module(core, &pane_id)
+        .unwrap_or_default();
+
+    match action {
+        "tabs" => {
+            let state = match module.as_str() {
+                "Editor" => core.editor.content_tabs(&pane_id),
+                "Terminal" => core.terminal.content_tabs(&pane_id),
+                "Chat" => core.chat.content_tabs(&pane_id),
+                _ => None,
+            };
+            match state {
+                Some(s) => serde_json::to_value(&s)
+                    .map_err(|e| NexusError::InvalidState(e.to_string())),
+                None => Ok(serde_json::json!(null)),
+            }
+        }
+
+        "switch" => {
+            let index = args.get("index")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| NexusError::InvalidState("content.switch requires index".into()))?
+                as usize;
+
+            let state = match module.as_str() {
+                "Editor" => core.editor.switch_content_tab(&pane_id, index),
+                "Terminal" => core.terminal.switch_content_tab(&pane_id, index),
+                "Chat" => core.chat.switch_content_tab(&pane_id, index),
+                _ => Err(format!("module {module} has no content tabs")),
+            }.map_err(NexusError::InvalidState)?;
+
+            // Emit event
+            let mut payload = HashMap::new();
+            payload.insert("pane_id".to_string(), serde_json::json!(pane_id));
+            payload.insert("state".to_string(), serde_json::to_value(&state).unwrap_or_default());
+            core.publish("content.changed", payload);
+
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        "close" => {
+            let index = args.get("index")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| NexusError::InvalidState("content.close requires index".into()))?
+                as usize;
+
+            let result = match module.as_str() {
+                "Editor" => core.editor.close_content_tab(&pane_id, index),
+                "Terminal" => core.terminal.close_content_tab(&pane_id, index),
+                "Chat" => core.chat.close_content_tab(&pane_id, index),
+                _ => Err(format!("module {module} has no content tabs")),
+            }.map_err(NexusError::InvalidState)?;
+
+            // Emit event
+            let mut payload = HashMap::new();
+            payload.insert("pane_id".to_string(), serde_json::json!(pane_id));
+            core.publish("content.changed", payload);
+
+            match result {
+                Some(state) => serde_json::to_value(&state)
+                    .map_err(|e| NexusError::InvalidState(e.to_string())),
+                None => Ok(serde_json::json!({"empty": true})),
+            }
+        }
+
+        "next" | "prev" => {
+            let state = match module.as_str() {
+                "Editor" => core.editor.content_tabs(&pane_id),
+                "Terminal" => core.terminal.content_tabs(&pane_id),
+                "Chat" => core.chat.content_tabs(&pane_id),
+                _ => None,
+            };
+
+            let state = state.ok_or_else(|| NexusError::InvalidState("no content tabs".into()))?;
+            if state.tabs.is_empty() {
+                return Err(NexusError::InvalidState("no content tabs".into()));
+            }
+
+            let new_index = if action == "next" {
+                (state.active + 1) % state.tabs.len()
+            } else {
+                if state.active == 0 { state.tabs.len() - 1 } else { state.active - 1 }
+            };
+
+            let new_state = match module.as_str() {
+                "Editor" => core.editor.switch_content_tab(&pane_id, new_index),
+                "Terminal" => core.terminal.switch_content_tab(&pane_id, new_index),
+                "Chat" => core.chat.switch_content_tab(&pane_id, new_index),
+                _ => Err("unreachable".into()),
+            }.map_err(NexusError::InvalidState)?;
+
+            let mut payload = HashMap::new();
+            payload.insert("pane_id".to_string(), serde_json::json!(pane_id));
+            payload.insert("state".to_string(), serde_json::to_value(&new_state).unwrap_or_default());
+            core.publish("content.changed", payload);
+
+            serde_json::to_value(&new_state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+
+        _ => Err(NexusError::NotFound(format!("unknown content action: {action}"))),
     }
 }
 
@@ -967,14 +1765,14 @@ mod tests {
         assert!(result.unwrap().get("path").is_some());
 
         core.layout.split_focused(Direction::Vertical);
-        assert_eq!(core.layout.root.leaf_ids().len(), 5);
+        assert_eq!(core.layout.root.leaf_ids().len(), 2);
 
         let mut restore_args = HashMap::new();
         restore_args.insert("name".to_string(), serde_json::json!("my-snapshot"));
         restore_args.insert("_nexus_home".to_string(), serde_json::json!(dir.path().to_str().unwrap()));
         let result = dispatch(&mut core, "session.restore", &restore_args);
         assert!(result.is_ok());
-        assert_eq!(core.layout.root.leaf_ids().len(), 4);
+        assert_eq!(core.layout.root.leaf_ids().len(), 1);
     }
 
     #[test]
@@ -1037,11 +1835,11 @@ mod tests {
         dispatch(&mut core, "layout.export", &args).unwrap();
 
         core.layout.split_focused(Direction::Vertical);
-        assert_eq!(core.layout.root.leaf_ids().len(), 5);
+        assert_eq!(core.layout.root.leaf_ids().len(), 2);
 
         let result = dispatch(&mut core, "layout.import", &args);
         assert!(result.is_ok());
-        assert_eq!(core.layout.root.leaf_ids().len(), 4);
+        assert_eq!(core.layout.root.leaf_ids().len(), 1);
     }
 
     #[test]
@@ -1145,22 +1943,29 @@ mod tests {
 
     #[test]
     fn dispatch_editor_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("test.rs");
+        std::fs::write(&file, "fn main() {}").unwrap();
+
         let mut core = make_core();
         let mut args = HashMap::new();
-        args.insert("path".to_string(), serde_json::json!("/tmp/test.rs"));
-        args.insert("name".to_string(), serde_json::json!("test.rs"));
+        args.insert("path".to_string(), serde_json::json!(file.to_str().unwrap()));
         let result = dispatch(&mut core, "editor.open", &args);
         assert!(result.is_ok());
         let val = result.unwrap();
-        assert_eq!(val["path"], "/tmp/test.rs");
         assert_eq!(val["name"], "test.rs");
+        assert!(val["content"].as_str().unwrap().contains("fn main"));
     }
 
     #[test]
     fn dispatch_editor_open_infers_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("main.rs");
+        std::fs::write(&file, "// hello").unwrap();
+
         let mut core = make_core();
         let mut args = HashMap::new();
-        args.insert("path".to_string(), serde_json::json!("/home/user/src/main.rs"));
+        args.insert("path".to_string(), serde_json::json!(file.to_str().unwrap()));
         let result = dispatch(&mut core, "editor.open", &args);
         assert!(result.is_ok());
         assert_eq!(result.unwrap()["name"], "main.rs");

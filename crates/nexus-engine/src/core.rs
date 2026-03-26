@@ -14,7 +14,34 @@ use crate::registry::CapabilityRegistry;
 use crate::stack::{Tab, TabStack, TabStatus};
 use crate::stack_manager::StackManager;
 use crate::surface::{Mux, SurfaceRegistry};
+use serde::{Deserialize, Serialize};
+
 use nexus_core::capability::SystemContext;
+
+// ---------------------------------------------------------------------------
+// Display settings — engine-owned, synced to all surfaces
+// ---------------------------------------------------------------------------
+
+const GAP_CYCLE: [u32; 3] = [0, 8, 16];
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplaySettings {
+    pub gap: u32,
+    pub background: String,
+    pub border_radius: u32,
+    pub pane_opacity: f64,
+}
+
+impl Default for DisplaySettings {
+    fn default() -> Self {
+        Self {
+            gap: 0,
+            background: "var(--bg)".into(),
+            border_radius: 0,
+            pane_opacity: 1.0,
+        }
+    }
+}
 
 /// Find the visible container in a stack given the focused pane.
 fn get_visible_container(stack: &TabStack, focused_id: &str) -> Option<String> {
@@ -76,40 +103,101 @@ pub struct NexusCore {
     pub bus: Arc<Mutex<EventBus>>,
     pub layout: LayoutTree,
     pub surfaces: SurfaceRegistry,
+    pub display: DisplaySettings,
+    pub menu: crate::menu::MenuEngine,
+    pub explorer: crate::explorer::Explorer,
+    pub editor: crate::editor::Editor,
+    pub chat: crate::chat::Chat,
+    pub terminal: crate::terminal::Terminal,
     pty: PtyManager,
     session: Option<String>,
     dirty: bool,
     cwd: String,
+    /// Tracks last-focused pane per module name (e.g. "Editor" -> "pane_abc").
+    /// Updated on navigate/focus. Used for file-open routing.
+    pub last_active: HashMap<String, String>,
 }
 
 impl NexusCore {
     pub fn new(mux: Box<dyn Mux>) -> Self {
-        Self {
+        let mut core = Self {
             mux,
             registry: None,
             stacks: StackManager::new(),
             bus: Arc::new(Mutex::new(EventBus::new())),
             layout: LayoutTree::default_layout(),
             surfaces: SurfaceRegistry::new(),
+            display: DisplaySettings::default(),
+            menu: crate::menu::MenuEngine::new(None, None, None),
+            explorer: crate::explorer::Explorer::new("/tmp"),
+            editor: crate::editor::Editor::new(),
+            chat: crate::chat::Chat::new(),
+            terminal: crate::terminal::Terminal::new(),
             pty: PtyManager::new(),
             session: None,
             dirty: false,
             cwd: String::new(),
-        }
+            last_active: HashMap::new(),
+        };
+        core.init_default_stacks();
+        core.detect_backends();
+        core
     }
 
     pub fn with_registry(mux: Box<dyn Mux>, ctx: SystemContext) -> Self {
-        Self {
+        let mut core = Self {
             mux,
             registry: Some(CapabilityRegistry::new(ctx)),
             stacks: StackManager::new(),
             bus: Arc::new(Mutex::new(EventBus::new())),
             layout: LayoutTree::default_layout(),
             surfaces: SurfaceRegistry::new(),
+            display: DisplaySettings::default(),
+            menu: crate::menu::MenuEngine::new(None, None, None),
+            explorer: crate::explorer::Explorer::new("/tmp"),
+            editor: crate::editor::Editor::new(),
+            chat: crate::chat::Chat::new(),
+            terminal: crate::terminal::Terminal::new(),
             pty: PtyManager::new(),
             session: None,
             dirty: false,
             cwd: String::new(),
+            last_active: HashMap::new(),
+        };
+        core.init_default_stacks();
+        core.detect_backends();
+        core
+    }
+
+    /// Populate default tab stacks for the default layout panes.
+    /// Single pane with Chooser tab — user picks their module.
+    fn init_default_stacks(&mut self) {
+        let pane_ids = self.layout.root.leaf_ids();
+        for pane_id in &pane_ids {
+            let (sid, stack) = self.stacks.get_or_create_by_identity(pane_id, None);
+            let sid = sid.clone();
+            if stack.tabs.is_empty() {
+                let tab = Tab::new("Chooser")
+                    .with_status(TabStatus::Visible, true);
+                self.stacks.push(&sid, tab);
+            }
+        }
+    }
+
+    /// Auto-detect available backends and swap in real adapters.
+    fn detect_backends(&mut self) {
+        use crate::explorer::ExplorerBackend;
+        use crate::editor::EditorBackend;
+        // Explorer: prefer broot if available
+        let broot = crate::explorer::BrootAdapter::new();
+        if broot.is_available() {
+            self.explorer.set_backend(Box::new(broot));
+        }
+
+        // Editor: prefer nvim if available
+        let nvim = crate::editor::NvimAdapter::new();
+        if nvim.is_available() {
+            self.editor.set_backend(Box::new(nvim));
         }
     }
 
@@ -120,6 +208,7 @@ impl NexusCore {
         let session = self.mux.initialize(name, cwd);
         self.session = Some(session.clone());
         self.cwd = cwd.to_string();
+        self.explorer.navigate(cwd);
         self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::Custom, "workspace.created")
                 .with_payload("name", name),
@@ -196,6 +285,18 @@ impl NexusCore {
             "list" => self.stack_list(payload),
             "prev" => self.stack_rotate(payload, -1),
             "next" => self.stack_rotate(payload, 1),
+            "set_content" => self.stack_set_content(payload),
+            "open" => {
+                // Push a Menu tab onto the focused pane's stack
+                let mut menu_payload = payload.clone();
+                if !menu_payload.contains_key("name") {
+                    menu_payload.insert("name".into(), "Menu".into());
+                }
+                if !menu_payload.contains_key("pane_id") {
+                    menu_payload.insert("pane_id".into(), format!("pane_{}", uuid::Uuid::new_v4()));
+                }
+                self.stack_push(&menu_payload)
+            }
             _ => OpResult::error("unknown_op"),
         }
     }
@@ -206,7 +307,7 @@ impl NexusCore {
             Some(id) => id.clone(),
             None => return OpResult::error("no_pane_id"),
         };
-        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Shell");
+        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Chooser");
 
         let focused_id = payload
             .get("focused_id")
@@ -281,6 +382,7 @@ impl NexusCore {
         self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackPush, "stack.push")
                 .with_payload("stack_id", sid.as_str())
+                .with_payload("identity", identity)
                 .with_payload("pane", new_pane_id.as_str())
                 .with_payload("name", name),
         );
@@ -377,7 +479,7 @@ impl NexusCore {
             Some(id) => id.clone(),
             None => return OpResult::error("no_pane_id"),
         };
-        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Shell");
+        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Chooser");
 
         // Resolve sid with immutable borrow
         let sid = match self.stacks.get_by_identity(identity) {
@@ -518,7 +620,7 @@ impl NexusCore {
             Some(id) => id.clone(),
             None => return OpResult::error("no_pane_id"),
         };
-        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Shell");
+        let name = payload.get("name").map(|s| s.as_str()).unwrap_or("Chooser");
 
         let (sid, stack) = self
             .stacks
@@ -608,6 +710,32 @@ impl NexusCore {
         }
     }
 
+    /// Change what module the active tab renders by renaming it.
+    fn stack_set_content(&mut self, payload: &HashMap<String, String>) -> OpResult {
+        let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let name = match payload.get("name") {
+            Some(n) => n.clone(),
+            None => return OpResult::error("no_name"),
+        };
+
+        match self.stacks.get_by_identity_mut(identity) {
+            Some((_sid, stack)) => {
+                if let Some(tab) = stack.tabs.get_mut(stack.active_index) {
+                    tab.name = name.clone();
+                }
+                let sid = _sid.clone();
+                self.bus.lock().unwrap().publish(
+                    TypedEvent::new(EventType::Custom, "stack.set_content")
+                        .with_payload("stack_id", sid.as_str())
+                        .with_payload("identity", identity)
+                        .with_payload("name", name.as_str()),
+                );
+                OpResult::ok()
+            }
+            None => OpResult::error("not_found"),
+        }
+    }
+
     fn stack_rename(&mut self, payload: &HashMap<String, String>) -> OpResult {
         let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
         let name = match payload.get("name") {
@@ -628,6 +756,60 @@ impl NexusCore {
 
     pub fn publish(&mut self, source: &str, payload: HashMap<String, serde_json::Value>) {
         let mut event = TypedEvent::new(EventType::Custom, source);
+        event.payload = payload;
+        self.bus.lock().unwrap().publish(event);
+    }
+
+    // -- Display -------------------------------------------------------------
+
+    pub fn get_display(&self) -> &DisplaySettings {
+        &self.display
+    }
+
+    pub fn set_display_key(&mut self, key: &str, value: &str) {
+        match key {
+            "gap" => self.display.gap = value.parse().unwrap_or(0),
+            "background" => self.display.background = value.to_string(),
+            "borderRadius" | "border_radius" | "radius" => {
+                self.display.border_radius = value.parse().unwrap_or(0)
+            }
+            "opacity" | "paneOpacity" | "pane_opacity" => {
+                self.display.pane_opacity = value.parse().unwrap_or(1.0)
+            }
+            _ => return,
+        }
+        // Auto-set borderRadius when gap > 0
+        if key == "gap" && self.display.gap > 0 && self.display.border_radius == 0 {
+            self.display.border_radius = 6;
+        }
+        self.emit_display_changed();
+    }
+
+    pub fn cycle_gaps(&mut self) {
+        let idx = GAP_CYCLE.iter().position(|&g| g == self.display.gap).unwrap_or(0);
+        self.display.gap = GAP_CYCLE[(idx + 1) % GAP_CYCLE.len()];
+        self.display.border_radius = if self.display.gap > 0 { 6 } else { 0 };
+        self.emit_display_changed();
+    }
+
+    pub fn toggle_transparent(&mut self) {
+        self.display.background = if self.display.background == "transparent" {
+            "var(--bg)".into()
+        } else {
+            "transparent".into()
+        };
+        self.emit_display_changed();
+    }
+
+    fn emit_display_changed(&self) {
+        let payload_value = serde_json::to_value(&self.display).unwrap_or_default();
+        let mut payload = HashMap::new();
+        if let serde_json::Value::Object(map) = payload_value {
+            for (k, v) in map {
+                payload.insert(k, v);
+            }
+        }
+        let mut event = TypedEvent::new(EventType::Custom, "display.changed");
         event.payload = payload;
         self.bus.lock().unwrap().publish(event);
     }
@@ -719,7 +901,18 @@ impl NexusCore {
     // -- Keymap --------------------------------------------------------------
 
     pub fn get_keymap(&self) -> Vec<nexus_core::keymap::KeyBinding> {
-        nexus_core::keymap::default_keymap()
+        let defaults = nexus_core::keymap::default_keymap();
+        let user_path = dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("nexus/keymap.conf");
+        let user = nexus_core::keymap::parse_keymap(
+            user_path.to_str().unwrap_or(""),
+        );
+        if user.is_empty() {
+            defaults
+        } else {
+            nexus_core::keymap::cascade_keymaps(&[defaults, user])
+        }
     }
 
     pub fn get_commands(&self) -> Vec<nexus_core::keymap::CommandEntry> {
@@ -786,7 +979,7 @@ mod tests {
         let core = make_core();
         let snap = core.snapshot();
         assert_eq!(snap.version, 1);
-        assert_eq!(snap.layout.root.leaf_ids().len(), 4);
+        assert_eq!(snap.layout.root.leaf_ids().len(), 1);
         assert_eq!(snap.cwd, "/tmp");
     }
 

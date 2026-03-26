@@ -99,8 +99,8 @@ Alt+k = navigate.up
 Alt+l = navigate.right
 
 # Pane management
-Alt+v = pane.split.vertical
-Alt+s = pane.split.horizontal
+Alt+v = pane.split.horizontal
+Alt+s = pane.split.vertical
 Alt+f = pane.zoom
 Alt+w = pane.close
 Alt+q = pane.close
@@ -116,9 +116,16 @@ Alt+t = stack.list
 Alt+e = pane.new.explorer
 Alt+c = pane.new.chat
 
+# Module
+Alt+o = stack.open
+
 # UI
 Alt+p = command_palette.toggle
 Ctrl+\\ = command_line.toggle
+
+# Display
+Alt+g = display.gaps
+Alt+b = display.transparent
 ",
     )
 }
@@ -183,6 +190,18 @@ pub fn default_commands() -> Vec<CommandEntry> {
             binding: None,
         },
         CommandEntry {
+            id: "pane.set_role".into(),
+            label: "Set Pane Role...".into(),
+            category: "Pane".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "pane.clear_role".into(),
+            label: "Clear Pane Role".into(),
+            category: "Pane".into(),
+            binding: None,
+        },
+        CommandEntry {
             id: "pane.new.terminal".into(),
             label: "New Terminal Pane".into(),
             category: "Pane".into(),
@@ -242,6 +261,31 @@ pub fn default_commands() -> Vec<CommandEntry> {
             id: "stack.list".into(),
             label: "Show Stack".into(),
             category: "Stack".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "stack.open".into(),
+            label: "Open Module in Pane...".into(),
+            category: "Stack".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "layout.template".into(),
+            label: "Apply Layout Template...".into(),
+            category: "Layout".into(),
+            binding: None,
+        },
+        // Display
+        CommandEntry {
+            id: "display.gaps".into(),
+            label: "Toggle Gaps".into(),
+            category: "Display".into(),
+            binding: None,
+        },
+        CommandEntry {
+            id: "display.transparent".into(),
+            label: "Toggle Transparency".into(),
+            category: "Display".into(),
             binding: None,
         },
         // Chat
