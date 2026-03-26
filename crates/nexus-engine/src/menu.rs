@@ -32,6 +32,24 @@ pub struct MenuItem {
     pub meta: HashMap<String, serde_json::Value>,
 }
 
+impl MenuItem {
+    pub fn new(label: &str, item_type: &str, description: &str) -> Self {
+        Self {
+            label: label.to_string(),
+            item_type: item_type.to_string(),
+            payload: String::new(),
+            icon: None,
+            description: Some(description.to_string()),
+            meta: HashMap::new(),
+        }
+    }
+
+    pub fn with_arg(mut self, key: &str, value: &str) -> Self {
+        self.meta.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MenuList {
     #[serde(default)]
@@ -323,10 +341,13 @@ impl MenuEngine {
             icon: Some("M".into()),
             layout: "grid".into(),
             items: vec![
-                module_item("Terminal", ">_", "Shell session"),
-                module_item("Editor", "E", "Code editor"),
+                MenuItem::new("Browser", "browser.open", "🌐 Browser layer"),
+                MenuItem::new("RichText", "markdown.open", "📝 RichText layer"),
+                MenuItem::new("HUD", "stack.set_content", "📊 System HUD").with_arg("name", "HUD"),
+                MenuItem::new("Editor", "stack.set_content", "📝 Code editor").with_arg("name", "Editor"),
                 module_item("Explorer", "F", "File browser"),
                 module_item("Chat", "C", "AI assistant"),
+                module_item("Browser", "W", "Web browser"),
                 module_item("Menu", "=", "Menu browser"),
                 module_item("Info", "i", "System info"),
             ],

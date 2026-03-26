@@ -25,6 +25,9 @@ import EditorTauri from "./components/EditorTauri";
 import ExplorerTauri from "./components/ExplorerTauri";
 import InfoTauri from "./components/InfoTauri";
 import ChatTauri from "./components/ChatTauri";
+import BrowserTauri from "./components/BrowserTauri";
+import RichTextTauri from "./components/RichTextTauri";
+import HUDTauri from "./components/HUDTauri";
 import ChooserPane from "./components/ChooserPane";
 import MenuTauri from "./components/MenuTauri";
 import CommandPalette from "./components/CommandPalette";
@@ -496,6 +499,9 @@ const PANE_REGISTRY: Record<string, React.ComponentType<PaneProps>> = {
   Editor: EditorTauri,
   Explorer: ({ paneId, cwd, isFocused }) => <ExplorerTauri paneId={paneId} rootPath={cwd || ""} isFocused={isFocused} />,
   Chat: ChatTauri,
+  Browser: BrowserTauri,
+  RichText: RichTextTauri,
+  HUD: HUDTauri,
   Info: InfoTauri,
   Chooser: ChooserPane,
   Menu: MenuTauri,

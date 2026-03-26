@@ -13,6 +13,7 @@
 //! └── EventBus          (typed pub/sub)
 //! ```
 
+pub mod browser;
 pub mod bus;
 pub mod chat;
 pub mod content_tabs;
@@ -23,6 +24,8 @@ pub mod explorer;
 pub mod layout;
 pub mod info;
 pub mod menu;
+pub mod richtext;
+pub mod hud;
 pub mod terminal;
 pub mod pty;
 pub mod registry;

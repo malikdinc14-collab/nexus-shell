@@ -2,7 +2,7 @@
 //!
 //! Owns the engine. All surfaces connect here as JSON-RPC 2.0 clients.
 
-use nexus_core::adapters::{ClaudeAdapter, FsExplorer};
+use nexus_core::adapters::{ClaudeAdapter, FsExplorer, TauriBrowserAdapter};
 use nexus_core::capability::SystemContext;
 use nexus_core::mux::Mux;
 use nexus_engine::persistence;
@@ -146,10 +146,21 @@ async fn main() {
         }
     };
 
+    let claude = ClaudeAdapter::new(ctx.clone());
+    let fs_explorer = FsExplorer::new();
+    let tauri_browser = TauriBrowserAdapter::new();
+    let notes = NotesAdapter::new();
+    let sys_info = SystemInfoAdapter::new();
+    
+    // ...
+    
     let mut core = NexusCore::with_registry(mux, ctx);
     if let Some(ref mut reg) = core.registry {
         reg.register_chat(Box::new(claude));
         reg.register_explorer(Box::new(fs_explorer));
+        reg.register_browser(Box::new(tauri_browser));
+        reg.register_richtext(Box::new(notes));
+        reg.register_hud(Box::new(sys_info));
     }
     core.create_workspace("nexus", &cwd);
 

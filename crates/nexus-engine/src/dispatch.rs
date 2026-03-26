@@ -36,6 +36,7 @@ pub fn dispatch(
         "pane" => handle_pane(core, action, args),
         "stack" => handle_stack(core, action, args),
         "chat" => handle_chat(core, action, args),
+        "browser" => handle_browser(core, action, args),
         "terminal" => handle_terminal(core, action, args),
         "pty" => handle_pty(core, action, args),
         "session" => handle_session(core, action, args),
@@ -53,7 +54,30 @@ pub fn dispatch(
         "command_line" => handle_command_line(core, action, args),
         "menu" => handle_menu(core, action, args),
         "info" => handle_info(core, action, args),
+        "markdown" => handle_markdown(core, action, args),
+        "hud" => {
+            let val = serde_json::to_value(args).unwrap_or(serde_json::Value::Null);
+            core.handle_hud(action, &val)
+        }
         _ => Err(NexusError::NotFound(format!("unknown domain: {domain}"))),
+    }
+}
+
+impl NexusCore {
+    fn handle_hud(&self, action: &str, _args: &serde_json::Value) -> Result<serde_json::Value, NexusError> {
+        match action {
+            "frame" => {
+                let frame = self.hud.get_best_frame()?;
+                serde_json::to_value(&frame)
+                    .map_err(|e| NexusError::InvalidState(e.to_string()))
+            }
+            "list" => {
+                let frames = self.hud.get_combined_frame()?;
+                serde_json::to_value(&frames)
+                    .map_err(|e| NexusError::InvalidState(e.to_string()))
+            }
+            _ => Err(NexusError::NotFound(format!("unknown hud action: {action}"))),
+        }
     }
 }
 
@@ -407,6 +431,131 @@ fn handle_chat(
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
         _ => Err(NexusError::NotFound(format!("unknown chat action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// browser.*
+// ---------------------------------------------------------------------------
+
+fn handle_browser(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "open" => {
+            let url = str_arg("url").unwrap_or_else(|| "https://google.com".into());
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+
+            // 1. Create session in engine
+            let session = core.browser.open(&pane_id, &url)?;
+
+            // 2. Ensure the pane has a Browser tab
+            let (sid, stack) = core.stacks.get_or_create_by_identity(&pane_id, None);
+            let sid = sid.clone();
+
+            // If active tab isn't Browser, push or switch to it
+            let has_browser = stack.tabs.iter().any(|t| t.name == "Browser");
+            if !has_browser {
+                let tab = crate::stack::Tab::new("Browser")
+                    .with_status(crate::stack::TabStatus::Visible, true);
+                core.stacks.push(&sid, tab);
+            } else {
+                // Find index and switch
+                let idx = stack.tabs.iter().position(|t| t.name == "Browser").unwrap();
+                let mut switch_args = HashMap::new();
+                switch_args.insert("identity".into(), pane_id.clone());
+                switch_args.insert("index".into(), idx.to_string());
+                core.handle_stack_op("switch", &switch_args);
+            }
+
+            core.mark_dirty();
+            serde_json::to_value(&session)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "navigate" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            let url = str_arg("url").ok_or_else(|| {
+                NexusError::InvalidState("browser.navigate requires url".into())
+            })?;
+
+            core.browser.navigate(&pane_id, &url)?;
+            core.mark_dirty();
+            Ok(serde_json::json!({"status": "ok"}))
+        }
+        "state" => {
+            let state = core.browser.state();
+            serde_json::to_value(&state)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown browser action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// markdown.*
+// ---------------------------------------------------------------------------
+
+fn handle_markdown(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "open" => {
+            let path = str_arg("path").ok_or_else(|| {
+                NexusError::InvalidState("markdown.open requires path".into())
+            })?;
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+
+            // 1. Load node in engine
+            let node = core.richtext.load_node(&pane_id, &path)?;
+
+            // 2. Ensure pane has a RichText tab
+            let (sid, stack) = core.stacks.get_or_create_by_identity(&pane_id, None);
+            let sid = sid.clone();
+
+            let has_richtext = stack.tabs.iter().any(|t| t.name == "RichText");
+            if !has_richtext {
+                let tab = crate::stack::Tab::new("RichText")
+                    .with_status(crate::stack::TabStatus::Visible, true);
+                core.stacks.push(&sid, tab);
+            } else {
+                let idx = stack.tabs.iter().position(|t| t.name == "RichText").unwrap();
+                let mut switch_args = HashMap::new();
+                switch_args.insert("identity".into(), pane_id.clone());
+                switch_args.insert("index".into(), idx.to_string());
+                core.handle_stack_op("switch", &switch_args);
+            }
+
+            core.mark_dirty();
+            serde_json::to_value(&node)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        "save" => {
+            // Stub for now
+            Ok(serde_json::json!({"status": "ok"}))
+        }
+        "state" => {
+            let pane_id = str_arg("pane_id")
+                .unwrap_or_else(|| core.layout.focused.clone());
+            let node = core.richtext.state(&pane_id)?;
+            serde_json::to_value(&node)
+                .map_err(|e| NexusError::InvalidState(e.to_string()))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown markdown action: {action}"))),
     }
 }
 

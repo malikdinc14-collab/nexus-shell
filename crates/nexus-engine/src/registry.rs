@@ -6,7 +6,7 @@
 
 use nexus_core::capability::{
     Capability, CapabilityType, ChatCapability, EditorCapability, ExplorerCapability,
-    SystemContext,
+    BrowserCapability, RichTextCapability, HUDCapability, SystemContext,
 };
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,10 @@ use nexus_core::capability::{
 pub struct CapabilityRegistry {
     chat: Vec<Box<dyn ChatCapability>>,
     editor: Vec<Box<dyn EditorCapability>>,
-    explorer: Vec<Box<dyn ExplorerCapability>>,
+    pub explorers: Vec<Box<dyn ExplorerCapability>>,
+    pub browsers: Vec<Box<dyn BrowserCapability>>,
+    pub richtext: Vec<Box<dyn RichTextCapability>>,
+    pub huds: Vec<Box<dyn HUDCapability>>,
     pub ctx: SystemContext,
 }
 
@@ -26,7 +29,10 @@ impl CapabilityRegistry {
         Self {
             chat: Vec::new(),
             editor: Vec::new(),
-            explorer: Vec::new(),
+            explorers: Vec::new(),
+            browsers: Vec::new(),
+            richtext: Vec::new(),
+            huds: Vec::new(),
             ctx,
         }
     }
@@ -44,7 +50,18 @@ impl CapabilityRegistry {
     }
 
     pub fn register_explorer(&mut self, adapter: Box<dyn ExplorerCapability>) {
-        self.explorer.push(adapter);
+        self.explorers.push(adapter);
+    }
+    pub fn register_browser(&mut self, adapter: Box<dyn BrowserCapability>) {
+        self.browsers.push(adapter);
+    }
+
+    pub fn register_richtext(&mut self, adapter: Box<dyn RichTextCapability>) {
+        self.richtext.push(adapter);
+    }
+
+    pub fn register_hud(&mut self, adapter: Box<dyn HUDCapability>) {
+        self.huds.push(adapter);
     }
 
     // -----------------------------------------------------------------------
@@ -63,7 +80,18 @@ impl CapabilityRegistry {
 
     /// Return the highest-priority available explorer adapter, or `None`.
     pub fn best_explorer(&self) -> Option<&dyn ExplorerCapability> {
-        best_of(self.explorer.iter().map(|a| a.as_ref() as &dyn ExplorerCapability))
+        best_of(self.explorers.iter().map(|a| a.as_ref() as &dyn ExplorerCapability))
+    }
+    pub fn best_browser(&self) -> Option<&dyn BrowserCapability> {
+        best_of(self.browsers.iter().map(|a| a.as_ref() as &dyn BrowserCapability))
+    }
+
+    pub fn best_richtext(&self) -> Option<&dyn RichTextCapability> {
+        best_of(self.richtext.iter().map(|a| a.as_ref() as &dyn RichTextCapability))
+    }
+
+    pub fn best_hud(&self) -> Option<&dyn HUDCapability> {
+        best_of(self.huds.iter().map(|a| a.as_ref() as &dyn HUDCapability))
     }
 
     // -----------------------------------------------------------------------
@@ -79,7 +107,10 @@ impl CapabilityRegistry {
     }
 
     pub fn list_explorer(&self) -> &[Box<dyn ExplorerCapability>] {
-        &self.explorer
+        &self.explorers
+    }
+    pub fn list_browser(&self) -> &[Box<dyn BrowserCapability>] {
+        &self.browsers
     }
 
     /// Return all registered adapters as JSON, optionally filtered by type.
@@ -93,7 +124,10 @@ impl CapabilityRegistry {
                     CapabilityType::Chat => "chat",
                     CapabilityType::Editor => "editor",
                     CapabilityType::Explorer => "explorer",
+                    CapabilityType::Browser => "browser",
                     CapabilityType::Multiplexer => "multiplexer",
+                    CapabilityType::RichText => "richtext",
+                    CapabilityType::HUD => "hud",
                 },
                 "priority": m.priority,
                 "binary": m.binary,
@@ -112,8 +146,13 @@ impl CapabilityRegistry {
             }
         }
         if type_filter.is_none() || type_filter == Some("explorer") {
-            for c in &self.explorer {
-                add(&mut result, c.as_ref());
+            for c in &self.explorers {
+                add(&mut result, c.as_ref() as &dyn Capability);
+            }
+        }
+        if type_filter.is_none() || type_filter == Some("browser") {
+            for c in &self.browsers {
+                add(&mut result, c.as_ref() as &dyn Capability);
             }
         }
 

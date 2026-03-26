@@ -20,6 +20,9 @@ pub enum CapabilityType {
     Editor,
     Chat,
     Explorer,
+    Browser,
+    RichText,
+    HUD,
 }
 
 /// System-level context for binary resolution.
@@ -153,6 +156,71 @@ pub trait ExplorerCapability: Capability {
     fn get_selection(&self) -> Option<String>;
     fn trigger_action(&mut self, action: &str, payload: &str) -> Result<(), NexusError>;
     fn get_launch_command(&self) -> Option<String>;
+}
+
+// ---------------------------------------------------------------------------
+// Browser capability
+// ---------------------------------------------------------------------------
+
+/// Web browser backend (xterm.js w3m fallback, Tauri WebView, Ladybird)
+pub trait BrowserCapability: Capability {
+    fn load_url(&mut self, url: &str) -> Result<(), NexusError>;
+    fn get_current_url(&self) -> Option<String>;
+    fn query_selector(&self, selector: &str) -> Result<String, NexusError>;
+    fn is_alive(&self) -> bool;
+    fn get_launch_command(&self) -> Option<String>;
+}
+
+// ---------------------------------------------------------------------------
+// RichText capability (Obsidian Parity)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteNode {
+    pub id: String,
+    pub path: String,
+    pub title: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub backlinks: Vec<String>,
+}
+
+pub trait RichTextCapability: Capability {
+    /// Open a "Vault" (directory)
+    fn open_vault(&mut self, path: &str) -> Result<(), NexusError>;
+    /// Load a node by its ID or path
+    fn load_node(&mut self, id_or_path: &str) -> Result<NoteNode, NexusError>;
+    /// Save node content
+    fn save_node(&mut self, node: NoteNode) -> Result<(), NexusError>;
+    /// Search for nodes by tag or title
+    fn search_nodes(&self, query: &str) -> Result<Vec<NoteNode>, NexusError>;
+    /// Get all nodes in the current vault
+    fn list_nodes(&self) -> Result<Vec<NoteNode>, NexusError>;
+}
+
+// ---------------------------------------------------------------------------
+// HUD Capability
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HUDPart {
+    pub id: String,
+    pub part_type: String, // "Gauge", "Sparkline", "Matrix", "Graph", "Timeline"
+    pub label: String,
+    pub value: serde_json::Value,
+    pub metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HUDFrame {
+    pub source: String,
+    pub parts: Vec<HUDPart>,
+    pub timestamp: String,
+}
+
+pub trait HUDCapability: Capability + Send + Sync {
+    /// Get a single snapshot of HUD data
+    fn get_frame(&self) -> Result<HUDFrame, NexusError>;
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 //! construction time. All state lives here; the mux is a dumb backend.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::bus::{EventBus, EventType, TypedEvent};
 use crate::layout::LayoutTree;
@@ -14,6 +14,7 @@ use crate::registry::CapabilityRegistry;
 use crate::stack::{Tab, TabStack, TabStatus};
 use crate::stack_manager::StackManager;
 use crate::surface::{Mux, SurfaceRegistry};
+use crate::hud::HUDManager;
 use serde::{Deserialize, Serialize};
 
 use nexus_core::capability::SystemContext;
@@ -98,7 +99,7 @@ impl OpResult {
 /// Facade wrapping all engine modules behind a mux-agnostic API.
 pub struct NexusCore {
     pub mux: Box<dyn Mux>,
-    pub registry: Option<CapabilityRegistry>,
+    pub registry: Option<Arc<RwLock<CapabilityRegistry>>>,
     pub stacks: StackManager,
     pub bus: Arc<Mutex<EventBus>>,
     pub layout: LayoutTree,
@@ -109,6 +110,9 @@ pub struct NexusCore {
     pub editor: crate::editor::Editor,
     pub chat: crate::chat::Chat,
     pub terminal: crate::terminal::Terminal,
+    pub browser: crate::browser::Browser,
+    pub richtext: crate::richtext::RichText,
+    pub hud: crate::hud::HUDManager,
     pty: PtyManager,
     session: Option<String>,
     dirty: bool,
@@ -120,9 +124,10 @@ pub struct NexusCore {
 
 impl NexusCore {
     pub fn new(mux: Box<dyn Mux>) -> Self {
+        let reg = Arc::new(RwLock::new(CapabilityRegistry::new(SystemContext::from_login_shell())));
         let mut core = Self {
             mux,
-            registry: None,
+            registry: Some(reg.clone()),
             stacks: StackManager::new(),
             bus: Arc::new(Mutex::new(EventBus::new())),
             layout: LayoutTree::default_layout(),
@@ -133,6 +138,9 @@ impl NexusCore {
             editor: crate::editor::Editor::new(),
             chat: crate::chat::Chat::new(),
             terminal: crate::terminal::Terminal::new(),
+            browser: crate::browser::Browser::new(),
+            richtext: crate::richtext::RichText::new(reg.clone()),
+            hud: crate::hud::HUDManager::new(reg.clone()),
             pty: PtyManager::new(),
             session: None,
             dirty: false,
@@ -145,9 +153,10 @@ impl NexusCore {
     }
 
     pub fn with_registry(mux: Box<dyn Mux>, ctx: SystemContext) -> Self {
+        let reg = Arc::new(RwLock::new(CapabilityRegistry::new(ctx)));
         let mut core = Self {
             mux,
-            registry: Some(CapabilityRegistry::new(ctx)),
+            registry: Some(reg.clone()),
             stacks: StackManager::new(),
             bus: Arc::new(Mutex::new(EventBus::new())),
             layout: LayoutTree::default_layout(),
@@ -158,6 +167,9 @@ impl NexusCore {
             editor: crate::editor::Editor::new(),
             chat: crate::chat::Chat::new(),
             terminal: crate::terminal::Terminal::new(),
+            browser: crate::browser::Browser::new(),
+            richtext: crate::richtext::RichText::new(reg.clone()),
+            hud: crate::hud::HUDManager::new(reg.clone()),
             pty: PtyManager::new(),
             session: None,
             dirty: false,
@@ -846,10 +858,11 @@ impl NexusCore {
     // -- Chat ----------------------------------------------------------------
 
     pub fn chat_send(&mut self, pane_id: &str, message: &str, cwd: &str) -> Result<(), String> {
-        let registry = self.registry.as_ref().ok_or("No capability registry")?;
+        let registry_lock = self.registry.as_ref().ok_or("No capability registry")?;
+        let registry = registry_lock.read().unwrap();
         let chat = registry.best_chat().ok_or("No chat adapter available")?;
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx): (std::sync::mpsc::Sender<nexus_core::capability::ChatEvent>, std::sync::mpsc::Receiver<nexus_core::capability::ChatEvent>) = std::sync::mpsc::channel();
         chat.send_message(message, cwd, tx).map_err(|e| e.to_string())?;
 
         let bus = self.bus.clone();
@@ -925,7 +938,7 @@ impl NexusCore {
     /// List all registered adapters with availability.
     pub fn capabilities_list(&self, type_filter: Option<&str>) -> serde_json::Value {
         match &self.registry {
-            Some(reg) => reg.capabilities_list(type_filter),
+            Some(reg) => reg.read().unwrap().capabilities_list(type_filter),
             None => serde_json::json!([]),
         }
     }

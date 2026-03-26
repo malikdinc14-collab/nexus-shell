@@ -12,6 +12,11 @@ pub enum NexusError {
     Io(String),
     /// Protocol/serialization error.
     Protocol(String),
+    /// Capability-specific errors.
+    CapabilityNotFound(String),
+    AdapterError(String),
+    DispatchError(String),
+    Unimplemented(&'static str),
     /// Generic error with message.
     Other(String),
 }
@@ -23,6 +28,10 @@ impl fmt::Display for NexusError {
             NexusError::InvalidState(s) => write!(f, "invalid state: {s}"),
             NexusError::Io(s) => write!(f, "io error: {s}"),
             NexusError::Protocol(s) => write!(f, "protocol error: {s}"),
+            NexusError::CapabilityNotFound(s) => write!(f, "capability not found: {s}"),
+            NexusError::AdapterError(s) => write!(f, "adapter error: {s}"),
+            NexusError::DispatchError(s) => write!(f, "dispatch error: {s}"),
+            NexusError::Unimplemented(s) => write!(f, "unimplemented: {s}"),
             NexusError::Other(s) => write!(f, "{s}"),
         }
     }

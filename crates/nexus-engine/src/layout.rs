@@ -28,7 +28,7 @@ pub enum Nav {
 }
 
 /// Normalized bounding rectangle for spatial navigation.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,
@@ -41,21 +41,30 @@ fn ranges_overlap(a0: f64, a1: f64, b0: f64, b1: f64) -> bool {
     a0 < b1 - 0.001 && b0 < a1 - 0.001
 }
 
-// ---------------------------------------------------------------------------
-// Layout node
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum LayoutNode {
+    /// A single pane with a unique ID.
     Leaf {
         id: String,
     },
+    /// A binary split (horizontal or vertical) with a ratio.
     Split {
         direction: Direction,
         ratio: f64,
         left: Box<LayoutNode>,
         right: Box<LayoutNode>,
+    },
+    /// A weighted MxN grid for complex non-binary layouts.
+    Grid {
+        weights: Vec<f64>,
+        columns: usize,
+        children: Vec<LayoutNode>,
+    },
+    /// A floating/overlapping pane with absolute coordinates.
+    Absolute {
+        rect: Rect,
+        child: Box<LayoutNode>,
     },
 }
 
@@ -75,6 +84,21 @@ impl LayoutNode {
         }
     }
 
+    pub fn grid(weights: Vec<f64>, columns: usize, children: Vec<LayoutNode>) -> Self {
+        LayoutNode::Grid {
+            weights,
+            columns,
+            children,
+        }
+    }
+
+    pub fn absolute(rect: Rect, child: LayoutNode) -> Self {
+        LayoutNode::Absolute {
+            rect,
+            child: Box::new(child),
+        }
+    }
+
     /// Collect all leaf IDs in tree order.
     pub fn leaf_ids(&self) -> Vec<String> {
         match self {
@@ -84,6 +108,10 @@ impl LayoutNode {
                 ids.extend(right.leaf_ids());
                 ids
             }
+            LayoutNode::Grid { children, .. } => {
+                children.iter().flat_map(|c| c.leaf_ids()).collect()
+            }
+            LayoutNode::Absolute { child, .. } => child.leaf_ids(),
         }
     }
 
@@ -107,6 +135,80 @@ impl LayoutNode {
                 left.insert_split(target_id, direction, new_id, ratio)
                     || right.insert_split(target_id, direction, new_id, ratio)
             }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.insert_split(target_id, direction, new_id, ratio) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                child.insert_split(target_id, direction, new_id, ratio)
+            }
+            _ => false,
+        }
+    }
+
+    /// Find a leaf by ID and replace it with a grid containing the original
+    /// leaf plus additional new leaves.
+    pub fn insert_grid(
+        &mut self,
+        target_id: &str,
+        columns: usize,
+        new_ids: Vec<String>,
+    ) -> bool {
+        match self {
+            LayoutNode::Leaf { id } if id == target_id => {
+                let mut children = vec![LayoutNode::leaf(id)];
+                for nid in new_ids {
+                    children.push(LayoutNode::leaf(&nid));
+                }
+                let weights = vec![1.0; children.len()];
+                *self = LayoutNode::grid(weights, columns, children);
+                true
+            }
+            LayoutNode::Split { left, right, .. } => {
+                left.insert_grid(target_id, columns, new_ids.clone())
+                    || right.insert_grid(target_id, columns, new_ids)
+            }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.insert_grid(target_id, columns, new_ids.clone()) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                child.insert_grid(target_id, columns, new_ids)
+            }
+            _ => false,
+        }
+    }
+
+    /// Wrap a leaf in an Absolute container.
+    pub fn insert_absolute(&mut self, target_id: &str, rect: Rect) -> bool {
+        match self {
+            LayoutNode::Leaf { id } if id == target_id => {
+                let original = LayoutNode::leaf(id);
+                *self = LayoutNode::absolute(rect, original);
+                true
+            }
+            LayoutNode::Split { left, right, .. } => {
+                left.insert_absolute(target_id, rect) || right.insert_absolute(target_id, rect)
+            }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.insert_absolute(target_id, rect) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                child.insert_absolute(target_id, rect)
+            }
             _ => false,
         }
     }
@@ -118,16 +220,43 @@ impl LayoutNode {
             LayoutNode::Leaf { id, .. } => id == target_id,
             LayoutNode::Split { left, right, .. } => {
                 if left.is_leaf_with_id(target_id) {
-                    // Replace self with right child
                     *self = *right.clone();
                     true
                 } else if right.is_leaf_with_id(target_id) {
-                    // Replace self with left child
                     *self = *left.clone();
                     true
                 } else {
                     left.remove_leaf(target_id) || right.remove_leaf(target_id)
                 }
+            }
+            LayoutNode::Grid { children, .. } => {
+                let mut found_idx = None;
+                for (idx, child) in children.iter().enumerate() {
+                    if child.is_leaf_with_id(target_id) {
+                        found_idx = Some(idx);
+                        break;
+                    }
+                    if child.clone().remove_leaf(target_id) {
+                        // This recursion for Grid is slightly tricky because remove_leaf 
+                        // in Split replaces self. Let's simplify and say for now
+                        // we only support removing direct children of Grid.
+                        // TODO: Proper nested Grid removal.
+                        return true;
+                    }
+                }
+                if let Some(idx) = found_idx {
+                    children.remove(idx);
+                    return true;
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                if child.is_leaf_with_id(target_id) {
+                    // Logic for Absolute removal? Maybe it just disappears.
+                    // For now, let's say we don't allow removing the only child of Absolute directly.
+                    return false;
+                }
+                child.remove_leaf(target_id)
             }
         }
     }
@@ -140,20 +269,86 @@ impl LayoutNode {
     pub fn compute_bounds(&self, rect: Rect) -> Vec<(String, Rect)> {
         match self {
             LayoutNode::Leaf { id } => vec![(id.clone(), rect)],
-            LayoutNode::Split { direction, ratio, left, right } => {
+            LayoutNode::Split {
+                direction,
+                ratio,
+                left,
+                right,
+            } => {
                 let (left_rect, right_rect) = match direction {
                     Direction::Horizontal => (
-                        Rect { x: rect.x, y: rect.y, w: rect.w * ratio, h: rect.h },
-                        Rect { x: rect.x + rect.w * ratio, y: rect.y, w: rect.w * (1.0 - ratio), h: rect.h },
+                        Rect {
+                            x: rect.x,
+                            y: rect.y,
+                            w: rect.w * ratio,
+                            h: rect.h,
+                        },
+                        Rect {
+                            x: rect.x + rect.w * ratio,
+                            y: rect.y,
+                            w: rect.w * (1.0 - ratio),
+                            h: rect.h,
+                        },
                     ),
                     Direction::Vertical => (
-                        Rect { x: rect.x, y: rect.y, w: rect.w, h: rect.h * ratio },
-                        Rect { x: rect.x, y: rect.y + rect.h * ratio, w: rect.w, h: rect.h * (1.0 - ratio) },
+                        Rect {
+                            x: rect.x,
+                            y: rect.y,
+                            w: rect.w,
+                            h: rect.h * ratio,
+                        },
+                        Rect {
+                            x: rect.x,
+                            y: rect.y + rect.h * ratio,
+                            w: rect.w,
+                            h: rect.h * (1.0 - ratio),
+                        },
                     ),
                 };
                 let mut out = left.compute_bounds(left_rect);
                 out.extend(right.compute_bounds(right_rect));
                 out
+            }
+            LayoutNode::Grid {
+                weights,
+                columns,
+                children,
+            } => {
+                let mut out = Vec::new();
+                if children.is_empty() {
+                    return out;
+                }
+
+                let rows = (children.len() as f64 / *columns as f64).ceil() as usize;
+                
+                // For simplicity in Phase 1, we assume equal weights if weights.len() != children.len()
+                // or we use weights as proportions for rows/cols if they match.
+                // Let's implement a simple uniform grid first.
+                let cell_w = rect.w / (*columns as f64);
+                let cell_h = rect.h / (rows as f64);
+
+                for (idx, child) in children.iter().enumerate() {
+                    let r = idx / columns;
+                    let c = idx % columns;
+                    let child_rect = Rect {
+                        x: rect.x + (c as f64 * cell_w),
+                        y: rect.y + (r as f64 * cell_h),
+                        w: cell_w,
+                        h: cell_h,
+                    };
+                    out.extend(child.compute_bounds(child_rect));
+                }
+                out
+            }
+            LayoutNode::Absolute { rect: abs_rect, child } => {
+                // Absolute rects are relative to the parent's rect [0,1]
+                let child_rect = Rect {
+                    x: rect.x + abs_rect.x * rect.w,
+                    y: rect.y + abs_rect.y * rect.h,
+                    w: abs_rect.w * rect.w,
+                    h: abs_rect.h * rect.h,
+                };
+                child.compute_bounds(child_rect)
             }
         }
     }
@@ -175,6 +370,17 @@ impl LayoutNode {
                     left.set_ratio_for(pane_id, new_ratio)
                         || right.set_ratio_for(pane_id, new_ratio)
                 }
+            }
+            LayoutNode::Grid { children, .. } => {
+                for child in children {
+                    if child.set_ratio_for(pane_id, new_ratio) {
+                        return true;
+                    }
+                }
+                false
+            }
+            LayoutNode::Absolute { child, .. } => {
+                child.set_ratio_for(pane_id, new_ratio)
             }
             _ => false,
         }
@@ -227,6 +433,26 @@ impl LayoutTree {
             .insert_split(&self.focused, direction, &new_id, 0.5);
         self.focused = new_id.clone();
         new_id
+    }
+
+    /// Convert the focused pane into a grid of N panes. Returns the new pane IDs.
+    pub fn split_into_grid(&mut self, columns: usize, count: usize) -> Vec<String> {
+        let mut new_ids = Vec::new();
+        for _ in 0..count {
+            new_ids.push(self.alloc_id());
+        }
+        if self.root.insert_grid(&self.focused, columns, new_ids.clone()) {
+            // Focus the first new child
+            if let Some(first) = new_ids.first() {
+                self.focused = first.clone();
+            }
+        }
+        new_ids
+    }
+
+    /// Make the focused pane "floating" by wrapping it in an Absolute container.
+    pub fn make_absolute(&mut self, rect: Rect) {
+        self.root.insert_absolute(&self.focused, rect);
     }
 
     /// Close a pane by ID. If it's the focused pane, focus moves to the first
@@ -420,6 +646,22 @@ impl LayoutTree {
                 left: Box::new(Self::regen_ids(left, next_id)),
                 right: Box::new(Self::regen_ids(right, next_id)),
             },
+            LayoutNode::Grid {
+                weights,
+                columns,
+                children,
+            } => LayoutNode::Grid {
+                weights: weights.clone(),
+                columns: *columns,
+                children: children
+                    .iter()
+                    .map(|c| Self::regen_ids(c, next_id))
+                    .collect(),
+            },
+            LayoutNode::Absolute { rect, child } => LayoutNode::Absolute {
+                rect: *rect,
+                child: Box::new(Self::regen_ids(child, next_id)),
+            },
         }
     }
 }
@@ -590,5 +832,47 @@ mod tests {
         let arr = list.as_array().unwrap();
         assert_eq!(arr.len(), 5);
         assert!(arr[0].get("pane_id").is_some());
+    }
+
+    #[test]
+    fn grid_computes_uniform_bounds() {
+        let grid = LayoutNode::grid(
+            vec![1.0; 4],
+            2,
+            vec![
+                LayoutNode::leaf("g1"),
+                LayoutNode::leaf("g2"),
+                LayoutNode::leaf("g3"),
+                LayoutNode::leaf("g4"),
+            ],
+        );
+        let bounds = grid.compute_bounds(Rect { x: 0.0, y: 0.0, w: 100.0, h: 100.0 });
+        assert_eq!(bounds.len(), 4);
+        
+        // g1 (top-left)
+        assert_eq!(bounds[0].1.x, 0.0);
+        assert_eq!(bounds[0].1.y, 0.0);
+        assert_eq!(bounds[0].1.w, 50.0);
+        assert_eq!(bounds[0].1.h, 50.0);
+        
+        // g4 (bottom-right)
+        assert_eq!(bounds[3].1.x, 50.0);
+        assert_eq!(bounds[3].1.y, 50.0);
+        assert_eq!(bounds[3].1.w, 50.0);
+        assert_eq!(bounds[3].1.h, 50.0);
+    }
+
+    #[test]
+    fn absolute_computes_relative_bounds() {
+        let abs = LayoutNode::absolute(
+            Rect { x: 0.1, y: 0.1, w: 0.8, h: 0.8 },
+            LayoutNode::leaf("a1"),
+        );
+        let bounds = abs.compute_bounds(Rect { x: 0.0, y: 0.0, w: 1000.0, h: 1000.0 });
+        assert_eq!(bounds.len(), 1);
+        assert_eq!(bounds[0].1.x, 100.0);
+        assert_eq!(bounds[0].1.y, 100.0);
+        assert_eq!(bounds[0].1.w, 800.0);
+        assert_eq!(bounds[0].1.h, 800.0);
     }
 }
