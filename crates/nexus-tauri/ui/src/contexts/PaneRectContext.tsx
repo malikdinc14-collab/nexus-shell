@@ -14,7 +14,6 @@ interface PaneRect {
 
 interface PaneRectContextValue {
   rects: Map<string, PaneRect>;
-  /** The positioned container that overlay panes are children of. */
   containerRef: React.RefObject<HTMLDivElement | null>;
   setContainer: (el: HTMLDivElement | null) => void;
   reportRect: (paneId: string, rect: PaneRect) => void;
@@ -27,52 +26,31 @@ export function PaneRectProvider({ children }: { children: React.ReactNode }) {
   const [rects, setRects] = useState<Map<string, PaneRect>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Accumulate updates in a rAF batch — ensures browser layout is settled
-  const pendingRef = useRef<Map<string, PaneRect | null>>(new Map());
-  const rafRef = useRef(0);
-
-  const flush = useCallback(() => {
-    rafRef.current = 0;
-    const pending = pendingRef.current;
-    if (pending.size === 0) return;
-    setRects((prev) => {
-      const next = new Map(prev);
-      for (const [id, rect] of pending) {
-        if (rect === null) {
-          next.delete(id);
-        } else {
-          next.set(id, rect);
-        }
-      }
-      pending.clear();
-      return next;
-    });
-  }, []);
-
-  const schedule = useCallback(() => {
-    if (!rafRef.current) {
-      rafRef.current = requestAnimationFrame(flush);
-    }
-  }, [flush]);
-
   const setContainer = useCallback((el: HTMLDivElement | null) => {
     containerRef.current = el;
   }, []);
 
+  // No manual batching — React 18 auto-batches within the same task/microtask.
   const reportRect = useCallback(
     (paneId: string, rect: PaneRect) => {
-      pendingRef.current.set(paneId, rect);
-      schedule();
+      setRects((prev) => {
+        const next = new Map(prev);
+        next.set(paneId, rect);
+        return next;
+      });
     },
-    [schedule],
+    [],
   );
 
   const removeRect = useCallback(
     (paneId: string) => {
-      pendingRef.current.set(paneId, null);
-      schedule();
+      setRects((prev) => {
+        const next = new Map(prev);
+        next.delete(paneId);
+        return next;
+      });
     },
-    [schedule],
+    [],
   );
 
   const value = useMemo(

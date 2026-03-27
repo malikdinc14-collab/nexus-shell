@@ -514,10 +514,12 @@ function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSP
       });
     };
 
+    // ResizeObserver fires on initial observation + any size change.
     const observer = new ResizeObserver(report);
     observer.observe(el);
-    // Initial report after browser layout settles
-    requestAnimationFrame(report);
+    // Synchronous initial report — covers the case where paneId changes
+    // but the slot size doesn't (e.g., equal-size swap).
+    report();
 
     return () => {
       observer.disconnect();
