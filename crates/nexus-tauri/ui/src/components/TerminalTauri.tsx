@@ -118,12 +118,17 @@ export default function TerminalTauri({ paneId, cwd, onExit, isFocused }: Props)
     }
   }, [isFocused]);
 
-  // Re-focus after layout mutations (swap, grow, move) that displace xterm's DOM focus
+  // Repaint + refocus after layout mutations (swap, move) that don't trigger a resize
   useEffect(() => {
     const handler = (e: Event) => {
       const { paneId: targetId } = (e as CustomEvent).detail;
-      if (targetId === paneId && termRef.current) {
-        termRef.current.focus();
+      if (targetId === paneId) {
+        // Force canvas repaint — swap doesn't change size so ResizeObserver won't fire
+        fitRef.current?.fit();
+        if (termRef.current) {
+          termRef.current.refresh(0, termRef.current.rows - 1);
+          termRef.current.focus();
+        }
       }
     };
     window.addEventListener("nexus:refocus-pane", handler);
