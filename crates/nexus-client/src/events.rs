@@ -4,37 +4,70 @@ use crate::protocol::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 use nexus_core::NexusError;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(unix)]
+type InnerStream = std::os::unix::net::UnixStream;
+
+#[cfg(not(unix))]
+type InnerStream = std::net::TcpStream;
 
 /// A connection to the daemon's event socket with active subscription.
 pub struct EventSubscription {
-    reader: BufReader<UnixStream>,
-    writer: UnixStream,
+    reader: BufReader<InnerStream>,
+    writer: InnerStream,
     next_id: AtomicU64,
 }
 
 impl EventSubscription {
-    /// Connect to the event socket and subscribe to the given patterns.
+    /// Connect to the event socket and subscribe to the given patterns (Unix).
+    #[cfg(unix)]
     pub fn subscribe(
         patterns: &[&str],
         filter: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<Self, NexusError> {
         let path = nexus_core::constants::events_socket_path();
-        Self::subscribe_to(
-            path.to_str().unwrap_or(""),
-            patterns,
-            filter,
-        )
+        Self::subscribe_to(path.to_str().unwrap_or(""), patterns, filter)
     }
 
-    /// Connect to a specific event socket path (for testing).
+    /// Connect to a specific event socket path (for testing) (Unix).
+    #[cfg(unix)]
     pub fn subscribe_to(
         path: &str,
         patterns: &[&str],
         filter: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<Self, NexusError> {
-        let stream = UnixStream::connect(path)
+        let stream = InnerStream::connect(path)
+            .map_err(|e| NexusError::Protocol(format!("event connect: {e}")))?;
+        let reader = BufReader::new(stream.try_clone()
+            .map_err(|e| NexusError::Protocol(format!("clone: {e}")))?);
+        let mut sub = Self {
+            reader,
+            writer: stream,
+            next_id: AtomicU64::new(1),
+        };
+        sub.send_subscribe(patterns, filter)?;
+        Ok(sub)
+    }
+
+    /// Connect to the event socket and subscribe to the given patterns (Windows).
+    #[cfg(not(unix))]
+    pub fn subscribe(
+        patterns: &[&str],
+        filter: Option<HashMap<String, serde_json::Value>>,
+    ) -> Result<Self, NexusError> {
+        let addr = nexus_core::constants::event_addr();
+        Self::subscribe_to(addr, patterns, filter)
+    }
+
+    /// Connect to a specific TCP address (for testing) (Windows).
+    #[cfg(not(unix))]
+    pub fn subscribe_to(
+        addr: std::net::SocketAddr,
+        patterns: &[&str],
+        filter: Option<HashMap<String, serde_json::Value>>,
+    ) -> Result<Self, NexusError> {
+        let stream = InnerStream::connect(addr)
             .map_err(|e| NexusError::Protocol(format!("event connect: {e}")))?;
         let reader = BufReader::new(stream.try_clone()
             .map_err(|e| NexusError::Protocol(format!("clone: {e}")))?);

@@ -5,6 +5,24 @@ use std::path::PathBuf;
 /// Default session name when no name is specified.
 pub const DEFAULT_SESSION_NAME: &str = "nexus";
 
+/// Returns the TCP address for the command socket.
+pub fn cmd_addr() -> std::net::SocketAddr {
+    let port = std::env::var("NEXUS_CMD_PORT")
+        .unwrap_or_else(|_| "7723".to_string())
+        .parse()
+        .unwrap_or(7723);
+    std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), port)
+}
+
+/// Returns the TCP address for the event socket.
+pub fn event_addr() -> std::net::SocketAddr {
+    let port = std::env::var("NEXUS_EVENT_PORT")
+        .unwrap_or_else(|_| "7724".to_string())
+        .parse()
+        .unwrap_or(7724);
+    std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), port)
+}
+
 /// Compute the unix socket path.
 ///
 /// Resolution order:
@@ -51,7 +69,11 @@ pub fn pid_path() -> PathBuf {
 
 #[cfg(not(unix))]
 pub fn pid_path() -> PathBuf {
-    PathBuf::from(r"\\.\pipe\nexus.pid")
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        std::path::Path::new(&appdata).join("nexus").join("nexus.pid")
+    } else {
+        PathBuf::from(r"C:\nexus\nexus.pid")
+    }
 }
 
 #[cfg(test)]

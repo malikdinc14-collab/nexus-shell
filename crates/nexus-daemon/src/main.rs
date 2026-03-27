@@ -56,62 +56,102 @@ async fn main() {
         return;
     }
 
-    let cmd_socket = args
-        .windows(2)
-        .find(|w| w[0] == "--socket")
-        .map(|w| std::path::PathBuf::from(&w[1]))
-        .unwrap_or_else(nexus_core::constants::socket_path);
-
-    let event_socket = {
-        let mut p = cmd_socket.clone();
-        p.set_file_name("nexus-events.sock");
-        p
-    };
-
-    let pid_file = {
-        let mut p = cmd_socket.clone();
-        p.set_file_name("nexus.pid");
-        p
-    };
-
-    // -- Directory setup --
-    if let Some(parent) = cmd_socket.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("Cannot create socket directory {}: {e}", parent.display());
-            std::process::exit(1);
-        }
-    }
-
-    // Remove stale sockets
-    let _ = std::fs::remove_file(&cmd_socket);
-    let _ = std::fs::remove_file(&event_socket);
-
-    // Write PID file
-    if let Err(e) = std::fs::write(&pid_file, std::process::id().to_string()) {
-        eprintln!("Warning: could not write PID file: {e}");
-    }
-
     // -- Bind listeners --
-    let cmd_listener = match tokio::net::UnixListener::bind(&cmd_socket) {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("Cannot bind command socket {}: {e}", cmd_socket.display());
-            std::process::exit(1);
+    #[cfg(unix)]
+    let (cmd_listener, event_listener, cmd_socket_path, event_socket_path, pid_path) = {
+        let cmd_socket = args
+            .windows(2)
+            .find(|w| w[0] == "--socket")
+            .map(|w| std::path::PathBuf::from(&w[1]))
+            .unwrap_or_else(nexus_core::constants::socket_path);
+
+        let event_socket = {
+            let mut p = cmd_socket.clone();
+            p.set_file_name("nexus-events.sock");
+            p
+        };
+
+        let pid_file = {
+            let mut p = cmd_socket.clone();
+            p.set_file_name("nexus.pid");
+            p
+        };
+
+        if let Some(parent) = cmd_socket.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("Cannot create socket directory {}: {e}", parent.display());
+                std::process::exit(1);
+            }
         }
+
+        let _ = std::fs::remove_file(&cmd_socket);
+        let _ = std::fs::remove_file(&event_socket);
+
+        if let Err(e) = std::fs::write(&pid_file, std::process::id().to_string()) {
+            eprintln!("Warning: could not write PID file: {e}");
+        }
+
+        let cmd_listener = match tokio::net::UnixListener::bind(&cmd_socket) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Cannot bind command socket {}: {e}", cmd_socket.display());
+                std::process::exit(1);
+            }
+        };
+
+        let event_listener = match tokio::net::UnixListener::bind(&event_socket) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Cannot bind event socket {}: {e}", event_socket.display());
+                std::process::exit(1);
+            }
+        };
+
+        eprintln!("nexus-daemon listening:");
+        eprintln!("  commands: {}", cmd_socket.display());
+        eprintln!("  events:   {}", event_socket.display());
+        eprintln!("  PID:      {}", std::process::id());
+
+        (cmd_listener, event_listener, cmd_socket, event_socket, pid_file)
     };
 
-    let event_listener = match tokio::net::UnixListener::bind(&event_socket) {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("Cannot bind event socket {}: {e}", event_socket.display());
-            std::process::exit(1);
+    #[cfg(not(unix))]
+    let (cmd_listener, event_listener, pid_path) = {
+        let cmd_addr = nexus_core::constants::cmd_addr();
+        let event_addr = nexus_core::constants::event_addr();
+        let pid_file = nexus_core::constants::pid_path();
+        
+        if let Some(parent) = pid_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
-    };
 
-    eprintln!("nexus-daemon listening:");
-    eprintln!("  commands: {}", cmd_socket.display());
-    eprintln!("  events:   {}", event_socket.display());
-    eprintln!("  PID:      {}", std::process::id());
+        if let Err(e) = std::fs::write(&pid_file, std::process::id().to_string()) {
+            eprintln!("Warning: could not write PID file: {e}");
+        }
+
+        let cmd_listener = match tokio::net::TcpListener::bind(cmd_addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Cannot bind command TCP socket {}: {}", cmd_addr, e);
+                std::process::exit(1);
+            }
+        };
+
+        let event_listener = match tokio::net::TcpListener::bind(event_addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Cannot bind event TCP socket {}: {}", event_addr, e);
+                std::process::exit(1);
+            }
+        };
+
+        eprintln!("nexus-daemon listening:");
+        eprintln!("  commands TCP: {}", cmd_addr);
+        eprintln!("  events TCP:   {}", event_addr);
+        eprintln!("  PID:          {}", std::process::id());
+
+        (cmd_listener, event_listener, pid_file)
+    };
 
     // -- Initialize engine --
     let mux_mode = args
@@ -203,10 +243,6 @@ async fn main() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     // -- Run --
-    let cmd_socket_path = cmd_socket.clone();
-    let event_socket_path = event_socket.clone();
-    let pid_path = pid_file.clone();
-
     tokio::select! {
         _ = nexus_daemon::server::run_command_listener(
             cmd_listener, core.clone(), client_count.clone(), shutdown_rx.clone()
@@ -224,8 +260,11 @@ async fn main() {
     }
 
     // -- Cleanup --
-    let _ = std::fs::remove_file(&cmd_socket_path);
-    let _ = std::fs::remove_file(&event_socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&cmd_socket_path);
+        let _ = std::fs::remove_file(&event_socket_path);
+    }
     let _ = std::fs::remove_file(&pid_path);
     eprintln!("Cleaned up socket and PID files");
 }

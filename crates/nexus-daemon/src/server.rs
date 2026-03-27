@@ -1,4 +1,5 @@
-//! Daemon server — two Unix socket listeners, JSON-RPC 2.0, all through dispatch().
+//! Daemon server — JSON-RPC 2.0, all through dispatch().
+//! Listens on Unix sockets (Unix) or TCP (Windows).
 
 use crate::event_bridge::{EventConnection, SharedConnections, SubscriptionFilter};
 use nexus_client::{JsonRpcRequest, JsonRpcResponse};
@@ -6,8 +7,17 @@ use nexus_engine::NexusCore;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixListener;
 use tokio::sync::watch;
+
+#[cfg(unix)]
+pub type AsyncListener = tokio::net::UnixListener;
+#[cfg(unix)]
+pub type AsyncStream = tokio::net::UnixStream;
+
+#[cfg(not(unix))]
+pub type AsyncListener = tokio::net::TcpListener;
+#[cfg(not(unix))]
+pub type AsyncStream = tokio::net::TcpStream;
 
 /// Shared engine state (std::sync::Mutex, NOT tokio).
 pub type SharedCore = Arc<StdMutex<NexusCore>>;
@@ -17,7 +27,7 @@ pub type ClientCount = Arc<std::sync::atomic::AtomicUsize>;
 
 /// Run the command socket accept loop.
 pub async fn run_command_listener(
-    listener: UnixListener,
+    listener: AsyncListener,
     core: SharedCore,
     client_count: ClientCount,
     mut shutdown: watch::Receiver<bool>,
@@ -47,7 +57,7 @@ pub async fn run_command_listener(
 
 /// Run the event socket accept loop.
 pub async fn run_event_listener(
-    listener: UnixListener,
+    listener: AsyncListener,
     connections: SharedConnections,
     mut shutdown: watch::Receiver<bool>,
 ) {
@@ -72,7 +82,7 @@ pub async fn run_event_listener(
 }
 
 async fn handle_command_connection(
-    stream: tokio::net::UnixStream,
+    stream: AsyncStream,
     core: SharedCore,
 ) {
     let (reader, mut writer) = stream.into_split();
@@ -131,7 +141,7 @@ async fn handle_command_connection(
 }
 
 async fn handle_event_connection(
-    stream: tokio::net::UnixStream,
+    stream: AsyncStream,
     connections: SharedConnections,
 ) {
     let (reader, writer) = stream.into_split();

@@ -8,8 +8,12 @@ use nexus_engine::TypedEvent;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
-use tokio::net::unix::OwnedWriteHalf;
 use tokio::sync::Mutex;
+
+#[cfg(unix)]
+type AsyncOwnedWriteHalf = tokio::net::unix::OwnedWriteHalf;
+#[cfg(not(unix))]
+type AsyncOwnedWriteHalf = tokio::net::tcp::OwnedWriteHalf;
 
 /// Subscription filter — pattern + key-value matching, testable without a socket.
 #[derive(Debug, Clone)]
@@ -56,7 +60,7 @@ impl SubscriptionFilter {
 
 /// Active event connection with subscription filters.
 pub struct EventConnection {
-    pub writer: OwnedWriteHalf,
+    pub writer: AsyncOwnedWriteHalf,
     pub sub: SubscriptionFilter,
 }
 

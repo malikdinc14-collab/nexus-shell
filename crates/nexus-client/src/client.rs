@@ -4,18 +4,24 @@ use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 use nexus_core::NexusError;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(unix)]
+type InnerStream = std::os::unix::net::UnixStream;
+
+#[cfg(not(unix))]
+type InnerStream = std::net::TcpStream;
 
 /// Synchronous client for the Nexus daemon command socket.
 pub struct NexusClient {
-    reader: BufReader<UnixStream>,
-    writer: UnixStream,
+    reader: BufReader<InnerStream>,
+    writer: InnerStream,
     next_id: AtomicU64,
 }
 
 impl NexusClient {
     /// Connect to daemon, auto-launching if needed.
+    #[cfg(unix)]
     pub fn connect() -> Result<Self, NexusError> {
         let path = nexus_core::constants::socket_path();
         if !path.exists() {
@@ -25,8 +31,33 @@ impl NexusClient {
     }
 
     /// Connect to a specific socket path (for testing).
+    #[cfg(unix)]
     pub fn connect_to(path: &str) -> Result<Self, NexusError> {
-        let stream = UnixStream::connect(path)
+        let stream = InnerStream::connect(path)
+            .map_err(|e| NexusError::Protocol(format!("connect failed: {e}")))?;
+        let reader = BufReader::new(stream.try_clone()
+            .map_err(|e| NexusError::Protocol(format!("clone stream: {e}")))?);
+        Ok(Self {
+            reader,
+            writer: stream,
+            next_id: AtomicU64::new(1),
+        })
+    }
+
+    /// Connect to daemon over TCP (Windows).
+    #[cfg(not(unix))]
+    pub fn connect() -> Result<Self, NexusError> {
+        let addr = nexus_core::constants::cmd_addr();
+        if InnerStream::connect(addr).is_err() {
+            crate::auto_launch::auto_launch(addr)?;
+        }
+        Self::connect_to(addr)
+    }
+
+    /// Connect to a specific TCP address (Windows).
+    #[cfg(not(unix))]
+    pub fn connect_to(addr: std::net::SocketAddr) -> Result<Self, NexusError> {
+        let stream = InnerStream::connect(addr)
             .map_err(|e| NexusError::Protocol(format!("connect failed: {e}")))?;
         let reader = BufReader::new(stream.try_clone()
             .map_err(|e| NexusError::Protocol(format!("clone stream: {e}")))?);
