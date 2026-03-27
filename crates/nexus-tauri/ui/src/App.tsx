@@ -2,8 +2,7 @@
 // Renders layout tree from Rust engine, routes keyboard commands.
 // The UI is a dumb renderer. All state and logic lives in the engine.
 
-import React, { useState, useEffect, useCallback, useRef, Component } from "react";
-import { flushSync } from "react-dom";
+import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
 import {
   getLayout,
   getSession,
@@ -37,6 +36,8 @@ import CommandPalette from "./components/CommandPalette";
 import CommandLine from "./components/CommandLine";
 import TabListOverlay from "./components/TabListOverlay";
 import TabBar, { ContentTabItem } from "./components/TabBar";
+import PaneOverlayLayer from "./components/PaneOverlayLayer";
+import { PaneRectProvider, usePaneRects } from "./contexts/PaneRectContext";
 import useTabStack from "./hooks/useTabStack";
 import { listen } from "@tauri-apps/api/event";
 
@@ -146,13 +147,7 @@ export default function App() {
       try {
         const result = await dispatchCommand(binding.action);
         if (result && typeof result === "object" && "root" in result && "focused" in result) {
-          const layout = result as LayoutData;
-          // Commit DOM before dispatching refocus — fit() must measure updated container dims
-          flushSync(() => setLayout(layout));
-          // Re-focus the active pane after any layout mutation (swap, resize, move…)
-          window.dispatchEvent(new CustomEvent("nexus:refocus-pane", {
-            detail: { paneId: layout.focused },
-          }));
+          setLayout(result as LayoutData);
         }
       } catch (err) {
         console.warn("Dispatch failed:", binding.action, err);
@@ -312,41 +307,21 @@ export default function App() {
         </span>
       </div>
 
-      {/* Layout */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          overflow: "hidden",
-          padding: display.gap,
-          background: display.background,
-          transition: "padding 0.2s, background 0.3s",
-        }}
-      >
-        {layout.zoomed ? (
-          <PaneComponent
-            node={findLeaf(layout.root, layout.zoomed)!}
-            focused={true}
-            onFocus={handleFocus}
-            cwd={cwd}
-            session={session}
-            display={display}
-          />
-        ) : (
-          <NodeRenderer
-            node={layout.root}
-            focused={layout.focused}
-            onFocus={handleFocus}
-            onResize={handleResize}
-            cwd={cwd}
-            session={session}
-            display={display}
-            dragState={dragState}
-            onDragStart={handlePaneDragStart}
-            onDropTargetChange={setDropTarget}
-          />
-        )}
-      </div>
+      {/* Layout + Overlay */}
+      <PaneRectProvider>
+        <LayoutArea
+          layout={layout}
+          display={display}
+          focused={layout.focused}
+          onFocus={handleFocus}
+          onResize={handleResize}
+          cwd={cwd}
+          session={session}
+          dragState={dragState}
+          onDragStart={handlePaneDragStart}
+          onDropTargetChange={setDropTarget}
+        />
+      </PaneRectProvider>
 
       {/* Vim command line */}
       <CommandLine
@@ -406,83 +381,170 @@ export default function App() {
   );
 }
 
-// ── Per-pane error boundary ───────────────────────────────────────
+// ── Layout area — geometry slots + pane overlay ──────────────────
 
-class PaneErrorBoundary extends Component<
-  { paneId: string; children: React.ReactNode },
-  { error: string | null }
-> {
-  constructor(props: { paneId: string; children: React.ReactNode }) {
-    super(props);
-    this.state = { error: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { error: error.message };
-  }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error(`Pane ${this.props.paneId} crashed:`, error, info);
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: 16, color: "var(--red)", fontSize: 11, overflow: "auto" }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Pane error</div>
-          <div style={{ opacity: 0.7 }}>{this.state.error}</div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// ── Recursive layout renderer ────────────────────────────────────
-
-function NodeRenderer({
-  node,
+function LayoutArea({
+  layout,
+  display,
   focused,
   onFocus,
   onResize,
   cwd,
   session,
-  display,
   dragState,
   onDragStart,
   onDropTargetChange,
 }: {
-  node: LayoutNode;
+  layout: LayoutData;
+  display: DisplaySettings;
   focused: string;
   onFocus: (id: string) => void;
   onResize: (paneId: string, ratio: number) => Promise<void>;
   cwd: string;
   session: string | null;
-  display: DisplaySettings;
   dragState: DragState | null;
   onDragStart: (paneId: string, e: React.MouseEvent) => void;
   onDropTargetChange: (target: { paneId: string; zone: "center" | "left" | "right" | "top" | "bottom" } | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  if (node.type === "Leaf") {
-    const isDragSource = dragState?.active && dragState.sourcePaneId === node.id;
-    return (
-      <PaneErrorBoundary paneId={node.id!}>
-        <PaneComponent
-          node={node}
-          focused={node.id === focused}
-          onFocus={onFocus}
-          cwd={cwd}
-          session={session}
+  // Collect all leaf nodes for the overlay layer
+  const leafNodes = useMemo(() => {
+    const map = new Map<string, LayoutNode>();
+    function walk(node: LayoutNode) {
+      if (node.type === "Leaf" && node.id) {
+        map.set(node.id, node);
+      } else if (node.type === "Split") {
+        if (node.left) walk(node.left);
+        if (node.right) walk(node.right);
+      }
+    }
+    walk(layout.root);
+    return map;
+  }, [layout.root]);
+
+  const renderPane = useCallback(
+    (paneId: string, node: LayoutNode, isFocused: boolean) => {
+      const isDragSource = dragState?.active && dragState.sourcePaneId === paneId;
+      return (
+        <PaneErrorBoundary paneId={paneId}>
+          <PaneComponent
+            node={node}
+            focused={isFocused}
+            onFocus={onFocus}
+            cwd={cwd}
+            session={session}
+            display={display}
+            isDragSource={!!isDragSource}
+            dragActive={!!dragState?.active}
+            onDragStart={onDragStart}
+            onDropTargetChange={onDropTargetChange}
+          />
+        </PaneErrorBoundary>
+      );
+    },
+    [onFocus, cwd, session, display, dragState, onDragStart, onDropTargetChange],
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        flex: 1,
+        display: "flex",
+        overflow: "hidden",
+        padding: display.gap,
+        background: display.background,
+        transition: "padding 0.2s, background 0.3s",
+        position: "relative",
+      }}
+    >
+      {/* Geometry-only layout tree — renders empty measured slots */}
+      {layout.zoomed ? (
+        <SlotPlaceholder paneId={layout.zoomed} style={{ flex: 1 }} />
+      ) : (
+        <SlotRenderer
+          node={layout.root}
           display={display}
-          isDragSource={!!isDragSource}
-          dragActive={!!dragState?.active}
-          onDragStart={onDragStart}
-          onDropTargetChange={onDropTargetChange}
+          onResize={onResize}
         />
-      </PaneErrorBoundary>
-    );
+      )}
+
+      {/* Pane instances — absolutely positioned over slots, never reordered */}
+      <PaneOverlayLayer
+        leafNodes={leafNodes}
+        focused={focused}
+        zoomed={layout.zoomed ?? null}
+        onFocus={onFocus}
+        cwd={cwd}
+        session={session}
+        display={display}
+        dragState={dragState}
+        onDragStart={onDragStart}
+        onDropTargetChange={onDropTargetChange}
+        renderPane={renderPane}
+      />
+    </div>
+  );
+}
+
+// ── Slot placeholder — empty div that reports its rect ────────────
+
+function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { reportRect, removeRect } = usePaneRects();
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const report = () => {
+      const r = el.getBoundingClientRect();
+      const parent = el.offsetParent;
+      const pr = parent ? parent.getBoundingClientRect() : { top: 0, left: 0 };
+      reportRect(paneId, {
+        top: r.top - pr.top,
+        left: r.left - pr.left,
+        width: r.width,
+        height: r.height,
+      });
+    };
+
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    // Initial report
+    report();
+
+    return () => {
+      observer.disconnect();
+      removeRect(paneId);
+    };
+  }, [paneId, reportRect, removeRect]);
+
+  return (
+    <div
+      ref={ref}
+      data-pane-slot={paneId}
+      style={{ ...style, overflow: "hidden" }}
+    />
+  );
+}
+
+// ── Geometry-only layout renderer (no pane components) ────────────
+
+function SlotRenderer({
+  node,
+  display,
+  onResize,
+}: {
+  node: LayoutNode;
+  display: DisplaySettings;
+  onResize: (paneId: string, ratio: number) => Promise<void>;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  if (node.type === "Leaf") {
+    return <SlotPlaceholder paneId={node.id!} style={{ flex: 1, display: "flex" }} />;
   }
 
   const isH = node.direction === "Horizontal";
@@ -523,7 +585,6 @@ function NodeRenderer({
     const onMouseUp = () => {
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
-      // Only commit if the user actually dragged
       if (didMove) {
         onResize(paneId, lastClamped);
       }
@@ -533,8 +594,6 @@ function NodeRenderer({
     document.addEventListener("mouseup", onMouseUp);
   };
 
-  // Render as a keyed array so React can MOVE elements on swap without unmounting.
-  // Hardcoded siblings would unmount/remount on key change; array elements are reordered in-place.
   return (
     <div
       ref={containerRef}
@@ -546,61 +605,74 @@ function NodeRenderer({
         gap: display.gap,
       }}
     >
-      {([node.left!, node.right!] as LayoutNode[]).flatMap((child, idx) => {
-        const childKey = firstLeafId(child) ?? String(idx);
-        const isFirst = idx === 0;
-        const childStyle = isFirst
-          ? (isH
-              ? { width: pct, flexShrink: 0 as const, display: "flex" as const, overflow: "hidden" as const }
-              : { height: pct, flexShrink: 0 as const, display: "flex" as const, overflow: "hidden" as const })
-          : { flex: 1, display: "flex" as const, overflow: "hidden" as const };
+      {/* Left/top child */}
+      <div style={isH
+        ? { width: pct, flexShrink: 0, display: "flex", overflow: "hidden" }
+        : { height: pct, flexShrink: 0, display: "flex", overflow: "hidden" }
+      }>
+        <SlotRenderer node={node.left!} display={display} onResize={onResize} />
+      </div>
 
-        const paneDiv = (
-          <div key={childKey} style={childStyle}>
-            <NodeRenderer
-              node={child}
-              focused={focused}
-              onFocus={onFocus}
-              onResize={onResize}
-              cwd={cwd}
-              session={session}
-              display={display}
-              dragState={dragState}
-              onDragStart={onDragStart}
-              onDropTargetChange={onDropTargetChange}
-            />
-          </div>
-        );
+      {/* Resize handle */}
+      <div
+        style={{
+          [isH ? "width" : "height"]: Math.max(display.gap, 6),
+          [isH ? "marginLeft" : "marginTop"]: -(Math.max(display.gap, 6) / 2),
+          [isH ? "marginRight" : "marginBottom"]: -(Math.max(display.gap, 6) / 2),
+          cursor: isH ? "col-resize" : "row-resize",
+          flexShrink: 0,
+          background: "transparent",
+          zIndex: 10,
+          position: "relative",
+        }}
+        onMouseDown={handleResizeMouseDown}
+        onMouseOver={(e) => {
+          (e.target as HTMLElement).style.background =
+            display.gap === 0 ? "var(--accent)" : "rgba(122,162,247,0.2)";
+        }}
+        onMouseOut={(e) =>
+          ((e.target as HTMLElement).style.background = "transparent")
+        }
+      />
 
-        if (!isFirst) return [paneDiv];
-
-        return [
-          paneDiv,
-          <div
-            key="__resize__"
-            style={{
-              [isH ? "width" : "height"]: Math.max(display.gap, 6),
-              [isH ? "marginLeft" : "marginTop"]: -(Math.max(display.gap, 6) / 2),
-              [isH ? "marginRight" : "marginBottom"]: -(Math.max(display.gap, 6) / 2),
-              cursor: isH ? "col-resize" : "row-resize",
-              flexShrink: 0,
-              background: "transparent",
-              zIndex: 10,
-              position: "relative",
-            }}
-            onMouseDown={handleResizeMouseDown}
-            onMouseOver={(e) => {
-              (e.target as HTMLElement).style.background =
-                display.gap === 0 ? "var(--accent)" : "rgba(122,162,247,0.2)";
-            }}
-            onMouseOut={(e) =>
-              ((e.target as HTMLElement).style.background = "transparent")
-            }
-          />,
-        ];
-      })}
+      {/* Right/bottom child */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <SlotRenderer node={node.right!} display={display} onResize={onResize} />
+      </div>
     </div>
   );
+}
+
+// ── Per-pane error boundary ───────────────────────────────────────
+
+class PaneErrorBoundary extends Component<
+  { paneId: string; children: React.ReactNode },
+  { error: string | null }
+> {
+  constructor(props: { paneId: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`Pane ${this.props.paneId} crashed:`, error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, color: "var(--red)", fontSize: 11, overflow: "auto" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Pane error</div>
+          <div style={{ opacity: 0.7 }}>{this.state.error}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // ── Focus guard — blurs previous element so new pane can claim focus ──
@@ -923,14 +995,6 @@ function DropZoneOverlay({ zone }: { zone: DropZone }) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-function findLeaf(
-  node: LayoutNode,
-  id: string,
-): LayoutNode | null {
-  if (node.type === "Leaf") return node.id === id ? node : null;
-  return findLeaf(node.left!, id) || findLeaf(node.right!, id);
-}
 
 function firstLeafId(node: LayoutNode): string | null {
   if (node.type === "Leaf") return node.id ?? null;

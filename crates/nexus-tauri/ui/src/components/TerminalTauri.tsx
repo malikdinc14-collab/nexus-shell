@@ -118,22 +118,6 @@ export default function TerminalTauri({ paneId, cwd, onExit, isFocused }: Props)
     }
   }, [isFocused]);
 
-  // Repaint + refocus after layout mutations (swap, move) that don't trigger a resize
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { paneId: targetId } = (e as CustomEvent).detail;
-      // Always refit — both panes physically move on a swap.
-      // Only refocus the active pane.
-      fitRef.current?.fit();
-      if (termRef.current) {
-        termRef.current.refresh(0, termRef.current.rows - 1);
-        if (targetId === paneId) termRef.current.focus();
-      }
-    };
-    window.addEventListener("nexus:refocus-pane", handler);
-    return () => window.removeEventListener("nexus:refocus-pane", handler);
-  }, [paneId]);
-
   return (
     <div
       ref={containerRef}
