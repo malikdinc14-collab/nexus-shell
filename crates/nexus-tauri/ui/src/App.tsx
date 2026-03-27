@@ -3,6 +3,7 @@
 // The UI is a dumb renderer. All state and logic lives in the engine.
 
 import React, { useState, useEffect, useCallback, useRef, Component } from "react";
+import { flushSync } from "react-dom";
 import {
   getLayout,
   getSession,
@@ -145,10 +146,12 @@ export default function App() {
       try {
         const result = await dispatchCommand(binding.action);
         if (result && typeof result === "object" && "root" in result && "focused" in result) {
-          setLayout(result as LayoutData);
+          const layout = result as LayoutData;
+          // Commit DOM before dispatching refocus — fit() must measure updated container dims
+          flushSync(() => setLayout(layout));
           // Re-focus the active pane after any layout mutation (swap, resize, move…)
           window.dispatchEvent(new CustomEvent("nexus:refocus-pane", {
-            detail: { paneId: (result as LayoutData).focused },
+            detail: { paneId: layout.focused },
           }));
         }
       } catch (err) {
