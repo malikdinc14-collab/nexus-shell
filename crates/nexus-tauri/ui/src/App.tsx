@@ -14,6 +14,7 @@ import {
   getKeymap,
   getCommands,
   dispatchCommand,
+  setDecorations,
   KeyBinding,
   CommandEntry,
   DisplaySettings,
@@ -62,6 +63,8 @@ export default function App() {
     background: "var(--bg)",
     border_radius: 0,
     pane_opacity: 1,
+    show_status_bar: true,
+    show_decorations: true,
   });
 
   // Init — fetch all state from engine (each call independent so one failure doesn't block all)
@@ -81,6 +84,11 @@ export default function App() {
     document.body.dataset.transparent =
       display.background === "transparent" ? "true" : "false";
   }, [display.background]);
+
+  // Sync window decorations with engine state
+  useEffect(() => {
+    setDecorations(display.show_decorations).catch(() => {});
+  }, [display.show_decorations]);
 
   // Event-driven layout updates (from daemon or other clients)
   useEffect(() => {
@@ -288,9 +296,8 @@ export default function App() {
           background: "var(--bg-panel)",
           borderBottom: "1px solid var(--border)",
           fontSize: 11,
-          WebkitAppRegion: "drag" as any,
           flexShrink: 0,
-        }}
+        } as React.CSSProperties & { WebkitAppRegion: string }}
       >
         <span style={{ color: "var(--accent)" }}>Nexus Shell</span>
         <span style={{ color: "var(--text-dim)" }}>
@@ -345,7 +352,7 @@ export default function App() {
       <div
         style={{
           height: 24,
-          display: "flex",
+          display: display.show_status_bar === false ? "none" : "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 10px",
@@ -555,9 +562,9 @@ function NodeRenderer({
       {/* Resize handle */}
       <div
         style={{
-          [isH ? "width" : "height"]: display.gap > 0 ? display.gap : 4,
-          [isH ? "marginLeft" : "marginTop"]: display.gap > 0 ? -(display.gap / 2) : 0,
-          [isH ? "marginRight" : "marginBottom"]: display.gap > 0 ? -(display.gap / 2) : 0,
+          [isH ? "width" : "height"]: Math.max(display.gap, 6),
+          [isH ? "marginLeft" : "marginTop"]: -(Math.max(display.gap, 6) / 2),
+          [isH ? "marginRight" : "marginBottom"]: -(Math.max(display.gap, 6) / 2),
           cursor: isH ? "col-resize" : "row-resize",
           flexShrink: 0,
           background: "transparent",
@@ -566,8 +573,8 @@ function NodeRenderer({
         }}
         onMouseDown={handleResizeMouseDown}
         onMouseOver={(e) => {
-          if (display.gap === 0)
-            (e.target as HTMLElement).style.background = "var(--accent)";
+          (e.target as HTMLElement).style.background =
+            display.gap === 0 ? "var(--accent)" : "rgba(122,162,247,0.2)";
         }}
         onMouseOut={(e) =>
           ((e.target as HTMLElement).style.background = "transparent")

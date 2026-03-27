@@ -48,6 +48,7 @@ fn main() {
             commands::get_keymap,
             commands::get_commands,
             commands::dispatch_command,
+            commands::set_decorations,
         ])
         .setup(|app| {
             // Bridge daemon events to Tauri frontend via EventSubscription

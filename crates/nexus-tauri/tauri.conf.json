@@ -10,7 +10,7 @@
   },
   "app": {
     "withGlobalTauri": false,
-    "macosPrivateApi": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Nexus Shell",

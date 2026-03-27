@@ -501,7 +501,7 @@ impl LayoutNode {
                         return true;
                     }
                     if in_right {
-                        *ratio = (*ratio - delta).clamp(0.1, 0.9);
+                        *ratio = (*ratio + delta).clamp(0.1, 0.9);
                         return true;
                     }
                 }

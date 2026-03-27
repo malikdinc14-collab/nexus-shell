@@ -216,3 +216,12 @@ pub fn dispatch_command(
     };
     client.request(&command, params).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn set_decorations(app: tauri::AppHandle, decorated: bool) -> Result<(), String> {
+    use tauri::Manager;
+    let win = app
+        .get_webview_window("main")
+        .ok_or_else(|| "no main window".to_string())?;
+    win.set_decorations(decorated).map_err(|e| e.to_string())
+}

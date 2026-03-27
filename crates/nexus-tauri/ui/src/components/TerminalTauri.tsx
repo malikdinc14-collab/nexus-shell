@@ -42,6 +42,8 @@ export default function TerminalTauri({ paneId, cwd, onExit, isFocused }: Props)
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -91,9 +93,12 @@ export default function TerminalTauri({ paneId, cwd, onExit, isFocused }: Props)
       term.writeln(`\r\n\x1b[31mFailed to spawn PTY: ${e}\x1b[0m`);
     });
 
-    // Auto-fit on container resize
+    // Auto-fit on container resize; re-focus if this pane is active
     const observer = new ResizeObserver(() => {
       fitAddon.fit();
+      if (isFocusedRef.current && termRef.current) {
+        termRef.current.focus();
+      }
     });
     observer.observe(containerRef.current);
 

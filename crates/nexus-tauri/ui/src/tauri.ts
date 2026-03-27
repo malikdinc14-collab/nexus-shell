@@ -130,6 +130,10 @@ export async function dispatchCommand(command: string, args?: Record<string, any
   return invoke("dispatch_command", { command, args });
 }
 
+export async function setDecorations(decorated: boolean): Promise<void> {
+  return invoke("set_decorations", { decorated });
+}
+
 // -- Capabilities ------------------------------------------------------------
 
 export interface CapabilityInfo {
@@ -185,6 +189,8 @@ export interface DisplaySettings {
   background: string;
   border_radius: number;
   pane_opacity: number;
+  show_status_bar: boolean;
+  show_decorations: boolean;
 }
 
 export function onDisplayChanged(callback: (settings: DisplaySettings) => void): Promise<() => void> {

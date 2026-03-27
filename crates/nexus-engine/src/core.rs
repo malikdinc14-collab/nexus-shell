@@ -32,6 +32,8 @@ pub struct DisplaySettings {
     pub background: String,
     pub border_radius: u32,
     pub pane_opacity: f64,
+    pub show_status_bar: bool,
+    pub show_decorations: bool,
 }
 
 impl Default for DisplaySettings {
@@ -41,6 +43,8 @@ impl Default for DisplaySettings {
             background: "var(--bg)".into(),
             border_radius: 0,
             pane_opacity: 1.0,
+            show_status_bar: true,
+            show_decorations: true,
         }
     }
 }
@@ -798,6 +802,12 @@ impl NexusCore {
             }
             "opacity" | "paneOpacity" | "pane_opacity" => {
                 self.display.pane_opacity = value.parse().unwrap_or(1.0)
+            }
+            "show_status_bar" | "statusBar" => {
+                self.display.show_status_bar = value != "false" && value != "0";
+            }
+            "show_decorations" | "decorations" => {
+                self.display.show_decorations = value != "false" && value != "0";
             }
             _ => return,
         }

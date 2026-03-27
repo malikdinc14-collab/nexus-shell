@@ -9,6 +9,8 @@ interface DisplaySettings {
   background: string;
   border_radius: number;
   pane_opacity: number;
+  show_status_bar: boolean;
+  show_decorations: boolean;
 }
 
 interface Theme {
@@ -210,6 +212,22 @@ export default function SettingsTauri({ isFocused }: Props) {
             </div>
           </Row>
         )}
+      </Section>
+
+      {/* Window */}
+      <Section title="Window">
+        <Row label="Title bar">
+          <Toggle
+            value={display.show_decorations !== false}
+            onChange={(v) => set("show_decorations", String(v))}
+          />
+        </Row>
+        <Row label="Status bar">
+          <Toggle
+            value={display.show_status_bar !== false}
+            onChange={(v) => set("show_status_bar", String(v))}
+          />
+        </Row>
       </Section>
 
       {/* Panes */}
