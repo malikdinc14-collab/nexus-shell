@@ -17,7 +17,7 @@ export interface ContentTabItem {
 interface TabBarProps {
   tabs: TabItem[];
   onSelect: (index: number) => void;
-  onClose?: (index: number) => void;
+  onClose?: (index: number) => void | Promise<void>;
   paneLabel?: string;
   contentTabs?: ContentTabItem[];
   onContentSelect?: (index: number) => void;
@@ -52,16 +52,27 @@ export default function TabBar({
     >
       {/* Pane label (when single module tab) */}
       {paneLabel && tabs.length <= 1 && !hasContentTabs && (
-        <span
-          style={{
-            padding: "0 10px",
-            color: "var(--text-dim)",
-            textTransform: "uppercase",
-            letterSpacing: 0.5,
-          }}
-        >
-          {paneLabel}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 10px", flex: 1 }}>
+          <span
+            style={{
+              color: "var(--text-dim)",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
+          >
+            {paneLabel}
+          </span>
+          {onClose && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onClose(0); }}
+              style={{ cursor: "pointer", opacity: 0.4, fontSize: 13, lineHeight: 1, marginLeft: "auto" }}
+              onMouseOver={(e) => ((e.target as HTMLElement).style.opacity = "1")}
+              onMouseOut={(e) => ((e.target as HTMLElement).style.opacity = "0.4")}
+            >
+              x
+            </span>
+          )}
+        </div>
       )}
 
       {/* Module tabs */}
@@ -85,7 +96,7 @@ export default function TabBar({
             }}
           >
             <span>{tab.name}</span>
-            {onClose && i > 0 && (
+            {onClose && (
               <span
                 onClick={(e) => {
                   e.stopPropagation();

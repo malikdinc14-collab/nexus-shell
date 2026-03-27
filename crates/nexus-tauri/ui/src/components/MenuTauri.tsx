@@ -2,7 +2,7 @@
 // Fetches menu items from the engine via menu.get/navigate/back/execute.
 // Renders as a navigable list with folder drill-down and action dispatch.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { dispatchCommand } from "../tauri";
 
 interface MenuItem {
@@ -24,12 +24,20 @@ interface Props {
   paneId: string;
   cwd?: string;
   session?: string | null;
+  isFocused?: boolean;
 }
 
-export default function MenuPane({ paneId }: Props) {
+export default function MenuPane({ paneId, isFocused }: Props) {
+  const filterRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<MenuList | null>(null);
   const [historyDepth, setHistoryDepth] = useState(0);
   const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    if (isFocused && filterRef.current) {
+      filterRef.current.focus();
+    }
+  }, [isFocused]);
 
   const fetchMenu = useCallback(async (context?: string) => {
     const args: Record<string, string> = {};
@@ -160,6 +168,7 @@ export default function MenuPane({ paneId }: Props) {
       {/* Filter */}
       <div style={{ padding: "6px 12px", flexShrink: 0 }}>
         <input
+          ref={filterRef}
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}

@@ -18,8 +18,15 @@ interface Props {
 }
 
 export default function BrowserTauri({ paneId, isFocused }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [session, setSession] = useState<BrowserSession | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (isFocused && containerRef.current) {
+      containerRef.current.focus();
+    }
+  }, [isFocused]);
 
   const refreshSession = useCallback(async () => {
     try {
@@ -67,7 +74,7 @@ export default function BrowserTauri({ paneId, isFocused }: Props) {
   }
 
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+    <div ref={containerRef} tabIndex={0} style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", outline: "none" }}>
       {/* Navigation bar (optional, could be move to a shared header) */}
       <div 
         style={{ 

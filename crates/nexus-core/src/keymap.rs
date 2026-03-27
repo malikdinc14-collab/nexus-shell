@@ -102,7 +102,7 @@ Alt+l = navigate.right
 Alt+v = pane.split.horizontal
 Alt+s = pane.split.vertical
 Alt+f = pane.zoom
-Alt+w = pane.close
+Alt+w = stack.close
 Alt+q = pane.close
 Alt+- = pane.minimize
 

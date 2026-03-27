@@ -169,6 +169,13 @@ pub fn handle_terminal(
             serde_json::to_value(&s)
                 .map_err(|e| NexusError::InvalidState(e.to_string()))
         }
+        "remove" => {
+            let pane_id = str_arg("pane_id").ok_or_else(|| {
+                NexusError::InvalidState("terminal.remove requires pane_id".into())
+            })?;
+            core.terminal.remove_sessions(&pane_id);
+            Ok(serde_json::json!({"status": "ok"}))
+        }
         _ => Err(NexusError::NotFound(format!("unknown terminal action: {action}"))),
     }
 }
@@ -202,14 +209,23 @@ pub fn handle_pty(
             }
             Ok(serde_json::json!({ "pane_id": pane_id, "status": "ok" }))
         }
-        "input" => {
+        "input" | "write" => {
             let pane_id = str_arg("pane_id").ok_or_else(|| {
-                NexusError::InvalidState("pty.input requires pane_id".into())
+                NexusError::InvalidState("pty.write requires pane_id".into())
             })?;
-            let data = str_arg("data").ok_or_else(|| {
-                NexusError::InvalidState("pty.input requires data".into())
+            let raw = str_arg("data").ok_or_else(|| {
+                NexusError::InvalidState("pty.write requires data".into())
             })?;
-            core.pty_write(&pane_id, &data)?;
+            // Client may base64-encode binary data; try decoding first.
+            let decoded = {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.decode(&raw).ok()
+            };
+            let text = match &decoded {
+                Some(bytes) => std::str::from_utf8(bytes).unwrap_or(&raw),
+                None => &raw,
+            };
+            core.pty_write(&pane_id, text)?;
             Ok(serde_json::json!({"status": "ok"}))
         }
         "resize" => {
@@ -379,7 +395,19 @@ pub fn handle_command_line(
                     let mut set_args = HashMap::new();
                     set_args.insert("identity".to_string(), serde_json::json!(&target_pane));
                     set_args.insert("name".to_string(), serde_json::json!("Editor"));
-                    super::dispatch(core, "stack.set_active_by_name", &set_args)?;
+                    super::dispatch(core, "stack.set_content", &set_args)?;
+
+                    Ok(result)
+                }
+                // :md <path> or :markdown <path> — open in RichText
+                "md" | "markdown" if parts.len() >= 2 => {
+                    let path = parts[1..].join(" ");
+                    let focused = core.layout.focused.clone();
+
+                    let mut md_args = HashMap::new();
+                    md_args.insert("path".to_string(), serde_json::json!(path));
+                    md_args.insert("pane_id".to_string(), serde_json::json!(&focused));
+                    let result = super::dispatch(core, "markdown.open", &md_args)?;
 
                     Ok(result)
                 }
@@ -524,5 +552,94 @@ pub fn handle_menu(
             serde_json::to_value(&list).map_err(|e| NexusError::Protocol(e.to_string()))
         }
         _ => Err(NexusError::NotFound(format!("unknown menu action: {action}"))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// workspace.*
+// ---------------------------------------------------------------------------
+
+pub fn handle_workspace(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        // workspace.init — scaffold .nexus/ in the given (or current) directory
+        "init" => {
+            let cwd = str_arg("cwd")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from(core.cwd()));
+
+            let nexus_dir = cwd.join(".nexus");
+            std::fs::create_dir_all(&nexus_dir)
+                .map_err(|e| NexusError::Io(e.to_string()))?;
+
+            // config.yaml
+            let config_path = nexus_dir.join("config.yaml");
+            if !config_path.exists() {
+                let dir_name = cwd.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "workspace".into());
+                std::fs::write(&config_path, format!(
+                    "# Nexus workspace config\nworkspace: {dir_name}\n# shell: /bin/zsh\n"
+                )).map_err(|e| NexusError::Io(e.to_string()))?;
+            }
+
+            // keymap.conf
+            let keymap_path = nexus_dir.join("keymap.conf");
+            if !keymap_path.exists() {
+                std::fs::write(&keymap_path,
+                    "# Workspace keybindings (overrides global)\n# Alt+x = some.action\n"
+                ).map_err(|e| NexusError::Io(e.to_string()))?;
+            }
+
+            // menu/ directory
+            let menu_dir = nexus_dir.join("menu");
+            std::fs::create_dir_all(&menu_dir)
+                .map_err(|e| NexusError::Io(e.to_string()))?;
+
+            Ok(serde_json::json!({
+                "path": nexus_dir.to_string_lossy(),
+                "files": [
+                    config_path.to_string_lossy(),
+                    keymap_path.to_string_lossy(),
+                ],
+            }))
+        }
+
+        // workspace.status — does .nexus/ exist in cwd?
+        "status" => {
+            let cwd = str_arg("cwd")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from(core.cwd()));
+            let nexus_dir = cwd.join(".nexus");
+            let exists = nexus_dir.exists();
+            let config_path = nexus_dir.join("config.yaml");
+
+            let name = if config_path.exists() {
+                std::fs::read_to_string(&config_path).ok()
+                    .and_then(|s| {
+                        s.lines()
+                         .find(|l| l.starts_with("workspace:"))
+                         .map(|l| l.trim_start_matches("workspace:").trim().to_string())
+                    })
+            } else {
+                None
+            };
+
+            Ok(serde_json::json!({
+                "initialized": exists,
+                "path": nexus_dir.to_string_lossy(),
+                "name": name,
+                "cwd": cwd.to_string_lossy(),
+            }))
+        }
+
+        _ => Err(NexusError::NotFound(format!("unknown workspace action: {action}"))),
     }
 }

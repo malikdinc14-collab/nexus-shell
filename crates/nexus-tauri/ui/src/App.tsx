@@ -28,6 +28,7 @@ import ChatTauri from "./components/ChatTauri";
 import BrowserTauri from "./components/BrowserTauri";
 import RichTextTauri from "./components/RichTextTauri";
 import HUDTauri from "./components/HUDTauri";
+import SettingsTauri from "./components/SettingsTauri";
 import ChooserPane from "./components/ChooserPane";
 import MenuTauri from "./components/MenuTauri";
 import CommandPalette from "./components/CommandPalette";
@@ -63,22 +64,13 @@ export default function App() {
     pane_opacity: 1,
   });
 
-  // Init — fetch all state from engine
+  // Init — fetch all state from engine (each call independent so one failure doesn't block all)
   useEffect(() => {
-    Promise.all([
-      getLayout(),
-      getSession(),
-      getCwd(),
-      getKeymap(),
-      getCommands(),
-    ]).then(([layoutData, sess, dir, km, cmds]) => {
-      setLayout(layoutData);
-      setSession(sess);
-      setCwd(dir);
-      setKeymap(km);
-      setCommands(cmds);
-    });
-    // Display settings fetched separately — non-blocking
+    getLayout().then(setLayout).catch((e) => console.error("init getLayout failed:", e));
+    getSession().then(setSession).catch((e) => console.error("init getSession failed:", e));
+    getCwd().then(setCwd).catch((e) => console.error("init getCwd failed:", e));
+    getKeymap().then(setKeymap).catch((e) => console.error("init getKeymap failed:", e));
+    getCommands().then(setCommands).catch((e) => console.error("init getCommands failed:", e));
     dispatchCommand("display.get")
       .then((disp) => { if (disp) setDisplay(disp as DisplaySettings); })
       .catch(() => {});
@@ -601,6 +593,25 @@ function NodeRenderer({
   );
 }
 
+// ── Focus guard — blurs previous element so new pane can claim focus ──
+
+function PaneFocusGuard({ focused, children }: { focused: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (focused && ref.current) {
+      // Blur whatever currently has focus so the child component's
+      // useEffect can cleanly claim it
+      const active = document.activeElement;
+      if (active && active instanceof HTMLElement && !ref.current.contains(active)) {
+        active.blur();
+      }
+    }
+  }, [focused]);
+
+  return <div ref={ref} style={{ display: "contents" }}>{children}</div>;
+}
+
 // ── Pane type registry ───────────────────────────────────────────
 
 interface PaneProps {
@@ -609,6 +620,7 @@ interface PaneProps {
   session?: string | null;
   rootPath?: string;
   isFocused?: boolean;
+  activeContentId?: string;
 }
 
 const PANE_REGISTRY: Record<string, React.ComponentType<PaneProps>> = {
@@ -619,6 +631,7 @@ const PANE_REGISTRY: Record<string, React.ComponentType<PaneProps>> = {
   Browser: BrowserTauri,
   RichText: RichTextTauri,
   HUD: HUDTauri,
+  Settings: SettingsTauri,
   Info: InfoTauri,
   Chooser: ChooserPane,
   Menu: MenuTauri,
@@ -821,7 +834,14 @@ function PaneComponent({
       <TabBar
         tabs={tabItems}
         onSelect={stack.switchTab}
-        onClose={() => stack.closeTab()}
+        onClose={async (index: number) => {
+          const result = await stack.closeTab(index);
+          // stack.close now returns a layout object — update layout to re-render
+          if (result && typeof result === "object" && "root" in result && "focused" in result) {
+            // Pane layout changed — update and refocus
+            onFocus((result as any).focused ?? paneId);
+          }
+        }}
         paneLabel={`${activeTabName} · ${paneId}`}
         contentTabs={contentTabs}
         onContentSelect={handleContentSelect}
@@ -837,7 +857,9 @@ function PaneComponent({
           opacity: display.pane_opacity,
         }}
       >
-        <PaneImpl paneId={paneId} cwd={cwd} session={session} isFocused={focused} />
+        <PaneFocusGuard focused={focused}>
+          <PaneImpl paneId={paneId} cwd={cwd} session={session} isFocused={focused} activeContentId={contentState?.tabs?.[contentState.active]?.id} />
+        </PaneFocusGuard>
       </div>
 
       {/* Drop zone overlay */}

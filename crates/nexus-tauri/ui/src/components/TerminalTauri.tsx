@@ -98,8 +98,8 @@ export default function TerminalTauri({ paneId, cwd, onExit, isFocused }: Props)
     observer.observe(containerRef.current);
 
     return () => {
-      // Unregister session
-      dispatchCommand("terminal.remove", { pane_id: paneId });
+      // Only dispose the UI — don't remove engine session state.
+      // React StrictMode re-mounts, and the PTY is still alive.
       term.dispose();
       observer.disconnect();
       if (unlisten) unlisten();

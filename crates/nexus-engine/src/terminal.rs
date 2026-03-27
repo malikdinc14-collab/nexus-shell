@@ -158,7 +158,13 @@ impl Terminal {
     }
 
     /// Register a new terminal session for a pane.
+    /// Idempotent: if the pane already has sessions, returns the active one.
     pub fn register_session(&mut self, pane_id: &str, cwd: Option<&str>) -> &TerminalSession {
+        let pane = self.sessions.entry(pane_id.to_string()).or_insert_with(PaneSessions::new);
+        // Don't push duplicate sessions on re-mount
+        if !pane.items.is_empty() {
+            return &pane.items[pane.active];
+        }
         let session = TerminalSession {
             pane_id: pane_id.to_string(),
             shell: self.backend.name().to_string(),
@@ -166,10 +172,14 @@ impl Terminal {
             title: None,
             pid: None,
         };
-        let pane = self.sessions.entry(pane_id.to_string()).or_insert_with(PaneSessions::new);
         pane.items.push(session);
         pane.active = pane.items.len() - 1;
         &pane.items[pane.active]
+    }
+
+    /// Remove all sessions for a pane (called on unmount).
+    pub fn remove_sessions(&mut self, pane_id: &str) {
+        self.sessions.remove(pane_id);
     }
 
     /// Update active session metadata (title, pid, cwd).

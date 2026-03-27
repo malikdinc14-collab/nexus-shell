@@ -90,6 +90,14 @@ impl CapabilityRegistry {
         best_of(self.richtext.iter().map(|a| a.as_ref() as &dyn RichTextCapability))
     }
 
+    pub fn best_richtext_mut(&mut self) -> Option<&mut dyn RichTextCapability> {
+        self.richtext
+            .iter_mut()
+            .filter(|a| a.is_available())
+            .max_by_key(|a| a.manifest().priority)
+            .map(|a| a.as_mut() as &mut dyn RichTextCapability)
+    }
+
     pub fn best_hud(&self) -> Option<&dyn HUDCapability> {
         best_of(self.huds.iter().map(|a| a.as_ref() as &dyn HUDCapability))
     }

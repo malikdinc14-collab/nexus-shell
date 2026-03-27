@@ -16,7 +16,7 @@ export interface TabStackState {
   tabs: StackTab[];
   activeIndex: number;
   switchTab: (index: number) => void;
-  closeTab: () => void;
+  closeTab: (index?: number) => Promise<any>;
   prevTab: () => void;
   nextTab: () => void;
 }
@@ -74,8 +74,10 @@ export default function useTabStack(paneId: string): TabStackState {
     [paneId],
   );
 
-  const closeTab = useCallback(() => {
-    dispatchCommand("stack.close", { identity: paneId });
+  const closeTab = useCallback(async (index?: number) => {
+    const args: Record<string, string> = { identity: paneId };
+    if (index !== undefined) args.index = String(index);
+    return await dispatchCommand("stack.close", args);
   }, [paneId]);
 
   const prevTab = useCallback(() => {

@@ -94,10 +94,23 @@ async fn handle_command_connection(
                     _ => HashMap::new(),
                 };
 
+                eprintln!("[INVARIANT] server: received method={method}");
+
                 // spawn_blocking to avoid blocking tokio runtime
                 match tokio::task::spawn_blocking(move || {
                     let mut core = core.lock().unwrap();
-                    nexus_engine::dispatch(&mut core, &method, &args)
+                    let result = nexus_engine::dispatch(&mut core, &method, &args);
+                    // Publish layout.changed whenever a command mutates layout state
+                    if core.is_dirty() {
+                        core.clear_dirty();
+                        let layout_json = core.layout.to_json();
+                        core.publish("layout.changed", {
+                            let mut m = std::collections::HashMap::new();
+                            m.insert("layout".to_string(), layout_json);
+                            m
+                        });
+                    }
+                    result
                 }).await {
                     Ok(Ok(result)) => JsonRpcResponse::success(id, result),
                     Ok(Err(e)) => JsonRpcResponse::error(id, -1, &e.to_string()),

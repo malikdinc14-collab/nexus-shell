@@ -134,11 +134,12 @@ interface BufferData {
 interface Props {
   paneId: string;
   isFocused?: boolean;
+  activeContentId?: string;
 }
 
 // ── Component ────────────────────────────────────────────────────
 
-export default function EditorTauri({ paneId, isFocused }: Props) {
+export default function EditorTauri({ paneId, isFocused, activeContentId }: Props) {
   const [openFiles, setOpenFiles] = useState<BufferData[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [mode, setMode] = useState("normal");
@@ -216,8 +217,20 @@ export default function EditorTauri({ paneId, isFocused }: Props) {
 
   // ── Close file ───────────────────────────────────────────────
 
-  const closeFile = useCallback((path: string) => {
-    dispatchCommand("editor.close", { pane_id: paneIdRef.current });
+  const closeFile = useCallback(async (path: string) => {
+    // Find the index of this file in the engine's content tabs before closing
+    try {
+      const tabs = await dispatchCommand("content.tabs", { pane_id: paneIdRef.current });
+      if (tabs?.tabs) {
+        const idx = tabs.tabs.findIndex((t: any) => t.id === path);
+        if (idx >= 0) {
+          await dispatchCommand("content.close", { pane_id: paneIdRef.current, index: idx });
+        }
+      }
+    } catch {
+      // Fall back to just closing on engine side
+      await dispatchCommand("editor.close", { pane_id: paneIdRef.current });
+    }
     setOpenFiles((prev) => {
       const next = prev.filter((f) => f.path !== path);
       if (activePathRef.current === path) {
@@ -406,15 +419,65 @@ export default function EditorTauri({ paneId, isFocused }: Props) {
     })();
   }, []);
 
+  // ── React to content tab switch (activeContentId = file path) ──
+
+  useEffect(() => {
+    if (!activeContentId) return;
+    // activeContentId is the file path from the content tab
+    const existing = openFilesRef.current.find((f) => f.path === activeContentId);
+    if (existing) {
+      setActivePath(activeContentId);
+      return;
+    }
+    // Not in local state yet — fetch from engine
+    (async () => {
+      try {
+        const buf = await dispatchCommand("editor.read", {
+          pane_id: paneIdRef.current,
+        });
+        if (buf && buf.path) {
+          const buffer = buf as BufferData;
+          if (!openFilesRef.current.find((f) => f.path === buffer.path)) {
+            setOpenFiles((prev) => [...prev, buffer]);
+          }
+          setActivePath(buffer.path);
+        }
+      } catch {
+        // Buffer not ready
+      }
+    })();
+  }, [activeContentId]);
+
   // ── Listen for file open events from engine (scoped to this pane) ──
+  // The engine already opened the file — just read the buffer into local state.
+  // Do NOT call openFile() here, as that calls editor.open again → infinite loop.
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    listen("editor-file-opened", (event: any) => {
+    listen("editor-file-opened", async (event: any) => {
       const { path, pane_id } = event.payload;
-      // Only open if this event is for our pane
-      if (path && pane_id === paneIdRef.current) {
-        openFileRef.current(path);
+      if (!path || pane_id !== paneIdRef.current) return;
+
+      // Already in local state? Just switch.
+      if (openFilesRef.current.find((f) => f.path === path)) {
+        setActivePath(path);
+        return;
+      }
+
+      // Fetch the buffer the engine already prepared (editor.read, not editor.open)
+      try {
+        const buf = await dispatchCommand("editor.read", {
+          pane_id: paneIdRef.current,
+        });
+        if (buf && buf.path) {
+          const buffer = buf as BufferData;
+          if (!openFilesRef.current.find((f) => f.path === buffer.path)) {
+            setOpenFiles((prev) => [...prev, buffer]);
+          }
+          setActivePath(buffer.path);
+        }
+      } catch {
+        // Buffer not ready yet — ignore
       }
     }).then((fn) => {
       unlisten = fn;

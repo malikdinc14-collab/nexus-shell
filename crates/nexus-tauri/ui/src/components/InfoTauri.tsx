@@ -1,7 +1,7 @@
 // InfoTauri — Tauri surface for the Info module.
 // Fetches all data from the engine via info.get dispatch.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { dispatchCommand } from "../tauri";
 
 interface InfoData {
@@ -44,10 +44,18 @@ interface Props {
   paneId: string;
   cwd?: string;
   session?: string | null;
+  isFocused?: boolean;
 }
 
-export default function InfoTauri({ paneId }: Props) {
+export default function InfoTauri({ paneId, isFocused }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [info, setInfo] = useState<InfoData | null>(null);
+
+  useEffect(() => {
+    if (isFocused && containerRef.current) {
+      containerRef.current.focus();
+    }
+  }, [isFocused]);
 
   useEffect(() => {
     dispatchCommand("info.system")
@@ -69,12 +77,15 @@ export default function InfoTauri({ paneId }: Props) {
 
   return (
     <div
+      ref={containerRef}
+      tabIndex={0}
       style={{
         padding: 12,
         fontSize: 12,
         lineHeight: 1.8,
         overflow: "auto",
         height: "100%",
+        outline: "none",
       }}
     >
       <div style={{ color: "var(--accent)", marginBottom: 8, fontSize: 14 }}>

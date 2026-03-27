@@ -479,6 +479,7 @@ impl NexusCore {
         self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackSwitch, "stack.switch")
                 .with_payload("stack_id", sid.as_str())
+                .with_payload("identity", identity)
                 .with_payload("pane", target_id.as_str())
                 .with_payload("index", index as u64),
         );
@@ -550,6 +551,7 @@ impl NexusCore {
         self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackReplace, "stack.replace")
                 .with_payload("stack_id", sid.as_str())
+                .with_payload("identity", identity)
                 .with_payload("new_pane", new_pane_id.as_str()),
         );
 
@@ -558,70 +560,89 @@ impl NexusCore {
 
     fn stack_close(&mut self, payload: &HashMap<String, String>) -> OpResult {
         let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
+        let explicit_index = payload.get("index").and_then(|s| s.parse::<usize>().ok());
+        eprintln!("[INVARIANT] stack_close: identity={identity:?}, explicit_index={explicit_index:?}");
 
         // Resolve sid and extract data with immutable borrow
-        let (sid, idx, target_id, foundation_id, visible_id) = {
+        let (sid, idx, tab_count) = {
             let (sid, stack) = match self.stacks.get_by_identity(identity) {
-                Some((sid, stack)) => (sid.to_string(), stack),
-                None => return OpResult::error("empty"),
+                Some((sid, stack)) => {
+                    eprintln!("[INVARIANT] stack_close: found stack sid={sid}, tabs={}, active_index={}",
+                        stack.tabs.len(), stack.active_index);
+                    (sid.to_string(), stack)
+                }
+                None => {
+                    eprintln!("[INVARIANT] stack_close: NO STACK → returning 'empty'");
+                    return OpResult::error("empty");
+                }
             };
 
             if stack.tabs.is_empty() {
                 return OpResult::error("empty");
             }
 
-            let idx = stack.active_index;
-            if idx == 0 {
-                return OpResult::error("foundation_protected");
+            // Last tab — signal surface.rs to close the pane instead
+            if stack.tabs.len() == 1 {
+                eprintln!("[INVARIANT] stack_close: only 1 tab left → returning 'last_tab'");
+                return OpResult::error("last_tab");
             }
 
-            let target = stack.tabs[idx].pane_handle.clone();
-            let foundation = match stack.tabs[0].pane_handle.clone() {
-                Some(id) => id,
-                None => return OpResult::error("no_foundation"),
-            };
+            // Close the explicitly requested index, or active tab
+            let target = explicit_index.unwrap_or(stack.active_index);
+            if target >= stack.tabs.len() {
+                return OpResult::error("index_out_of_range");
+            }
 
-            let focused_id = payload
-                .get("focused_id")
-                .cloned()
-                .or_else(|| {
-                    self.session
-                        .as_ref()
-                        .and_then(|s| self.mux.get_focused(s))
-                })
-                .unwrap_or_default();
-
-            let visible = get_visible_container(stack, &focused_id);
-            (sid, idx, target, foundation, visible)
+            (sid, target, stack.tabs.len())
         };
 
-        if let Some(ref vis) = visible_id {
-            if !self.mux.swap_containers(vis, &foundation_id) {
-                return OpResult::error("swap_failed");
+        // Destroy the mux container for the tab being closed
+        {
+            let stack = self.stacks.get_stack(&sid).unwrap();
+            if let Some(ref handle) = stack.tabs[idx].pane_handle {
+                self.mux.destroy_container(handle);
             }
         }
 
-        self.mux.focus(&foundation_id);
-
-        if let Some(ref target) = target_id {
-            self.mux.destroy_container(target);
-        }
-
+        // Remove tab and compute new active_index
         let stack = self.stacks.get_stack_mut(&sid).unwrap();
+        let prev_active = stack.active_index;
         stack.tabs.remove(idx);
-        stack.active_index = 0;
+        let new_idx = if idx == prev_active {
+            // Closed the active tab — slide to same position or end
+            if idx >= stack.tabs.len() {
+                stack.tabs.len().saturating_sub(1)
+            } else {
+                idx
+            }
+        } else if idx < prev_active {
+            // Closed a tab before active — shift active down
+            prev_active - 1
+        } else {
+            // Closed a tab after active — no change
+            prev_active
+        };
+        stack.active_index = new_idx;
         for (i, tab) in stack.tabs.iter_mut().enumerate() {
-            tab.status = if i == 0 {
+            tab.status = if i == new_idx {
                 TabStatus::Visible
             } else {
                 TabStatus::Background
             };
-            tab.is_active = i == 0;
+            tab.is_active = i == new_idx;
+        }
+        eprintln!("[INVARIANT] stack_close: removed tab {idx}/{tab_count}, new active={new_idx}, remaining={}",
+            stack.tabs.len());
+
+        // Make the newly active tab's mux container visible
+        if let Some(ref handle) = stack.tabs[new_idx].pane_handle {
+            self.mux.focus(handle);
         }
 
         self.bus.lock().unwrap().publish(
             TypedEvent::new(EventType::StackClose, "stack.close")
-                .with_payload("stack_id", sid.as_str()),
+                .with_payload("stack_id", sid.as_str())
+                .with_payload("identity", identity),
         );
 
         OpResult::ok()
@@ -1045,19 +1066,53 @@ mod tests {
     }
 
     #[test]
-    fn stack_close_protects_foundation() {
+    fn stack_close_last_tab_returns_last_tab() {
         let mut core = make_core();
         // Push initial tab
         core.handle_stack_op(
             "push",
             &payload(&[("identity", "editor"), ("pane_id", "p1")]),
         );
-        // Try to close foundation
+        // Try to close the only tab — should return "last_tab" so surface falls through to pane.close
         let result = core.handle_stack_op(
             "close",
             &payload(&[("identity", "editor")]),
         );
         assert_eq!(result.status, "error");
+        assert_eq!(result.data.get("error").and_then(|v| v.as_str()), Some("last_tab"));
+    }
+
+    #[test]
+    fn stack_close_slides_to_previous() {
+        let mut core = make_core();
+        // Push two tabs
+        core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor"), ("pane_id", "p1")]),
+        );
+        core.handle_stack_op(
+            "push",
+            &payload(&[("identity", "editor"), ("pane_id", "p2"), ("name", "Second")]),
+        );
+        // Switch to tab 1 (the second tab)
+        core.handle_stack_op(
+            "switch",
+            &payload(&[("identity", "editor"), ("index", "1")]),
+        );
+        // Close tab 1 — should slide to tab 0
+        let result = core.handle_stack_op(
+            "close",
+            &payload(&[("identity", "editor")]),
+        );
+        assert_eq!(result.status, "ok");
+        // Verify only 1 tab remains and it's active
+        let list = core.handle_stack_op(
+            "list",
+            &payload(&[("identity", "editor")]),
+        );
+        let tabs = list.data.get("tabs").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(tabs.len(), 1);
+        assert_eq!(tabs[0]["is_active"], true);
     }
 
     #[test]

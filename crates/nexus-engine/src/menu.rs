@@ -349,6 +349,7 @@ impl MenuEngine {
                 module_item("Browser", "W", "Web browser"),
                 module_item("RichText", "R", "Rich text editor"),
                 module_item("HUD", "H", "System HUD"),
+                module_item("Settings", "S", "Appearance settings"),
                 module_item("Menu", "=", "Menu browser"),
                 module_item("Info", "i", "System info"),
             ],

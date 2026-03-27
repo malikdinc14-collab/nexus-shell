@@ -1,7 +1,7 @@
 // HUDTauri — Generic telemetry display for Nexus Shell.
 // Visualizes frames from HUDCapability adapters.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { dispatchCommand } from "../tauri";
 
 interface HUDPart {
@@ -18,8 +18,20 @@ interface HUDFrame {
   timestamp: string;
 }
 
-export default function HUDTauri() {
+interface Props {
+  paneId?: string;
+  isFocused?: boolean;
+}
+
+export default function HUDTauri({ isFocused }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [frames, setFrames] = useState<HUDFrame[]>([]);
+
+  useEffect(() => {
+    if (isFocused && containerRef.current) {
+      containerRef.current.focus();
+    }
+  }, [isFocused]);
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -67,9 +79,10 @@ export default function HUDTauri() {
   };
 
   return (
-    <div style={{ 
+    <div ref={containerRef} tabIndex={0} style={{
         display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)",
-        color: "var(--text)", fontFamily: "'Inter', sans-serif", padding: 24, overflow: "auto"
+        color: "var(--text)", fontFamily: "'Inter', sans-serif", padding: 24, overflow: "auto",
+        outline: "none"
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <span style={{ fontSize: 18 }}>📊</span>

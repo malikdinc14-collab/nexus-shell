@@ -209,10 +209,16 @@ pub fn dispatch_command(
     command: String,
     args: Option<HashMap<String, serde_json::Value>>,
 ) -> Result<serde_json::Value, String> {
+    eprintln!("[INVARIANT] tauri dispatch_command: command={command}, args={args:?}");
     let mut client = state.client.lock().map_err(|e| e.to_string())?;
     let params = match args {
         Some(map) => serde_json::to_value(map).unwrap_or(serde_json::Value::Null),
         None => serde_json::Value::Null,
     };
-    client.request(&command, params).map_err(|e| e.to_string())
+    let result = client.request(&command, params).map_err(|e| e.to_string());
+    match &result {
+        Ok(val) => eprintln!("[INVARIANT] tauri dispatch_command response: command={command}, val={val}"),
+        Err(e) => eprintln!("[INVARIANT] tauri dispatch_command ERROR: command={command}, err={e}"),
+    }
+    result
 }

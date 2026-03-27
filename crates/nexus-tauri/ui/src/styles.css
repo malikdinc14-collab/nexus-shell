@@ -43,6 +43,52 @@ body[data-transparent="true"] {
 ::-webkit-scrollbar-thumb { background: #2f3549; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3b4261; }
 
+/* ── Chooser (module picker) ── */
+.chooser-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  padding: 16px;
+  overflow: auto;
+}
+.chooser-header {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.chooser-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  width: 100%;
+}
+.chooser-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.chooser-item:hover {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+.chooser-icon { font-size: 14px; color: var(--accent); }
+.chooser-desc { display: none; }
+
 /* xterm overrides */
 .xterm { padding: 4px; }
 .xterm-viewport::-webkit-scrollbar { width: 8px; }

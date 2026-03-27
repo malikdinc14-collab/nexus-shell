@@ -95,8 +95,9 @@ pub fn handle_markdown(
             let pane_id = str_arg("pane_id")
                 .unwrap_or_else(|| core.layout.focused.clone());
 
-            // 1. Load node in engine
-            let node = core.richtext.load_node(&pane_id, &path)?;
+            // 1. Load node in engine (auto-opens vault from cwd)
+            let cwd = core.cwd().to_string();
+            let node = core.richtext.load_node(&pane_id, &path, &cwd)?;
 
             // 2. Ensure pane has a RichText tab
             let (sid, stack) = core.stacks.get_or_create_by_identity(&pane_id, None);

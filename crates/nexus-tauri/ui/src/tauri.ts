@@ -167,7 +167,13 @@ export function onAgentOutput(callback: (event: AgentEvent) => void): Promise<()
 // -- Layout & stack events ---------------------------------------------------
 
 export function onLayoutChanged(callback: (layout: LayoutData) => void): Promise<() => void> {
-  return listen("layout-changed", (event: any) => callback(event.payload));
+  return listen("layout-changed", (event: any) => {
+    // Payload is { layout: LayoutData } when emitted by the daemon after dispatch
+    const data = event.payload?.layout ?? event.payload;
+    if (data && "root" in data && "focused" in data) {
+      callback(data as LayoutData);
+    }
+  });
 }
 
 export function onStackChanged(callback: (data: any) => void): Promise<() => void> {

@@ -29,9 +29,16 @@ interface Props {
 }
 
 export default function RichTextTauri({ paneId, isFocused }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [node, setNode] = useState<NoteNode | null>(null);
   const [editing, setEditing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isFocused && containerRef.current) {
+      containerRef.current.focus();
+    }
+  }, [isFocused]);
 
   const refreshNode = useCallback(async () => {
     try {
@@ -90,9 +97,10 @@ export default function RichTextTauri({ paneId, isFocused }: Props) {
   }
 
   return (
-    <div style={{ 
+    <div ref={containerRef} tabIndex={0} style={{
         display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)",
-        color: "var(--text)", fontFamily: "'Inter', sans-serif", overflow: "hidden"
+        color: "var(--text)", fontFamily: "'Inter', sans-serif", overflow: "hidden",
+        outline: "none"
     }}>
       {/* Header */}
       <div style={{ 
