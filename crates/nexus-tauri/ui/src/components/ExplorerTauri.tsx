@@ -55,9 +55,8 @@ export default function ExplorerTauri({ paneId, rootPath, isFocused }: Props) {
 
   const handleToggle = async (entry: ExplorerEntry) => {
     if (!entry.is_dir) {
-      // Open file in editor — use command_line.execute which handles
-      // both editor.open AND switching the tab to Editor
-      dispatchCommand("command_line.execute", { raw: `e ${entry.path}` });
+      // Route through FileRouter — auto-selects Editor, RichText, etc.
+      dispatchCommand("file.open", { path: entry.path });
       return;
     }
     const result = await dispatchCommand("explorer.toggle", { path: entry.path });

@@ -383,33 +383,15 @@ pub fn handle_command_line(
                     let _ = super::dispatch(core, "session.save", args);
                     super::dispatch(core, "pane.close", &HashMap::new())
                 }
-                "e" | "edit" if parts.len() >= 2 => {
+                // :e <path> — auto-routes through FileRouter (editor for code, richtext for .md, etc.)
+                "e" | "edit" | "open" | "o" if parts.len() >= 2 => {
                     let path = parts[1..].join(" ");
-                    let target_pane = super::resolve_editor_pane(core);
+                    let target_pane = core.layout.focused.clone();
 
-                    let mut ed_args = HashMap::new();
-                    ed_args.insert("path".to_string(), serde_json::json!(path));
-                    ed_args.insert("pane_id".to_string(), serde_json::json!(&target_pane));
-                    let result = super::dispatch(core, "editor.open", &ed_args)?;
-
-                    let mut set_args = HashMap::new();
-                    set_args.insert("identity".to_string(), serde_json::json!(&target_pane));
-                    set_args.insert("name".to_string(), serde_json::json!("Editor"));
-                    super::dispatch(core, "stack.set_content", &set_args)?;
-
-                    Ok(result)
-                }
-                // :md <path> or :markdown <path> — open in RichText
-                "md" | "markdown" if parts.len() >= 2 => {
-                    let path = parts[1..].join(" ");
-                    let focused = core.layout.focused.clone();
-
-                    let mut md_args = HashMap::new();
-                    md_args.insert("path".to_string(), serde_json::json!(path));
-                    md_args.insert("pane_id".to_string(), serde_json::json!(&focused));
-                    let result = super::dispatch(core, "markdown.open", &md_args)?;
-
-                    Ok(result)
+                    let mut file_args = HashMap::new();
+                    file_args.insert("path".to_string(), serde_json::json!(path));
+                    file_args.insert("pane_id".to_string(), serde_json::json!(&target_pane));
+                    super::dispatch(core, "file.open", &file_args)
                 }
                 _ => Err(NexusError::NotFound(format!("unknown command: {}", parts[0]))),
             }

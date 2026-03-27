@@ -183,11 +183,11 @@ pub fn handle_explorer(
 
             if let Some(ref e) = entry {
                 if !e.entry.is_dir {
-                    // File — open in editor via command_line routing
+                    // File — route through FileRouter
                     let path = e.entry.path.clone();
-                    let mut ed_args = HashMap::new();
-                    ed_args.insert("raw".to_string(), serde_json::json!(format!("e {path}")));
-                    let _ = dispatch(core, "command_line.execute", &ed_args);
+                    let mut file_args = HashMap::new();
+                    file_args.insert("path".to_string(), serde_json::json!(&path));
+                    let _ = dispatch(core, "file.open", &file_args);
                     // Return current state unchanged
                     let state = core.explorer.tree()?;
                     return serde_json::to_value(&state)

@@ -33,6 +33,7 @@ pub fn dispatch(
         "explorer" => explorer::handle_explorer(core, action, args),
         "fs" => explorer::handle_fs(core, action, args),
 
+        "file" => handle_file(core, action, args),
         "editor" => editor::handle_editor(core, action, args),
         "markdown" => editor::handle_markdown(core, action, args),
 
@@ -100,6 +101,134 @@ pub(crate) fn resolve_editor_pane(core: &NexusCore) -> String {
         }
     }
     core.layout.focused.clone()
+}
+
+// ---------------------------------------------------------------------------
+// file.* — route file opens through the FileRouter
+// ---------------------------------------------------------------------------
+
+fn handle_file(
+    core: &mut NexusCore,
+    action: &str,
+    args: &HashMap<String, serde_json::Value>,
+) -> Result<serde_json::Value, NexusError> {
+    let str_arg = |key: &str| -> Option<String> {
+        args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    };
+
+    match action {
+        "open" => {
+            let path = str_arg("path")
+                .ok_or_else(|| NexusError::InvalidState("file.open requires path".into()))?;
+
+            // Resolve absolute path
+            let abs_path = if std::path::Path::new(&path).is_absolute() {
+                path.clone()
+            } else {
+                let cwd = core.cwd();
+                std::path::Path::new(cwd).join(&path).to_string_lossy().to_string()
+            };
+
+            let target = core.file_router.route(&abs_path);
+            let open_cmd = target.open_command();
+            let module_name = target.module_name();
+
+            // Resolve target pane: explicit > existing module pane > split
+            let pane_id = if let Some(explicit) = str_arg("pane_id") {
+                // Caller explicitly chose a pane — but skip if it's an Explorer
+                let is_explorer = resolve_active_module(core, &explicit)
+                    .map_or(false, |m| m == "Explorer");
+                if is_explorer {
+                    resolve_file_pane(core, module_name)
+                } else {
+                    explicit
+                }
+            } else {
+                resolve_file_pane(core, module_name)
+            };
+
+            // 1. Dispatch the module-specific open command
+            let mut open_args = HashMap::new();
+            open_args.insert("path".to_string(), serde_json::json!(&abs_path));
+            open_args.insert("pane_id".to_string(), serde_json::json!(&pane_id));
+            let result = dispatch(core, open_cmd, &open_args)?;
+
+            // 2. Switch the pane's tab to the correct module
+            let mut set_args = HashMap::new();
+            set_args.insert("identity".to_string(), serde_json::json!(&pane_id));
+            set_args.insert("name".to_string(), serde_json::json!(module_name));
+            dispatch(core, "stack.set_content", &set_args)?;
+
+            // 3. Focus the target pane
+            core.layout.focused = pane_id;
+
+            core.mark_dirty();
+            Ok(result)
+        }
+        "route" => {
+            // Query-only: which module would handle this path?
+            let path = str_arg("path")
+                .ok_or_else(|| NexusError::InvalidState("file.route requires path".into()))?;
+            let target = core.file_router.route(&path);
+            Ok(serde_json::json!({
+                "module": target.module_name(),
+                "command": target.open_command(),
+            }))
+        }
+        _ => Err(NexusError::NotFound(format!("unknown file action: {action}"))),
+    }
+}
+
+/// Find the best pane for opening a file in a given module.
+/// Priority: last_active for that module > any existing pane with that module > split to create one.
+fn resolve_file_pane(core: &mut NexusCore, module_name: &str) -> String {
+    let focused = core.layout.focused.clone();
+
+    // 1. Check last_active for this module
+    if let Some(pane_id) = core.last_active.get(module_name) {
+        let pane_id = pane_id.clone();
+        if core.stacks.get_by_identity(&pane_id).is_some() {
+            return pane_id;
+        }
+    }
+
+    // 2. Find any existing pane with this module active
+    for (_, stack) in core.stacks.all_stacks() {
+        if let Some(tab) = stack.tabs.get(stack.active_index) {
+            if tab.name == module_name {
+                if let Some(ref handle) = tab.pane_handle {
+                    return handle.clone();
+                }
+            }
+        }
+    }
+
+    // 3. Find any non-Explorer, non-Terminal pane (Chooser, Info, etc.)
+    for (_, stack) in core.stacks.all_stacks() {
+        if let Some(tab) = stack.tabs.get(stack.active_index) {
+            let name = &tab.name;
+            if name != "Explorer" && name != "Terminal" && name != &focused {
+                if let Some(ref handle) = tab.pane_handle {
+                    return handle.clone();
+                }
+            }
+        }
+    }
+
+    // 4. Focused pane is not an Explorer — use it
+    let focused_module = resolve_active_module(core, &focused);
+    if focused_module.as_deref() != Some("Explorer") {
+        return focused;
+    }
+
+    // 5. Only Explorer exists — split horizontally and use the new pane
+    let new_id = core.layout.split_focused(crate::layout::Direction::Horizontal);
+    let (sid, _) = core.stacks.get_or_create_by_identity(&new_id, None);
+    let sid = sid.clone();
+    let tab = crate::stack::Tab::new(module_name)
+        .with_status(crate::stack::TabStatus::Visible, true);
+    core.stacks.push(&sid, tab);
+    new_id
 }
 
 pub(crate) fn resolve_nexus_home(args: &HashMap<String, serde_json::Value>) -> std::path::PathBuf {

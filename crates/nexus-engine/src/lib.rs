@@ -21,6 +21,7 @@ pub mod core;
 pub mod dispatch;
 pub mod editor;
 pub mod explorer;
+pub mod file_router;
 pub mod layout;
 pub mod info;
 pub mod menu;

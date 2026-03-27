@@ -2,7 +2,7 @@
 // Renders layout tree from Rust engine, routes keyboard commands.
 // The UI is a dumb renderer. All state and logic lives in the engine.
 
-import React, { useState, useEffect, useCallback, useRef, useMemo, Component } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Component } from "react";
 import {
   getLayout,
   getSession,
@@ -37,7 +37,7 @@ import CommandLine from "./components/CommandLine";
 import TabListOverlay from "./components/TabListOverlay";
 import TabBar, { ContentTabItem } from "./components/TabBar";
 import PaneOverlayLayer from "./components/PaneOverlayLayer";
-import { PaneRectProvider, usePaneRects } from "./contexts/PaneRectContext";
+import { PanePortalProvider, usePanePortals } from "./contexts/PanePortalContext";
 import useTabStack from "./hooks/useTabStack";
 import { listen } from "@tauri-apps/api/event";
 
@@ -308,7 +308,7 @@ export default function App() {
       </div>
 
       {/* Layout + Overlay */}
-      <PaneRectProvider>
+      <PanePortalProvider>
         <LayoutArea
           layout={layout}
           display={display}
@@ -321,7 +321,7 @@ export default function App() {
           onDragStart={handlePaneDragStart}
           onDropTargetChange={setDropTarget}
         />
-      </PaneRectProvider>
+      </PanePortalProvider>
 
       {/* Vim command line */}
       <CommandLine
@@ -406,10 +406,7 @@ function LayoutArea({
   onDragStart: (paneId: string, e: React.MouseEvent) => void;
   onDropTargetChange: (target: { paneId: string; zone: "center" | "left" | "right" | "top" | "bottom" } | null) => void;
 }) {
-  const { setContainer } = usePaneRects();
-  const containerRef = useCallback((el: HTMLDivElement | null) => {
-    setContainer(el);
-  }, [setContainer]);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Collect all leaf nodes for the overlay layer
   const leafNodes = useMemo(() => {
@@ -427,53 +424,51 @@ function LayoutArea({
   }, [layout.root]);
 
   const renderPane = useCallback(
-    (paneId: string, node: LayoutNode, isFocused: boolean) => {
-      const isDragSource = dragState?.active && dragState.sourcePaneId === paneId;
-      return (
-        <PaneErrorBoundary paneId={paneId}>
-          <PaneComponent
-            node={node}
-            focused={isFocused}
-            onFocus={onFocus}
-            cwd={cwd}
-            session={session}
-            display={display}
-            isDragSource={!!isDragSource}
-            dragActive={!!dragState?.active}
-            onDragStart={onDragStart}
-            onDropTargetChange={onDropTargetChange}
-          />
-        </PaneErrorBoundary>
-      );
-    },
+    (paneId: string, node: LayoutNode, isFocused: boolean) => (
+      <PaneErrorBoundary paneId={paneId}>
+        <PaneComponent
+          node={node}
+          focused={isFocused}
+          onFocus={onFocus}
+          cwd={cwd}
+          session={session}
+          display={display}
+          isDragSource={!!(dragState?.active && dragState.sourcePaneId === paneId)}
+          dragActive={!!dragState?.active}
+          onDragStart={onDragStart}
+          onDropTargetChange={onDropTargetChange}
+        />
+      </PaneErrorBoundary>
+    ),
     [onFocus, cwd, session, display, dragState, onDragStart, onDropTargetChange],
   );
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        flex: 1,
-        display: "flex",
-        overflow: "hidden",
-        padding: display.gap,
-        background: display.background,
-        transition: "padding 0.2s, background 0.3s",
-        position: "relative",
-      }}
-    >
-      {/* Geometry-only layout tree — renders empty measured slots */}
-      {layout.zoomed ? (
-        <SlotPlaceholder paneId={layout.zoomed} style={{ flex: 1 }} />
-      ) : (
-        <SlotRenderer
-          node={layout.root}
-          display={display}
-          onResize={onResize}
-        />
-      )}
+    <>
+      <div
+        ref={containerRef}
+        style={{
+          flex: 1,
+          display: "flex",
+          overflow: "hidden",
+          padding: display.gap,
+          background: display.background,
+          transition: "padding 0.2s, background 0.3s",
+        }}
+      >
+        {/* Layout tree with slots — SlotPlaceholder moves host elements here via appendChild */}
+        {layout.zoomed ? (
+          <SlotPlaceholder paneId={layout.zoomed} style={{ flex: 1, display: "flex" }} />
+        ) : (
+          <SlotRenderer
+            node={layout.root}
+            display={display}
+            onResize={onResize}
+          />
+        )}
+      </div>
 
-      {/* Pane instances — absolutely positioned over slots, never reordered */}
+      {/* Pane components — rendered into host elements via portals, never reordered */}
       <PaneOverlayLayer
         leafNodes={leafNodes}
         focused={focused}
@@ -487,46 +482,25 @@ function LayoutArea({
         onDropTargetChange={onDropTargetChange}
         renderPane={renderPane}
       />
-    </div>
+    </>
   );
 }
 
-// ── Slot placeholder — empty div that reports its rect ────────────
+// ── Slot placeholder — claims a pane host element via appendChild ──
 
 function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { containerRef, reportRect } = usePaneRects();
+  const { getHost } = usePanePortals();
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const report = () => {
-      const container = containerRef.current;
-      if (!container) return;
-      const r = el.getBoundingClientRect();
-      const cr = container.getBoundingClientRect();
-      reportRect(paneId, {
-        top: r.top - cr.top,
-        left: r.left - cr.left,
-        width: r.width,
-        height: r.height,
-      });
-    };
-
-    // ResizeObserver fires on initial observation + any size change.
-    const observer = new ResizeObserver(report);
-    observer.observe(el);
-    // Synchronous initial report — covers paneId change without size change (swap).
-    report();
-
-    return () => {
-      observer.disconnect();
-      // Don't removeRect here — cleanup runs before new mount effects,
-      // creating a frame where rects are empty. Stale entries are harmless;
-      // the overlay only renders panes that exist in leafNodes.
-    };
-  }, [paneId, containerRef, reportRect]);
+  // useLayoutEffect runs synchronously after DOM commit, before paint.
+  // appendChild moves the host element into this slot — no unmount, no clone.
+  useLayoutEffect(() => {
+    const slot = ref.current;
+    if (!slot) return;
+    const host = getHost(paneId);
+    slot.appendChild(host);
+    // No cleanup: host will be moved to a new slot on swap, or removed on close.
+  }, [paneId, getHost]);
 
   return (
     <div
@@ -910,7 +884,7 @@ function PaneComponent({
         position: "relative",
       }}
       onMouseDown={(e) => {
-        if (e.altKey && onDragStart) {
+        if (e.altKey && e.shiftKey && onDragStart) {
           onDragStart(paneId, e);
         } else {
           onFocus(paneId);
