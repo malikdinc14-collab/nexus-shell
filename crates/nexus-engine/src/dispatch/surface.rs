@@ -82,16 +82,10 @@ pub fn handle_pane(
         "close" => {
             let pane_id = str_arg("pane_id")
                 .unwrap_or_else(|| core.layout.focused.clone());
-            let leaves = core.layout.root.leaf_ids();
-            eprintln!("[INVARIANT] pane.close: pane_id={pane_id}, leaves={leaves:?}, count={}",
-                leaves.len());
-
             if core.layout.close_pane(&pane_id) {
                 core.mark_dirty();
-                eprintln!("[INVARIANT] pane.close SUCCESS for {pane_id}");
                 Ok(core.layout.to_json())
             } else {
-                eprintln!("[INVARIANT] pane.close FAILED for {pane_id} (close_pane returned false)");
                 Err(NexusError::InvalidState(format!(
                     "cannot close pane: {pane_id}"
                 )))
@@ -345,29 +339,17 @@ pub fn handle_stack(
         })
         .collect();
 
-    eprintln!("[INVARIANT] handle_stack: action={action}, identity={:?}, focused={}",
-        string_args.get("identity"), core.layout.focused);
-
     let result = core.handle_stack_op(action, &string_args);
-
-    eprintln!("[INVARIANT] handle_stack: stack_op result status={}, data={:?}",
-        result.status, result.data);
 
     // stack.close couldn't remove a tab (foundation_protected, empty, etc.)
     // → fall through to pane.close so both Alt+W and X button work
     if action == "close" && result.status != "ok" {
         let pane_id = string_args.get("identity").cloned()
             .unwrap_or_else(|| core.layout.focused.clone());
-        let leaves = core.layout.root.leaf_ids();
-        eprintln!("[INVARIANT] stack.close fallthrough: pane_id={pane_id}, leaves={leaves:?}, count={}",
-            leaves.len());
         if core.layout.close_pane(&pane_id) {
             core.mark_dirty();
-            let json = core.layout.to_json();
-            eprintln!("[INVARIANT] pane.close SUCCESS — returning layout json with root+focused");
-            return Ok(json);
+            return Ok(core.layout.to_json());
         }
-        eprintln!("[INVARIANT] pane.close FAILED (last pane?) — returning last_pane status");
         return Ok(serde_json::json!({ "status": "last_pane" }));
     }
 
@@ -382,7 +364,6 @@ pub fn handle_stack(
     // For close: return full layout so frontend can update immediately
     // (don't rely on events which may arrive late or not at all)
     if action == "close" && result.status == "ok" {
-        eprintln!("[INVARIANT] stack.close OK — returning layout json for immediate UI update");
         return Ok(core.layout.to_json());
     }
 

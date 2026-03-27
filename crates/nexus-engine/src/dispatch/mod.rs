@@ -18,8 +18,6 @@ pub fn dispatch(
     command: &str,
     args: &HashMap<String, serde_json::Value>,
 ) -> Result<serde_json::Value, NexusError> {
-    eprintln!("[INVARIANT] dispatch: command={command}");
-
     let (domain, action) = command
         .split_once('.')
         .ok_or_else(|| NexusError::InvalidState("command must be domain.action".into()))?;
@@ -63,18 +61,6 @@ pub fn dispatch(
         
         _ => Err(NexusError::NotFound(format!("unknown domain: {domain}"))),
     };
-
-    match &result {
-        Ok(val) => {
-            let has_root = val.get("root").is_some();
-            let has_focused = val.get("focused").is_some();
-            let status = val.get("status").and_then(|v| v.as_str()).unwrap_or("(none)");
-            eprintln!("[INVARIANT] dispatch result: command={command}, has_root={has_root}, has_focused={has_focused}, status={status}");
-        }
-        Err(e) => {
-            eprintln!("[INVARIANT] dispatch ERROR: command={command}, err={e}");
-        }
-    }
 
     result
 }

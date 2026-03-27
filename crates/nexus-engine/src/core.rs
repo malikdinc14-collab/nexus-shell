@@ -561,18 +561,11 @@ impl NexusCore {
     fn stack_close(&mut self, payload: &HashMap<String, String>) -> OpResult {
         let identity = payload.get("identity").map(|s| s.as_str()).unwrap_or("");
         let explicit_index = payload.get("index").and_then(|s| s.parse::<usize>().ok());
-        eprintln!("[INVARIANT] stack_close: identity={identity:?}, explicit_index={explicit_index:?}");
-
         // Resolve sid and extract data with immutable borrow
-        let (sid, idx, tab_count) = {
+        let (sid, idx, _tab_count) = {
             let (sid, stack) = match self.stacks.get_by_identity(identity) {
-                Some((sid, stack)) => {
-                    eprintln!("[INVARIANT] stack_close: found stack sid={sid}, tabs={}, active_index={}",
-                        stack.tabs.len(), stack.active_index);
-                    (sid.to_string(), stack)
-                }
+                Some((sid, stack)) => (sid.to_string(), stack),
                 None => {
-                    eprintln!("[INVARIANT] stack_close: NO STACK → returning 'empty'");
                     return OpResult::error("empty");
                 }
             };
@@ -583,7 +576,6 @@ impl NexusCore {
 
             // Last tab — signal surface.rs to close the pane instead
             if stack.tabs.len() == 1 {
-                eprintln!("[INVARIANT] stack_close: only 1 tab left → returning 'last_tab'");
                 return OpResult::error("last_tab");
             }
 
@@ -631,9 +623,6 @@ impl NexusCore {
             };
             tab.is_active = i == new_idx;
         }
-        eprintln!("[INVARIANT] stack_close: removed tab {idx}/{tab_count}, new active={new_idx}, remaining={}",
-            stack.tabs.len());
-
         // Make the newly active tab's mux container visible
         if let Some(ref handle) = stack.tabs[new_idx].pane_handle {
             self.mux.focus(handle);

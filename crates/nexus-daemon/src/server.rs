@@ -94,8 +94,6 @@ async fn handle_command_connection(
                     _ => HashMap::new(),
                 };
 
-                eprintln!("[INVARIANT] server: received method={method}");
-
                 // spawn_blocking to avoid blocking tokio runtime
                 match tokio::task::spawn_blocking(move || {
                     let mut core = core.lock().unwrap();
