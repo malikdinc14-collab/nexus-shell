@@ -146,6 +146,10 @@ export default function App() {
         const result = await dispatchCommand(binding.action);
         if (result && typeof result === "object" && "root" in result && "focused" in result) {
           setLayout(result as LayoutData);
+          // Re-focus the active pane after any layout mutation (swap, resize, move…)
+          window.dispatchEvent(new CustomEvent("nexus:refocus-pane", {
+            detail: { paneId: (result as LayoutData).focused },
+          }));
         }
       } catch (err) {
         console.warn("Dispatch failed:", binding.action, err);

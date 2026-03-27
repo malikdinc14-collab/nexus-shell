@@ -118,6 +118,18 @@ export default function TerminalTauri({ paneId, cwd, onExit, isFocused }: Props)
     }
   }, [isFocused]);
 
+  // Re-focus after layout mutations (swap, grow, move) that displace xterm's DOM focus
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { paneId: targetId } = (e as CustomEvent).detail;
+      if (targetId === paneId && termRef.current) {
+        termRef.current.focus();
+      }
+    };
+    window.addEventListener("nexus:refocus-pane", handler);
+    return () => window.removeEventListener("nexus:refocus-pane", handler);
+  }, [paneId]);
+
   return (
     <div
       ref={containerRef}
