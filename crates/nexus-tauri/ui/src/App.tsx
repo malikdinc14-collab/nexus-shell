@@ -530,6 +530,8 @@ function NodeRenderer({
     document.addEventListener("mouseup", onMouseUp);
   };
 
+  // Render as a keyed array so React can MOVE elements on swap without unmounting.
+  // Hardcoded siblings would unmount/remount on key change; array elements are reordered in-place.
   return (
     <div
       ref={containerRef}
@@ -541,65 +543,59 @@ function NodeRenderer({
         gap: display.gap,
       }}
     >
-      <div
-        style={
-          isH
-            ? { width: pct, flexShrink: 0, display: "flex", overflow: "hidden" }
-            : { height: pct, flexShrink: 0, display: "flex", overflow: "hidden" }
-        }
-      >
-        <NodeRenderer
-          key={firstLeafId(node.left!)}
-          node={node.left!}
-          focused={focused}
-          onFocus={onFocus}
-          onResize={onResize}
-          cwd={cwd}
-          session={session}
-          display={display}
-          dragState={dragState}
-          onDragStart={onDragStart}
-          onDropTargetChange={onDropTargetChange}
-        />
-      </div>
+      {([node.left!, node.right!] as LayoutNode[]).flatMap((child, idx) => {
+        const childKey = firstLeafId(child) ?? String(idx);
+        const isFirst = idx === 0;
+        const childStyle = isFirst
+          ? (isH
+              ? { width: pct, flexShrink: 0 as const, display: "flex" as const, overflow: "hidden" as const }
+              : { height: pct, flexShrink: 0 as const, display: "flex" as const, overflow: "hidden" as const })
+          : { flex: 1, display: "flex" as const, overflow: "hidden" as const };
 
-      {/* Resize handle */}
-      <div
-        style={{
-          [isH ? "width" : "height"]: Math.max(display.gap, 6),
-          [isH ? "marginLeft" : "marginTop"]: -(Math.max(display.gap, 6) / 2),
-          [isH ? "marginRight" : "marginBottom"]: -(Math.max(display.gap, 6) / 2),
-          cursor: isH ? "col-resize" : "row-resize",
-          flexShrink: 0,
-          background: "transparent",
-          zIndex: 10,
-          position: "relative",
-        }}
-        onMouseDown={handleResizeMouseDown}
-        onMouseOver={(e) => {
-          (e.target as HTMLElement).style.background =
-            display.gap === 0 ? "var(--accent)" : "rgba(122,162,247,0.2)";
-        }}
-        onMouseOut={(e) =>
-          ((e.target as HTMLElement).style.background = "transparent")
-        }
-      />
+        const paneDiv = (
+          <div key={childKey} style={childStyle}>
+            <NodeRenderer
+              node={child}
+              focused={focused}
+              onFocus={onFocus}
+              onResize={onResize}
+              cwd={cwd}
+              session={session}
+              display={display}
+              dragState={dragState}
+              onDragStart={onDragStart}
+              onDropTargetChange={onDropTargetChange}
+            />
+          </div>
+        );
 
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <NodeRenderer
-          key={firstLeafId(node.right!)}
-          node={node.right!}
-          focused={focused}
-          onFocus={onFocus}
-          onResize={onResize}
-          cwd={cwd}
-          session={session}
-          display={display}
-          dragState={dragState}
-          onDragStart={onDragStart}
-          onDropTargetChange={onDropTargetChange}
-        />
-      </div>
+        if (!isFirst) return [paneDiv];
+
+        return [
+          paneDiv,
+          <div
+            key="__resize__"
+            style={{
+              [isH ? "width" : "height"]: Math.max(display.gap, 6),
+              [isH ? "marginLeft" : "marginTop"]: -(Math.max(display.gap, 6) / 2),
+              [isH ? "marginRight" : "marginBottom"]: -(Math.max(display.gap, 6) / 2),
+              cursor: isH ? "col-resize" : "row-resize",
+              flexShrink: 0,
+              background: "transparent",
+              zIndex: 10,
+              position: "relative",
+            }}
+            onMouseDown={handleResizeMouseDown}
+            onMouseOver={(e) => {
+              (e.target as HTMLElement).style.background =
+                display.gap === 0 ? "var(--accent)" : "rgba(122,162,247,0.2)";
+            }}
+            onMouseOut={(e) =>
+              ((e.target as HTMLElement).style.background = "transparent")
+            }
+          />,
+        ];
+      })}
     </div>
   );
 }
