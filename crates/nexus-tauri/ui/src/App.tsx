@@ -495,7 +495,7 @@ function LayoutArea({
 
 function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { containerRef, reportRect, removeRect } = usePaneRects();
+  const { containerRef, reportRect } = usePaneRects();
 
   useEffect(() => {
     const el = ref.current;
@@ -517,15 +517,16 @@ function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSP
     // ResizeObserver fires on initial observation + any size change.
     const observer = new ResizeObserver(report);
     observer.observe(el);
-    // Synchronous initial report — covers the case where paneId changes
-    // but the slot size doesn't (e.g., equal-size swap).
+    // Synchronous initial report — covers paneId change without size change (swap).
     report();
 
     return () => {
       observer.disconnect();
-      removeRect(paneId);
+      // Don't removeRect here — cleanup runs before new mount effects,
+      // creating a frame where rects are empty. Stale entries are harmless;
+      // the overlay only renders panes that exist in leafNodes.
     };
-  }, [paneId, containerRef, reportRect, removeRect]);
+  }, [paneId, containerRef, reportRect]);
 
   return (
     <div
