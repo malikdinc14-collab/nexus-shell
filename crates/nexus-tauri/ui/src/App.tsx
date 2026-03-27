@@ -406,7 +406,10 @@ function LayoutArea({
   onDragStart: (paneId: string, e: React.MouseEvent) => void;
   onDropTargetChange: (target: { paneId: string; zone: "center" | "left" | "right" | "top" | "bottom" } | null) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { setContainer } = usePaneRects();
+  const containerRef = useCallback((el: HTMLDivElement | null) => {
+    setContainer(el);
+  }, [setContainer]);
 
   // Collect all leaf nodes for the overlay layer
   const leafNodes = useMemo(() => {
@@ -492,19 +495,20 @@ function LayoutArea({
 
 function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { reportRect, removeRect } = usePaneRects();
+  const { containerRef, reportRect, removeRect } = usePaneRects();
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
     const report = () => {
+      const container = containerRef.current;
+      if (!container) return;
       const r = el.getBoundingClientRect();
-      const parent = el.offsetParent;
-      const pr = parent ? parent.getBoundingClientRect() : { top: 0, left: 0 };
+      const cr = container.getBoundingClientRect();
       reportRect(paneId, {
-        top: r.top - pr.top,
-        left: r.left - pr.left,
+        top: r.top - cr.top,
+        left: r.left - cr.left,
         width: r.width,
         height: r.height,
       });
@@ -512,14 +516,14 @@ function SlotPlaceholder({ paneId, style }: { paneId: string; style?: React.CSSP
 
     const observer = new ResizeObserver(report);
     observer.observe(el);
-    // Initial report
-    report();
+    // Initial report after browser layout settles
+    requestAnimationFrame(report);
 
     return () => {
       observer.disconnect();
       removeRect(paneId);
     };
-  }, [paneId, reportRect, removeRect]);
+  }, [paneId, containerRef, reportRect, removeRect]);
 
   return (
     <div

@@ -41,8 +41,8 @@ export default function PaneOverlayLayer({
               left: rect.left,
               width: rect.width,
               height: rect.height,
+              display: "flex",
               overflow: "hidden",
-              // no transition — instant repositioning for now
             }
           : {
               position: "absolute",
@@ -50,6 +50,7 @@ export default function PaneOverlayLayer({
               left: 0,
               width: 0,
               height: 0,
+              display: "flex",
               overflow: "hidden",
               visibility: "hidden",
               pointerEvents: "none",

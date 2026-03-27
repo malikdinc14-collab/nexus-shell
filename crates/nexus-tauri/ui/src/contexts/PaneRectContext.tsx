@@ -1,6 +1,6 @@
 // PaneRectContext — registry of bounding rects for layout leaf slots.
-// NodeRenderer reports rects via ResizeObserver; PaneOverlayLayer reads them
-// to absolutely-position pane components over their layout slots.
+// SlotPlaceholder reports rects via ResizeObserver; PaneOverlayLayer reads
+// them to absolutely-position pane components over their layout slots.
 
 import { createContext, useContext, useRef, useState, useCallback, useMemo } from "react";
 import type React from "react";
@@ -14,6 +14,9 @@ interface PaneRect {
 
 interface PaneRectContextValue {
   rects: Map<string, PaneRect>;
+  /** The positioned container that overlay panes are children of. */
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  setContainer: (el: HTMLDivElement | null) => void;
   reportRect: (paneId: string, rect: PaneRect) => void;
   removeRect: (paneId: string) => void;
 }
@@ -22,12 +25,14 @@ const Ctx = createContext<PaneRectContextValue | null>(null);
 
 export function PaneRectProvider({ children }: { children: React.ReactNode }) {
   const [rects, setRects] = useState<Map<string, PaneRect>>(new Map());
-  // Accumulate updates in a microtask batch to avoid per-slot re-renders
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Accumulate updates in a rAF batch — ensures browser layout is settled
   const pendingRef = useRef<Map<string, PaneRect | null>>(new Map());
-  const scheduledRef = useRef(false);
+  const rafRef = useRef(0);
 
   const flush = useCallback(() => {
-    scheduledRef.current = false;
+    rafRef.current = 0;
     const pending = pendingRef.current;
     if (pending.size === 0) return;
     setRects((prev) => {
@@ -45,11 +50,14 @@ export function PaneRectProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const schedule = useCallback(() => {
-    if (!scheduledRef.current) {
-      scheduledRef.current = true;
-      queueMicrotask(flush);
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(flush);
     }
   }, [flush]);
+
+  const setContainer = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+  }, []);
 
   const reportRect = useCallback(
     (paneId: string, rect: PaneRect) => {
@@ -68,8 +76,8 @@ export function PaneRectProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ rects, reportRect, removeRect }),
-    [rects, reportRect, removeRect],
+    () => ({ rects, containerRef, setContainer, reportRect, removeRect }),
+    [rects, setContainer, reportRect, removeRect],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
